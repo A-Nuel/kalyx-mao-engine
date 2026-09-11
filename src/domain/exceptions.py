@@ -29,3 +29,7 @@ class AgentSuspendedError(DomainError):
 class NoEligibleAgentException(DomainError):
     """Raised when no eligible agent is available to be assigned to a task."""
     pass
+
+class LLMOutputValidationError(DomainError):
+    """Raised when an LLM produces malformed output or schema validation fails."""
+    pass

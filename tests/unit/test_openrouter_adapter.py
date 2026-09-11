@@ -1,4 +1,4 @@
-﻿import os
+import os
 import pytest
 from unittest.mock import patch, MagicMock
 from pydantic import ValidationError
@@ -32,6 +32,8 @@ def test_openrouter_adapter_successful_response():
         assert len(result.key_findings) == 2
         assert result.evidence_data["score"] == 0.9
 
+from src.domain.exceptions import LLMOutputValidationError
+
 def test_openrouter_adapter_schema_validation_error():
     bad_json = """{"unrelated_field": 123}"""
     mock_resp = MagicMock()
@@ -42,5 +44,5 @@ def test_openrouter_adapter_schema_validation_error():
 
     with patch("httpx.Client.post", return_value=mock_resp):
         adapter = OpenRouterAgentAdapter(api_key="sk-or-fake-key")
-        with pytest.raises(ValidationError):
+        with pytest.raises((ValidationError, LLMOutputValidationError)):
             adapter.generate_structured("prompt", ResearchOutput)

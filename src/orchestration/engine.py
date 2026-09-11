@@ -9,15 +9,17 @@ from src.governance.policy_engine import PolicyEngine
 from src.governance.human_gate import HumanGate
 from src.economy.ledger import DoubleEntryLedger, TREASURY
 from src.economy.reputation import ReputationEngine
-from src.execution.executor import SandboxExecutor
+from src.execution.base import BaseExecutor
 from src.audit.event_store import AppendOnlyEventStore
 from src.audit.auditor import Auditor, VerificationReceipt, AuditVerificationError
 from src.orchestration.state_machine import StateMachine
+from src.orchestration.assignment import AgentAssignmentEngine
 from src.agents.roles.ceo import CEOAgent
 from src.agents.roles.researcher import ResearcherAgent
 from src.agents.roles.strategist import StrategistAgent
 from src.agents.roles.financial_analyst import FinancialAnalystAgent
 from src.agents.schemas import ResearchOutput, StrategyOutput, FinancialProposalOutput, MissionReviewOutput
+from src.domain.exceptions import LLMOutputValidationError, NoEligibleAgentException
 
 class OrchestrationEngine:
     """
@@ -37,7 +39,7 @@ class OrchestrationEngine:
         org: Organisation,
         ledger: Any,
         policy_engine: PolicyEngine,
-        executor: SandboxExecutor,
+        executor: BaseExecutor,
         event_store: Any,
         human_gate: HumanGate,
         ceo: CEOAgent,
@@ -96,18 +98,29 @@ class OrchestrationEngine:
 
         created_tasks: List[Task] = []
         for item in plan_output.tasks:
-            agent_id = f"agent-{item.assigned_role.value.lower()}"
             task = Task(
                 id=item.task_id,
                 mission_id=self.org.id,
-                assigned_agent_id=agent_id,
+                assigned_agent_id=None,
                 objective=item.objective,
                 allocated_credits=item.allocated_credits,
                 status=TaskStatus.PENDING
             )
+            # Route and assign via AgentAssignmentEngine if eligible agent exists
+            try:
+                agent, credits = AgentAssignmentEngine.assign_and_allocate(
+                    task=task,
+                    org=self.org,
+                    required_role=item.assigned_role,
+                    requested_credits=item.allocated_credits
+                )
+            except NoEligibleAgentException:
+                # Fallback to static mapping if candidate agent is not registered in org.agents yet
+                task.assigned_agent_id = f"agent-{item.assigned_role.value.lower()}"
+                StateMachine.transition_task(task, TaskStatus.ASSIGNED)
+
             self.tasks[task.id] = task
             created_tasks.append(task)
-            StateMachine.transition_task(task, TaskStatus.ASSIGNED)
 
         StateMachine.transition_org(self.org, OrgState.EXECUTING)
         self._sync_state()
@@ -240,7 +253,13 @@ class OrchestrationEngine:
                 raise ave
 
             if proposing_agent:
-                ReputationEngine.record_task_success(proposing_agent)
+                ReputationEngine.record_task_success(
+                    proposing_agent,
+                    credits_allocated=task.allocated_credits,
+                    credits_used=receipt.cost_credits,
+                    value_score=proposal.expected_value_score,
+                    task_id=task.id
+                )
 
             StateMachine.transition_task(task, TaskStatus.COMPLETED)
             self._sync_state()
@@ -249,12 +268,24 @@ class OrchestrationEngine:
         elif decision.result == PolicyResult.REJECTED:
             StateMachine.transition_task(task, TaskStatus.REJECTED)
             if proposing_agent:
-                ReputationEngine.record_policy_violation(proposing_agent)
+                ReputationEngine.record_policy_violation(
+                    proposing_agent,
+                    details=f"{decision.violated_rule_id}: {decision.violated_rule_description}",
+                    task_id=task.id
+                )
 
             attempts = self.replan_counts.get(task_id, 0) + 1
             self.replan_counts[task_id] = attempts
 
             if attempts > self.max_replan_attempts:
+                if proposing_agent:
+                    ReputationEngine.record_task_failure(
+                        proposing_agent,
+                        credits_allocated=task.allocated_credits,
+                        credits_used=0,
+                        reason="Max replan attempts exceeded",
+                        task_id=task.id
+                    )
                 StateMachine.transition_task(task, TaskStatus.FAILED)
                 StateMachine.transition_org(self.org, OrgState.FAILED)
                 self._sync_state()
