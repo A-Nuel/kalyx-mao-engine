@@ -27,6 +27,11 @@ CREATE TABLE IF NOT EXISTS agents (
     successful_tasks INTEGER NOT NULL,
     failed_tasks INTEGER NOT NULL,
     policy_violations INTEGER NOT NULL,
+    performance_score REAL NOT NULL DEFAULT 100.0,
+    risk_score REAL NOT NULL DEFAULT 0.0,
+    resource_efficiency REAL NOT NULL DEFAULT 1.0,
+    reliability_score REAL NOT NULL DEFAULT 100.0,
+    task_history TEXT NOT NULL DEFAULT '[]',
     FOREIGN KEY (org_id) REFERENCES organisations(id)
 );
 
@@ -131,6 +136,18 @@ class Database:
     def _init_schema(self) -> None:
         with self.conn:
             self.conn.executescript(SCHEMA_SQL)
+            cur = self.conn.cursor()
+            cur.execute("PRAGMA table_info(agents)")
+            columns = [row["name"] for row in cur.fetchall()]
+            for col_name, col_type in [
+                ("performance_score", "REAL NOT NULL DEFAULT 100.0"),
+                ("risk_score", "REAL NOT NULL DEFAULT 0.0"),
+                ("resource_efficiency", "REAL NOT NULL DEFAULT 1.0"),
+                ("reliability_score", "REAL NOT NULL DEFAULT 100.0"),
+                ("task_history", "TEXT NOT NULL DEFAULT '[]'")
+            ]:
+                if col_name not in columns:
+                    self.conn.execute(f"ALTER TABLE agents ADD COLUMN {col_name} {col_type}")
 
     def close(self) -> None:
         if self.conn:

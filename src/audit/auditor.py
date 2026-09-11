@@ -10,6 +10,7 @@ from src.domain.entities import ActionProposal, PolicyDecision, ExecutionReceipt
 from src.domain.enums import PolicyResult, OrgState, TaskStatus
 from src.domain.exceptions import DomainError
 from src.domain.events import canonical_json
+from src.governance.crypto import ITokenVerifier, HmacSha256TokenVerifier
 
 class AuditVerificationError(DomainError):
     """Raised when the independent Auditor detects an invalid, forged, or unverified execution."""
@@ -41,8 +42,18 @@ class Auditor:
     7. Conservation of credits
     8. Organisation / task state consistency
     """
-    def __init__(self, verification_secret: Optional[str] = None):
+    def __init__(
+        self,
+        verification_secret: Optional[str] = None,
+        verifier: Optional[ITokenVerifier] = None
+    ):
         self.verification_secret = verification_secret
+        if verifier:
+            self.verifier: Optional[ITokenVerifier] = verifier
+        elif verification_secret:
+            self.verifier = HmacSha256TokenVerifier(verification_secret)
+        else:
+            self.verifier = None
 
     def verify_authorization_token(
         self,
@@ -52,7 +63,8 @@ class Auditor:
         decision: Optional[PolicyDecision] = None,
         verification_secret: Optional[str] = None,
         expected_policy_version: Optional[str] = None,
-        current_time: Optional[float] = None
+        current_time: Optional[float] = None,
+        verifier: Optional[ITokenVerifier] = None
     ) -> Tuple[bool, Optional[str]]:
         """
         Independently verifies the authorization token cryptographic signature and claims
@@ -70,12 +82,10 @@ class Auditor:
 
         _, b64_claims, signature = parts
 
-        # Verify HMAC signature independently if verification secret is provided
-        secret = verification_secret or self.verification_secret
-        if secret:
-            secret_bytes = secret.encode("utf-8")
-            expected_sig = hmac.new(secret_bytes, b64_claims.encode("utf-8"), hashlib.sha256).hexdigest()
-            if not hmac.compare_digest(signature, expected_sig):
+        # Verify signature independently if verifier or secret is provided
+        active_verifier = verifier or (HmacSha256TokenVerifier(verification_secret) if verification_secret else self.verifier)
+        if active_verifier:
+            if not active_verifier.verify(b64_claims.encode("utf-8"), signature):
                 return False, "Invalid token signature: forged, modified, or signed with unrecognized key"
 
         try:
@@ -123,7 +133,8 @@ class Auditor:
         policy_engine: Optional[Any] = None,
         verification_secret: Optional[str] = None,
         policy_version_hash: Optional[str] = None,
-        current_time: Optional[float] = None
+        current_time: Optional[float] = None,
+        verifier: Optional[ITokenVerifier] = None
     ) -> VerificationReceipt:
         checks: List[str] = []
         failures: List[str] = []
@@ -146,7 +157,8 @@ class Auditor:
             decision=decision,
             verification_secret=resolved_secret,
             expected_policy_version=resolved_version,
-            current_time=current_time
+            current_time=current_time,
+            verifier=verifier
         )
         if not valid:
             failures.append(f"Authorization token verification failed: {reason}")

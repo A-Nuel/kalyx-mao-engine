@@ -15,12 +15,18 @@ from src.governance.rules import (
     OrgPauseRule,
     AgentStatusRule,
 )
+from src.governance.crypto import (
+    ITokenSigner,
+    ITokenVerifier,
+    HmacSha256TokenSigner,
+    HmacSha256TokenVerifier,
+)
 
 class PolicyEngine:
     """
     100% Deterministic policy evaluation engine.
     Evaluates ActionProposals against registered rules.
-    Issues HMAC-signed cryptographic authorization tokens ONLY upon approval.
+    Issues cryptographically signed authorization tokens ONLY upon approval.
     Binds authorizations to:
       - Organisation ID
       - Proposal content hash
@@ -34,7 +40,9 @@ class PolicyEngine:
         rules: Optional[List[PolicyRule]] = None,
         human_approval_threshold: int = 40,
         signing_secret: Optional[str] = None,
-        token_ttl_seconds: float = 60.0
+        token_ttl_seconds: float = 60.0,
+        signer: Optional[ITokenSigner] = None,
+        verifier: Optional[ITokenVerifier] = None
     ):
         self.rules = rules if rules is not None else [
             OrgPauseRule(),
@@ -46,7 +54,10 @@ class PolicyEngine:
         ]
         self.human_approval_threshold = human_approval_threshold
         self.token_ttl_seconds = token_ttl_seconds
-        self._secret = (signing_secret or str(uuid.uuid4())).encode("utf-8")
+        secret_str = signing_secret or str(uuid.uuid4())
+        self._secret = secret_str.encode("utf-8")
+        self.signer = signer or HmacSha256TokenSigner(secret_str)
+        self.verifier = verifier or HmacSha256TokenVerifier(secret_str)
 
     def get_signing_secret(self) -> str:
         """Returns the UTF-8 string of the signing secret."""
@@ -94,7 +105,7 @@ class PolicyEngine:
             nonce=str(uuid.uuid4())
         )
         b64_claims = claims.to_b64()
-        signature = hmac.new(self._secret, b64_claims.encode("utf-8"), hashlib.sha256).hexdigest()
+        signature = self.signer.sign(b64_claims.encode("utf-8"))
         return f"AUTH-{proposal.id[:8]}.{b64_claims}.{signature}"
 
     def _generate_token(
@@ -137,9 +148,8 @@ class PolicyEngine:
 
         _, b64_claims, signature = parts
 
-        # Verify HMAC signature first
-        expected_signature = hmac.new(self._secret, b64_claims.encode("utf-8"), hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(signature, expected_signature):
+        # Verify cryptographic signature using configured verifier
+        if not self.verifier.verify(b64_claims.encode("utf-8"), signature):
             return False, "Invalid token: signature does not match proposal content or was forged/modified"
 
         try:

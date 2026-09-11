@@ -348,6 +348,7 @@ class SqliteRepository:
         # Load agents
         cursor.execute("SELECT * FROM agents WHERE org_id = ?", (org_id,))
         for ar in cursor.fetchall():
+            task_history = json.loads(ar["task_history"]) if "task_history" in ar.keys() and ar["task_history"] else []
             org.agents[ar["id"]] = AgentRecord(
                 id=ar["id"],
                 role=AgentRole(ar["role"]),
@@ -359,7 +360,12 @@ class SqliteRepository:
                 status=AgentStatus(ar["status"]),
                 successful_tasks=ar["successful_tasks"],
                 failed_tasks=ar["failed_tasks"],
-                policy_violations=ar["policy_violations"]
+                policy_violations=ar["policy_violations"],
+                performance_score=ar["performance_score"] if "performance_score" in ar.keys() else 100.0,
+                risk_score=ar["risk_score"] if "risk_score" in ar.keys() else 0.0,
+                resource_efficiency=ar["resource_efficiency"] if "resource_efficiency" in ar.keys() else 1.0,
+                reliability_score=ar["reliability_score"] if "reliability_score" in ar.keys() else 100.0,
+                task_history=task_history
             )
         return org
 
@@ -368,8 +374,8 @@ class SqliteRepository:
             self.db.conn.execute(
                 """
                 INSERT INTO agents 
-                (id, org_id, role, model_name, credit_balance, reputation_score, authority_ceiling, allowed_action_types, status, successful_tasks, failed_tasks, policy_violations)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (id, org_id, role, model_name, credit_balance, reputation_score, authority_ceiling, allowed_action_types, status, successful_tasks, failed_tasks, policy_violations, performance_score, risk_score, resource_efficiency, reliability_score, task_history)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     credit_balance = excluded.credit_balance,
                     reputation_score = excluded.reputation_score,
@@ -377,7 +383,12 @@ class SqliteRepository:
                     status = excluded.status,
                     successful_tasks = excluded.successful_tasks,
                     failed_tasks = excluded.failed_tasks,
-                    policy_violations = excluded.policy_violations
+                    policy_violations = excluded.policy_violations,
+                    performance_score = excluded.performance_score,
+                    risk_score = excluded.risk_score,
+                    resource_efficiency = excluded.resource_efficiency,
+                    reliability_score = excluded.reliability_score,
+                    task_history = excluded.task_history
                 """,
                 (
                     agent.id,
@@ -391,7 +402,12 @@ class SqliteRepository:
                     agent.status.value,
                     agent.successful_tasks,
                     agent.failed_tasks,
-                    agent.policy_violations
+                    agent.policy_violations,
+                    agent.performance_score,
+                    agent.risk_score,
+                    agent.resource_efficiency,
+                    agent.reliability_score,
+                    json.dumps(agent.task_history)
                 )
             )
 

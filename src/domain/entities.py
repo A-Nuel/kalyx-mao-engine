@@ -58,6 +58,11 @@ class AgentRecord(BaseModel):
     successful_tasks: int = 0
     failed_tasks: int = 0
     policy_violations: int = 0
+    performance_score: float = 100.0
+    risk_score: float = 0.0
+    resource_efficiency: float = 1.0
+    reliability_score: float = 100.0
+    task_history: List[str] = Field(default_factory=list)
 
 class ActionProposal(BaseModel):
     id: str
