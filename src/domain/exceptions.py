@@ -25,3 +25,7 @@ class TamperedAuditLogError(DomainError):
 class AgentSuspendedError(DomainError):
     """Raised when a suspended/retired agent attempts actions."""
     pass
+
+class NoEligibleAgentException(DomainError):
+    """Raised when no eligible agent is available to be assigned to a task."""
+    pass

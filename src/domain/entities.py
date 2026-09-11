@@ -112,7 +112,7 @@ class ExecutionReceipt(BaseModel):
 class Task(BaseModel):
     id: str
     mission_id: str
-    assigned_agent_id: str
+    assigned_agent_id: Optional[str] = None
     objective: str
     allocated_credits: int = Field(ge=0)
     status: TaskStatus = TaskStatus.PENDING

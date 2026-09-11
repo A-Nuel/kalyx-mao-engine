@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS agents (
 CREATE TABLE IF NOT EXISTS tasks (
     id TEXT PRIMARY KEY,
     org_id TEXT NOT NULL,
-    assigned_agent_id TEXT NOT NULL,
+    assigned_agent_id TEXT,
     objective TEXT NOT NULL,
     allocated_credits INTEGER NOT NULL,
     status TEXT NOT NULL,
