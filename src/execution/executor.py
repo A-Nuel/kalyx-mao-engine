@@ -47,7 +47,7 @@ class SandboxExecutor:
             )
 
         # Check 3: Cryptographic signature & proposal payload integrity & kill-switch status
-        valid, reason = self.policy_engine.verify_token(token, proposal, org)
+        valid, reason = self.policy_engine.verify_token(token, proposal, org, decision=decision)
         if not valid:
             raise UnauthorizedActionError(f"Execution rejected: {reason}")
 

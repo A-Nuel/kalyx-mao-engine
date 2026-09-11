@@ -1,9 +1,41 @@
+import base64
+import json
 import hashlib
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 from src.domain.enums import OrgState, AgentRole, AgentStatus, TaskStatus, PolicyResult, ActionType
-from src.domain.events import compute_payload_hash
+from src.domain.events import compute_payload_hash, canonical_json
+
+class AuthorizationTokenClaims(BaseModel):
+    org_id: str
+    proposal_id: str
+    proposal_content_hash: str
+    decision_id: str
+    policy_version_hash: str
+    issued_at: float
+    expires_at: float
+    nonce: str
+
+    def to_b64(self) -> str:
+        claims_dict = {
+            "org_id": self.org_id,
+            "proposal_id": self.proposal_id,
+            "proposal_content_hash": self.proposal_content_hash,
+            "decision_id": self.decision_id,
+            "policy_version_hash": self.policy_version_hash,
+            "issued_at": round(self.issued_at, 3),
+            "expires_at": round(self.expires_at, 3),
+            "nonce": self.nonce
+        }
+        canonical = canonical_json(claims_dict)
+        return base64.urlsafe_b64encode(canonical.encode("utf-8")).decode("utf-8")
+
+    @classmethod
+    def from_b64(cls, b64_str: str) -> "AuthorizationTokenClaims":
+        raw = base64.urlsafe_b64decode(b64_str.encode("utf-8")).decode("utf-8")
+        data = json.loads(raw)
+        return cls(**data)
 
 class LedgerEntry(BaseModel):
     id: str

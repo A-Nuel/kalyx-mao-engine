@@ -190,7 +190,10 @@ class SqliteEventStore:
             self.on_startup_verify()
 
     def on_startup_verify(self) -> None:
-        valid, err = self.verify_integrity()
+        try:
+            valid, err = self.verify_integrity()
+        except Exception as e:
+            raise TamperedAuditLogError(f"Audit log corruption detected on startup: {e}")
         if not valid:
             raise TamperedAuditLogError(f"Audit log corruption detected on startup: {err}")
 
@@ -325,17 +328,20 @@ class SqliteRepository:
                 (org.id, org.mission, org.treasury_balance, org.state.value, org.created_at.isoformat())
             )
 
-    def load_organisation(self, org_id: str) -> Optional[Organisation]:
+    def load_organisation(self, org_id: str, ledger: Optional[Any] = None) -> Optional[Organisation]:
         cursor = self.db.conn.cursor()
         cursor.execute("SELECT * FROM organisations WHERE id = ?", (org_id,))
         row = cursor.fetchone()
         if not row:
             return None
         
+        # Authoritative balance from ledger if available; fallback to stored record
+        treasury_balance = ledger.get_balance(TREASURY) if ledger is not None else row["treasury_balance"]
+
         org = Organisation(
             id=row["id"],
             mission=row["mission"],
-            treasury_balance=row["treasury_balance"],
+            treasury_balance=treasury_balance,
             state=OrgState(row["state"]),
             created_at=datetime.fromisoformat(row["created_at"])
         )
