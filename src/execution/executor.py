@@ -131,7 +131,7 @@ class ControlledExternalExecutor(BaseExecutor):
         self._validate_outbound_target(proposal.target)
 
         # Step 3: Enforce allowed action types for external execution
-        if proposal.action_type not in {ActionType.EXTERNAL_API_CALL, ActionType.DATA_FETCH}:
+        if proposal.action_type not in {ActionType.EXTERNAL_API_CALL, ActionType.DATA_FETCH, ActionType.SIMULATED_ALLOCATION}:
             raise UnauthorizedActionError(
                 f"External execution rejected: ActionType '{proposal.action_type.value}' not allowed for external adapter"
             )
@@ -164,8 +164,8 @@ class ControlledExternalExecutor(BaseExecutor):
         if self.mock_handler:
             return self.mock_handler(proposal.target, proposal.parameters)
 
-        if proposal.target.startswith("api://"):
-            # Internal mockable API route
+        if proposal.target.startswith("api://") or proposal.target.startswith("sandbox://"):
+            # Internal mockable API route or verified sandbox route
             return 200, {
                 "source": "controlled_gateway",
                 "route": proposal.target,
