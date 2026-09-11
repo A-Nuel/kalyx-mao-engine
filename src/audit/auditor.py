@@ -182,13 +182,15 @@ class Auditor:
         # 5. Ledger settlement
         checks.append("LEDGER_SETTLEMENT")
         if receipt.cost_credits > 0:
-            expected_tx_id = f"tx-{hashlib.sha256((decision.authorization_token or '').encode('utf-8')).hexdigest()[:16]}"
+            token_hash = hashlib.sha256((decision.authorization_token or '').encode('utf-8')).hexdigest()[:16]
+            expected_tx_id = f"tx-{token_hash}"
+            expected_commit_id = f"commit-{token_hash}"
             entries = ledger.get_entries()
-            matching = [e for e in entries if e.transaction_id == expected_tx_id]
+            matching = [e for e in entries if e.transaction_id in (expected_tx_id, expected_commit_id)]
             if not matching:
                 failures.append(f"No ledger settlement found for transaction ID '{expected_tx_id}'")
-            elif matching[0].amount != receipt.cost_credits:
-                failures.append(f"Ledger settled amount ({matching[0].amount}) differs from receipt cost ({receipt.cost_credits})")
+            elif matching[-1].amount != receipt.cost_credits:
+                failures.append(f"Ledger settled amount ({matching[-1].amount}) differs from receipt cost ({receipt.cost_credits})")
 
         # 6. Audit-chain integrity
         checks.append("AUDIT_CHAIN_INTEGRITY")

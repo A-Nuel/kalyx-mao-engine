@@ -197,7 +197,7 @@ class OrchestrationEngine:
             payload=proposal.model_dump()
         )
 
-        decision = self.policy_engine.evaluate(proposal, self.org)
+        decision = self.policy_engine.evaluate(proposal, self.org, ledger=self.ledger)
         if self.repository:
             self.repository.save_policy_decision(decision)
 

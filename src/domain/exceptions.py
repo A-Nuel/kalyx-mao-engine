@@ -33,3 +33,8 @@ class NoEligibleAgentException(DomainError):
 class LLMOutputValidationError(DomainError):
     """Raised when an LLM produces malformed output or schema validation fails."""
     pass
+
+class ExternalExecutionError(DomainError):
+    """Raised when an external execution call fails, times out, or returns a 4xx/5xx status."""
+    pass
+
