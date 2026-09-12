@@ -15,7 +15,7 @@ function setReplay(index) {
   if (!replayEvents.length) {
     replayIndex = -1;
     $('replayTitle').textContent = 'No mission events';
-    $('replayDetail').textContent = 'Run the mission demo to populate the event history.';
+    $('replayDetail').textContent = 'Create a mission to populate the event history.';
     $('replayCount').textContent = '0 / 0';
     return;
   }
@@ -40,7 +40,7 @@ function toggleReplay() {
 async function loadOrgs() {
   const xs = await get('/api/organisations');
   const s = $('orgSelect');
-  s.innerHTML = xs.length ? xs.map(x => `<option value="${esc(x.id)}">${esc(x.id)}</option>`).join('') : '<option>No organisations</option>';
+  s.innerHTML = xs.length ? xs.map(x => `<option value="${esc(x.id)}">${esc(x.id)}</option>`).join('') : '<option value="">No organisations</option>';
   if (xs.length) { orgId = xs[0].id; await refresh(); }
 }
 async function refresh() {
@@ -66,6 +66,36 @@ async function refresh() {
   if (replayIndex >= replayEvents.length) replayIndex = replayEvents.length - 1;
   if (replayIndex >= 0) setReplay(replayIndex);
 }
+async function submitMission(event) {
+  event.preventDefault();
+  const button = $('runMission');
+  const status = $('missionStatus');
+  button.disabled = true;
+  status.textContent = 'Organisation is planning, evaluating and executing…';
+  try {
+    const result = await get('/api/missions', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        mission: $('missionInput').value.trim(),
+        budget: Number($('budgetInput').value),
+        live: $('liveInput').checked
+      })
+    });
+    orgId = result.organisation_id;
+    status.textContent = `Mission ${result.state.toLowerCase()} · ${result.event_count} audited events · ${result.treasury} credits remaining`;
+    await loadOrgs();
+    $('orgSelect').value = orgId;
+    await refresh();
+    $('missionForm').reset();
+    $('budgetInput').value = 100;
+  } catch (error) {
+    status.textContent = `Mission failed: ${error.message}`;
+  } finally {
+    button.disabled = false;
+  }
+}
+$('missionForm').addEventListener('submit', submitMission);
 $('orgSelect').addEventListener('change', e => { stopReplay(); orgId = e.target.value; refresh().catch(console.error); });
 $('pause').onclick = () => orgId && get(`/api/organisations/${orgId}/pause`, {method:'POST'}).then(refresh).catch(console.error);
 $('resume').onclick = () => orgId && get(`/api/organisations/${orgId}/resume`, {method:'POST'}).then(refresh).catch(console.error);
