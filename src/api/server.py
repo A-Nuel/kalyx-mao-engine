@@ -6,19 +6,21 @@ from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.api.config import cors_origins, operator_key, require_operator_auth
+from src.api.mission_service import run_mission
 from src.persistence.database import Database
 from src.persistence.repositories import SqliteEventStore, SqliteLedger
 
-app = FastAPI(title="Kalyx Command Centre API", version="0.6.0")
+app = FastAPI(title="Kalyx Command Centre API", version="0.7.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins(),
     allow_credentials=False,
     allow_methods=["GET", "POST"],
-    allow_headers=["*"]
+    allow_headers=["*"],
 )
 
 
@@ -60,6 +62,12 @@ def _operator_event(db: Database, org_id: str, event_type: str, previous_state: 
     )
 
 
+class MissionRequest(BaseModel):
+    mission: str = Field(min_length=3, max_length=2_000)
+    budget: int = Field(default=100, ge=1, le=10_000)
+    live: bool = False
+
+
 @app.get("/api/health")
 def health() -> Dict[str, Any]:
     db = _db()
@@ -68,6 +76,18 @@ def health() -> Dict[str, Any]:
         return {"status": "ok", "service": "kalyx-command-centre", "version": app.version}
     finally:
         db.close()
+
+
+@app.post("/api/missions")
+def create_and_run_mission(request: MissionRequest, x_api_key: str | None = Header(default=None, alias="X-API-Key")) -> Dict[str, Any]:
+    """Create and run a bounded mission through the complete MAO control loop."""
+    _require_operator(x_api_key)
+    try:
+        return run_mission(request.mission, request.budget, live=request.live)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Mission execution failed: {type(exc).__name__}: {exc}") from exc
 
 
 @app.get("/api/organisations")
