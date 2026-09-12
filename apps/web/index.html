@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kalyx Command Centre</title>
+  <link rel="stylesheet" href="/assets/app.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div><span class="brand">KALYX</span><span class="muted"> / COMMAND CENTRE</span></div>
+    <div class="status"><span id="dot"></span><span id="health">CONNECTING</span><span class="muted" id="clock"></span></div>
+  </header>
+  <main>
+    <section class="hero">
+      <div><div class="eyebrow">AUTONOMOUS ORGANISATION</div><h1 id="mission">No organisation loaded</h1><div class="muted" id="orgMeta">Start the engine demo, then refresh.</div></div>
+      <div class="controls"><select id="orgSelect"></select><button id="pause">PAUSE</button><button id="resume">RESUME</button></div>
+    </section>
+    <section class="metrics">
+      <article><span>TREASURY</span><strong id="treasury">—</strong><small>ORG credits</small></article>
+      <article><span>ACTIVE AGENTS</span><strong id="agents">—</strong><small>workforce</small></article>
+      <article><span>MISSIONS / TASKS</span><strong id="tasks">—</strong><small>persistent state</small></article>
+      <article><span>AUDIT CHAIN</span><strong id="audit">—</strong><small>cryptographic integrity</small></article>
+    </section>
+    <section class="grid">
+      <article class="panel wide"><div class="panel-head"><h2>Organisation graph</h2><span class="tag">CONTROL PLANE</span></div><div id="graph" class="graph"></div></article>
+      <article class="panel"><div class="panel-head"><h2>Agent economy</h2><span class="tag">LIVE</span></div><div id="agentList"></div></article>
+      <article class="panel wide"><div class="panel-head"><h2>Mission replay</h2><span class="tag">APPEND-ONLY EVENTS</span></div><div id="events" class="events"></div></article>
+      <article class="panel"><div class="panel-head"><h2>Policy telemetry</h2><span class="tag">DETERMINISTIC</span></div><div id="decisions" class="events"></div></article>
+      <article class="panel"><div class="panel-head"><h2>Ledger</h2><span class="tag">DOUBLE ENTRY</span></div><div id="ledger"></div></article>
+    </section>
+    <footer>AGENTS PROPOSE → POLICIES AUTHORIZE → EXECUTORS EXECUTE → AUDITORS VERIFY</footer>
+  </main>
+  <script src="/assets/app.js"></script>
+</body>
+</html>
