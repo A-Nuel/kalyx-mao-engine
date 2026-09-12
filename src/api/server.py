@@ -1,16 +1,37 @@
 import os
+import secrets
 from typing import Any, Dict
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
 
+from src.api.config import cors_origins, operator_key, require_operator_auth
 from src.persistence.database import Database
 from src.persistence.repositories import SqliteEventStore, SqliteLedger
 
-app = FastAPI(title="Kalyx Command Centre API", version="0.5.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=False, allow_methods=["GET", "POST"], allow_headers=["*"])
+app = FastAPI(title="Kalyx Command Centre API", version="0.6.0")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins(),
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"]
+)
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        return response
+
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 
 def _db() -> Database:
@@ -22,6 +43,14 @@ def _org_id_or_404(db: Database, org_id: str) -> Dict[str, Any]:
     if not row:
         raise HTTPException(status_code=404, detail="Organisation not found")
     return dict(row)
+
+
+def _require_operator(x_api_key: str | None) -> None:
+    if not require_operator_auth():
+        return
+    expected = operator_key()
+    if not expected or not x_api_key or not secrets.compare_digest(x_api_key, expected):
+        raise HTTPException(status_code=401, detail="Operator authentication required")
 
 
 def _operator_event(db: Database, org_id: str, event_type: str, previous_state: str, new_state: str) -> None:
@@ -36,7 +65,7 @@ def health() -> Dict[str, Any]:
     db = _db()
     try:
         db.conn.execute("SELECT 1")
-        return {"status": "ok", "service": "kalyx-command-centre"}
+        return {"status": "ok", "service": "kalyx-command-centre", "version": app.version}
     finally:
         db.close()
 
@@ -134,8 +163,11 @@ def audit(org_id: str) -> Dict[str, Any]:
     db = _db()
     try:
         _org_id_or_404(db, org_id)
-        store = SqliteEventStore(db, verify_on_startup=True)
-        valid, error = store.verify_integrity()
+        store = SqliteEventStore(db, verify_on_startup=False)
+        try:
+            valid, error = store.verify_integrity()
+        except Exception as exc:
+            valid, error = False, f"Audit verification failed: {type(exc).__name__}: {exc}"
         receipts = db.conn.execute("SELECT v.*, e.proposal_id FROM verification_receipts v JOIN execution_receipts e ON e.id = v.execution_id JOIN proposals p ON p.id = e.proposal_id JOIN tasks t ON t.id = p.task_id WHERE t.org_id = ? ORDER BY v.timestamp DESC", (org_id,)).fetchall()
         return {"chain_valid": valid, "chain_error": error, "verification_receipts": [dict(r) for r in receipts]}
     finally:
@@ -148,7 +180,8 @@ def policies(org_id: str) -> Dict[str, Any]:
 
 
 @app.post("/api/organisations/{org_id}/pause")
-def pause(org_id: str) -> Dict[str, Any]:
+def pause(org_id: str, x_api_key: str | None = Header(default=None, alias="X-API-Key")) -> Dict[str, Any]:
+    _require_operator(x_api_key)
     db = _db()
     try:
         org = _org_id_or_404(db, org_id)
@@ -163,7 +196,8 @@ def pause(org_id: str) -> Dict[str, Any]:
 
 
 @app.post("/api/organisations/{org_id}/resume")
-def resume(org_id: str) -> Dict[str, Any]:
+def resume(org_id: str, x_api_key: str | None = Header(default=None, alias="X-API-Key")) -> Dict[str, Any]:
+    _require_operator(x_api_key)
     db = _db()
     try:
         org = _org_id_or_404(db, org_id)
