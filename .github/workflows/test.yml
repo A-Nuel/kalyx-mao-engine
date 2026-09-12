@@ -33,5 +33,9 @@ jobs:
       - name: Compile Python sources
         run: python -m compileall -q src tests
 
+      - name: Build production container
+        if: matrix.python-version == '3.12'
+        run: docker build --tag kalyx-ci .
+
       - name: Run test suite
         run: python -m pytest -q
