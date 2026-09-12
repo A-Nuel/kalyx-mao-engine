@@ -9,13 +9,12 @@ from fastapi.staticfiles import StaticFiles
 from src.persistence.database import Database
 from src.persistence.repositories import SqliteEventStore, SqliteLedger
 
-DB_PATH = os.getenv("KALYX_DB", "data/kalyx.db")
 app = FastAPI(title="Kalyx Command Centre API", version="0.5.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=False, allow_methods=["GET", "POST"], allow_headers=["*"])
 
 
 def _db() -> Database:
-    return Database(DB_PATH)
+    return Database(os.getenv("KALYX_DB", "data/kalyx.db"))
 
 
 def _org_id_or_404(db: Database, org_id: str) -> Dict[str, Any]:
@@ -27,9 +26,7 @@ def _org_id_or_404(db: Database, org_id: str) -> Dict[str, Any]:
 
 def _operator_event(db: Database, org_id: str, event_type: str, previous_state: str, new_state: str) -> None:
     SqliteEventStore(db, verify_on_startup=True).append_event(
-        actor_id="human-operator",
-        event_type=event_type,
-        entity_id=org_id,
+        actor_id="human-operator", event_type=event_type, entity_id=org_id,
         payload={"org_id": org_id, "previous_state": previous_state, "new_state": new_state},
     )
 
@@ -39,7 +36,7 @@ def health() -> Dict[str, Any]:
     db = _db()
     try:
         db.conn.execute("SELECT 1")
-        return {"status": "ok", "service": "kalyx-command-centre", "db": DB_PATH}
+        return {"status": "ok", "service": "kalyx-command-centre"}
     finally:
         db.close()
 
