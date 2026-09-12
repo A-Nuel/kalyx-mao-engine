@@ -17,4 +17,4 @@ def test_dashboard_is_served():
     client = TestClient(app)
     response = client.get("/")
     assert response.status_code == 200
-    assert "Kalyx Command Centre" in response.text
+    assert "<title>Kalyx — Command Centre</title>" in response.text
