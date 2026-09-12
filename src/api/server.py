@@ -172,7 +172,35 @@ def events(org_id: str, limit: int = Query(default=200, ge=1, le=1000)) -> list[
     try:
         _org_id_or_404(db, org_id)
         store = SqliteEventStore(db, verify_on_startup=True)
-        result = [e.model_dump(mode="json") for e in store.get_events() if e.entity_id == org_id or e.payload.get("org_id") == org_id]
+        all_events = store.get_events()
+
+        # Event entities are heterogeneous: organisation events use org_id,
+        # while task/proposal/execution events use their own entity IDs. Resolve
+        # the organisation's related IDs before filtering so the API exposes the
+        # complete mission chronology without weakening the tenant/org boundary.
+        related_ids = {org_id}
+        task_rows = db.conn.execute("SELECT id FROM tasks WHERE org_id = ?", (org_id,)).fetchall()
+        task_ids = {row["id"] for row in task_rows}
+        related_ids.update(task_ids)
+        if task_ids:
+            placeholders = ",".join("?" for _ in task_ids)
+            proposal_rows = db.conn.execute(
+                f"SELECT id FROM proposals WHERE task_id IN ({placeholders})", tuple(task_ids)
+            ).fetchall()
+            proposal_ids = {row["id"] for row in proposal_rows}
+            related_ids.update(proposal_ids)
+            if proposal_ids:
+                placeholders = ",".join("?" for _ in proposal_ids)
+                receipt_rows = db.conn.execute(
+                    f"SELECT id FROM execution_receipts WHERE proposal_id IN ({placeholders})", tuple(proposal_ids)
+                ).fetchall()
+                related_ids.update(row["id"] for row in receipt_rows)
+
+        result = [
+            e.model_dump(mode="json")
+            for e in all_events
+            if e.entity_id in related_ids or e.payload.get("org_id") == org_id
+        ]
         return result[-limit:]
     finally:
         db.close()
