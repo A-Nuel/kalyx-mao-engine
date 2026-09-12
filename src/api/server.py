@@ -1,5 +1,5 @@
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,6 +25,15 @@ def _org_id_or_404(db: Database, org_id: str) -> Dict[str, Any]:
     return dict(row)
 
 
+def _operator_event(db: Database, org_id: str, event_type: str, previous_state: str, new_state: str) -> None:
+    SqliteEventStore(db, verify_on_startup=True).append_event(
+        actor_id="human-operator",
+        event_type=event_type,
+        entity_id=org_id,
+        payload={"org_id": org_id, "previous_state": previous_state, "new_state": new_state},
+    )
+
+
 @app.get("/api/health")
 def health() -> Dict[str, Any]:
     db = _db()
@@ -39,8 +48,7 @@ def health() -> Dict[str, Any]:
 def organisations() -> list[Dict[str, Any]]:
     db = _db()
     try:
-        rows = db.conn.execute("SELECT * FROM organisations ORDER BY created_at DESC").fetchall()
-        return [dict(r) for r in rows]
+        return [dict(r) for r in db.conn.execute("SELECT * FROM organisations ORDER BY created_at DESC").fetchall()]
     finally:
         db.close()
 
@@ -63,8 +71,7 @@ def agents(org_id: str) -> list[Dict[str, Any]]:
     db = _db()
     try:
         _org_id_or_404(db, org_id)
-        rows = db.conn.execute("SELECT * FROM agents WHERE org_id = ? ORDER BY reputation_score DESC", (org_id,)).fetchall()
-        return [dict(r) for r in rows]
+        return [dict(r) for r in db.conn.execute("SELECT * FROM agents WHERE org_id = ? ORDER BY reputation_score DESC", (org_id,)).fetchall()]
     finally:
         db.close()
 
@@ -74,8 +81,7 @@ def tasks(org_id: str) -> list[Dict[str, Any]]:
     db = _db()
     try:
         _org_id_or_404(db, org_id)
-        rows = db.conn.execute("SELECT * FROM tasks WHERE org_id = ? ORDER BY created_at DESC", (org_id,)).fetchall()
-        return [dict(r) for r in rows]
+        return [dict(r) for r in db.conn.execute("SELECT * FROM tasks WHERE org_id = ? ORDER BY created_at DESC", (org_id,)).fetchall()]
     finally:
         db.close()
 
@@ -85,10 +91,7 @@ def proposals(org_id: str, limit: int = Query(default=100, ge=1, le=500)) -> lis
     db = _db()
     try:
         _org_id_or_404(db, org_id)
-        rows = db.conn.execute("""
-            SELECT p.*, t.org_id FROM proposals p JOIN tasks t ON t.id = p.task_id
-            WHERE t.org_id = ? ORDER BY p.created_at DESC LIMIT ?
-        """, (org_id, limit)).fetchall()
+        rows = db.conn.execute("SELECT p.*, t.org_id FROM proposals p JOIN tasks t ON t.id = p.task_id WHERE t.org_id = ? ORDER BY p.created_at DESC LIMIT ?", (org_id, limit)).fetchall()
         return [dict(r) for r in rows]
     finally:
         db.close()
@@ -99,10 +102,7 @@ def decisions(org_id: str, limit: int = Query(default=100, ge=1, le=500)) -> lis
     db = _db()
     try:
         _org_id_or_404(db, org_id)
-        rows = db.conn.execute("""
-            SELECT d.*, p.task_id FROM policy_decisions d JOIN proposals p ON p.id = d.proposal_id
-            JOIN tasks t ON t.id = p.task_id WHERE t.org_id = ? ORDER BY d.timestamp DESC LIMIT ?
-        """, (org_id, limit)).fetchall()
+        rows = db.conn.execute("SELECT d.*, p.task_id FROM policy_decisions d JOIN proposals p ON p.id = d.proposal_id JOIN tasks t ON t.id = p.task_id WHERE t.org_id = ? ORDER BY d.timestamp DESC LIMIT ?", (org_id, limit)).fetchall()
         return [dict(r) for r in rows]
     finally:
         db.close()
@@ -139,12 +139,7 @@ def audit(org_id: str) -> Dict[str, Any]:
         _org_id_or_404(db, org_id)
         store = SqliteEventStore(db, verify_on_startup=True)
         valid, error = store.verify_integrity()
-        receipts = db.conn.execute("""
-            SELECT v.*, e.proposal_id FROM verification_receipts v
-            JOIN execution_receipts e ON e.id = v.execution_id
-            JOIN proposals p ON p.id = e.proposal_id
-            JOIN tasks t ON t.id = p.task_id WHERE t.org_id = ? ORDER BY v.timestamp DESC
-        """, (org_id,)).fetchall()
+        receipts = db.conn.execute("SELECT v.*, e.proposal_id FROM verification_receipts v JOIN execution_receipts e ON e.id = v.execution_id JOIN proposals p ON p.id = e.proposal_id JOIN tasks t ON t.id = p.task_id WHERE t.org_id = ? ORDER BY v.timestamp DESC", (org_id,)).fetchall()
         return {"chain_valid": valid, "chain_error": error, "verification_receipts": [dict(r) for r in receipts]}
     finally:
         db.close()
@@ -152,28 +147,20 @@ def audit(org_id: str) -> Dict[str, Any]:
 
 @app.get("/api/organisations/{org_id}/policies")
 def policies(org_id: str) -> Dict[str, Any]:
-    db = _db()
-    try:
-        _org_id_or_404(db, org_id)
-        decisions = db.conn.execute("""
-            SELECT d.* FROM policy_decisions d JOIN proposals p ON p.id = d.proposal_id
-            JOIN tasks t ON t.id = p.task_id WHERE t.org_id = ? ORDER BY d.timestamp DESC
-        """, (org_id,)).fetchall()
-        return {"policy_decisions": [dict(r) for r in decisions]}
-    finally:
-        db.close()
+    return {"policy_decisions": decisions(org_id)}
 
 
-# Intentionally bounded operator control: pause/resume only changes the organisation state.
-# Execution authority remains inside the engine/policy layer; the UI never receives credentials.
 @app.post("/api/organisations/{org_id}/pause")
 def pause(org_id: str) -> Dict[str, Any]:
     db = _db()
     try:
         org = _org_id_or_404(db, org_id)
+        if org["state"] == "PAUSED":
+            return {"id": org_id, "state": "PAUSED", "changed": False}
+        _operator_event(db, org_id, "ORG_PAUSED", org["state"], "PAUSED")
         db.conn.execute("UPDATE organisations SET state = ? WHERE id = ?", ("PAUSED", org_id))
         db.conn.commit()
-        return {"id": org_id, "state": "PAUSED", "previous_state": org["state"]}
+        return {"id": org_id, "state": "PAUSED", "previous_state": org["state"], "changed": True}
     finally:
         db.close()
 
@@ -182,10 +169,13 @@ def pause(org_id: str) -> Dict[str, Any]:
 def resume(org_id: str) -> Dict[str, Any]:
     db = _db()
     try:
-        _org_id_or_404(db, org_id)
+        org = _org_id_or_404(db, org_id)
+        if org["state"] != "PAUSED":
+            raise HTTPException(status_code=409, detail="Organisation is not paused")
+        _operator_event(db, org_id, "ORG_RESUMED", "PAUSED", "EXECUTING")
         db.conn.execute("UPDATE organisations SET state = ? WHERE id = ?", ("EXECUTING", org_id))
         db.conn.commit()
-        return {"id": org_id, "state": "EXECUTING"}
+        return {"id": org_id, "state": "EXECUTING", "changed": True}
     finally:
         db.close()
 
