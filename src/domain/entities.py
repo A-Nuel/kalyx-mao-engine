@@ -79,7 +79,6 @@ class ActionProposal(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     def get_content_hash(self) -> str:
-        """Deterministic fingerprint of all proposal fields. Any modification changes this hash."""
         raw = (
             f"{self.id}|{self.task_id}|{self.proposing_agent_id}|"
             f"{self.action_type.value}|{self.target}|{self.requested_credits}|"
@@ -123,6 +122,7 @@ class Task(BaseModel):
 class Organisation(BaseModel):
     id: str
     mission: str
+    tenant_id: str = "tenant-demo"
     treasury_balance: int = 100
     state: OrgState = OrgState.INITIALIZING
     agents: Dict[str, AgentRecord] = Field(default_factory=dict)
