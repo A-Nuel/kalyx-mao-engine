@@ -14,9 +14,21 @@
   </header>
   <main>
     <section class="hero">
-      <div class="hero-copy"><div class="eyebrow">AUTONOMOUS ORGANISATION · CONTROL PLANE</div><h1 id="mission">No organisation loaded</h1><div class="muted" id="orgMeta">Run the mission demo to populate the command centre.</div></div>
+      <div class="hero-copy"><div class="eyebrow">AUTONOMOUS ORGANISATION · CONTROL PLANE</div><h1 id="mission">No organisation loaded</h1><div class="muted" id="orgMeta">Create a mission to start an autonomous organisation.</div></div>
       <div class="controls"><select id="orgSelect" aria-label="Organisation"></select><button id="pause">PAUSE</button><button id="resume">RESUME</button></div>
     </section>
+
+    <section class="mission-composer panel">
+      <div class="panel-head"><div><span class="eyebrow">NEW MISSION</span><h2>Give the organisation a mission</h2></div><span class="tag">BOUNDED EXECUTION</span></div>
+      <form id="missionForm" class="mission-form">
+        <label>Objective<input id="missionInput" name="mission" minlength="3" maxlength="2000" required placeholder="Find the highest-value opportunity under strict risk limits" /></label>
+        <label>Budget<input id="budgetInput" name="budget" type="number" min="1" max="10000" value="100" required /></label>
+        <label class="checkbox"><input id="liveInput" type="checkbox" /> Allow live reasoning if configured</label>
+        <button id="runMission" type="submit">START MISSION</button>
+      </form>
+      <div id="missionStatus" class="muted" role="status"></div>
+    </section>
+
     <section class="metrics">
       <article><span>TREASURY</span><strong id="treasury">—</strong><small>ORG credits</small></article>
       <article><span>WORKFORCE</span><strong id="agents">—</strong><small>active agents</small></article>
