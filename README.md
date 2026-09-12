@@ -121,6 +121,27 @@ A production Robinhood Chain adapter belongs behind this same interface and must
 
 `src/identity/ed25519.py` provides an Ed25519 identity primitive for stable agent public identities and signed messages. Private keys are held by the caller/key-management layer and are never implicitly persisted by Kalyx.
 
+## Phase 6 — Product Hardening
+
+Phase 6 hardens the command centre's operational boundary before adding more autonomous behaviour.
+
+### API hardening
+
+- Production mode requires `KALYX_OPERATOR_KEY` for pause/resume controls and uses constant-time key comparison.
+- Demo/local mode remains frictionless for judging and development.
+- CORS is configurable with `KALYX_CORS_ORIGINS`; production defaults to same-origin/no cross-origin access unless explicitly configured.
+- Baseline security response headers are added (`nosniff`, frame protection, referrer policy).
+- The audit endpoint reports a broken/corrupt chain as an explicit invalid result instead of hiding the condition behind a startup exception.
+- `/api/health` reports the running API version.
+
+See `.env.example` for runtime configuration.
+
+### CI quality gate
+
+GitHub Actions runs the test matrix on Python 3.11 and 3.12, verifies dependency consistency with `pip check`, compiles the Python source tree, and runs the full pytest suite. The workflow is also manually dispatchable for release/demo verification.
+
+The repository treats CI as the authoritative test result because local execution is environment-dependent.
+
 ## Economic benchmark
 
 `src/economy/experiment.py` compares STATIC, PERFORMANCE and ADAPTIVE allocation across multiple workload scenarios and seeds. Results are generated empirically rather than hardcoding the desired winner.
@@ -134,6 +155,7 @@ A production Robinhood Chain adapter belongs behind this same interface and must
 - [x] Phase 4 — Agent economy & controlled execution
 - [x] Phase 4 hardening — escrow atomicity, DNS SSRF validation, ledger authority, empirical benchmark
 - [x] Phase 5 — Command Centre, API/read model, operator controls, Ed25519 identity primitive, settlement boundary, CI
+- [x] Phase 6 — API security boundary, audit resilience, production configuration, container healthcheck, CI quality gates
 
 ## Quickstart
 
@@ -142,7 +164,7 @@ git clone https://github.com/A-Nuel/kalyx-mao-engine.git
 cd kalyx-mao-engine
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -e .
+pip install -e ".[dev]"
 python scripts/run_demo.py --fast
 ```
 
@@ -154,13 +176,25 @@ uvicorn src.api.server:app --host 127.0.0.1 --port 8000
 
 Open `http://127.0.0.1:8000` after running a demo against the same `KALYX_DB` database.
 
-Run tests:
+For a production-style container:
 
 ```bash
-python -m pytest -v
+docker build -t kalyx .
+docker run --rm -p 8000:8000 \
+  -e KALYX_OPERATOR_KEY="replace-with-a-strong-secret" \
+  -v kalyx-data:/app/data \
+  kalyx
 ```
 
-GitHub Actions now runs the test suite on pushes to `main` and pull requests. The previously reported Phase 4 baseline was 121 passing tests; Phase 5 adds identity, settlement and API/dashboard coverage. CI is the authoritative current count.
+Run tests locally:
+
+```bash
+python -m pip check
+python -m compileall -q src tests
+python -m pytest -q
+```
+
+GitHub Actions repeats these checks on pushes to `main`, pull requests, and manual workflow dispatches.
 
 ## What Kalyx is trying to prove
 
