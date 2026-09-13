@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List, Optional
 
 from src.domain.entities import LedgerEntry
@@ -12,9 +13,21 @@ class TenantScopedLedger:
             raise ValueError("tenant_id must be a non-empty identifier without ':'")
         self.ledger = ledger
         self.tenant_id = tenant_id
+        self._ensure_tenant()
         if initial_treasury > 0 and self.get_balance("TREASURY") == 0:
-            entry = self.ledger._mint(self._account("TREASURY"), initial_treasury, f"Initial treasury for {tenant_id}")
+            entry = self.ledger._mint(
+                self._account("TREASURY"),
+                initial_treasury,
+                f"Initial treasury for {tenant_id}",
+            )
             self._mark_tenant(entry.id)
+
+    def _ensure_tenant(self) -> None:
+        with self.ledger.db.conn:
+            self.ledger.db.conn.execute(
+                "INSERT OR IGNORE INTO tenants (id, name, status, created_at) VALUES (?, ?, ?, ?)",
+                (self.tenant_id, self.tenant_id, "active", datetime.utcnow().isoformat()),
+            )
 
     def _account(self, account: str) -> str:
         if account.startswith(f"{self.tenant_id}:"):
@@ -31,7 +44,14 @@ class TenantScopedLedger:
     def get_balance(self, account: str) -> int:
         return self.ledger.get_balance(self._account(account))
 
-    def transfer(self, from_account: str, to_account: str, amount: int, memo: str, transaction_id: Optional[str] = None) -> LedgerEntry:
+    def transfer(
+        self,
+        from_account: str,
+        to_account: str,
+        amount: int,
+        memo: str,
+        transaction_id: Optional[str] = None,
+    ) -> LedgerEntry:
         entry = self.ledger.transfer(
             self._account(from_account),
             self._account(to_account),
