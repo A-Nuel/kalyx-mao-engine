@@ -76,10 +76,11 @@ class OrchestrationEngine:
                     task=task, org=self.org, required_role=item.assigned_role, requested_credits=item.allocated_credits,
                 )
             except NoEligibleAgentException as exc:
-                # Never invent a synthetic agent ID. Keep the task PENDING with no assignee;
-                # later stages may still run with explicit role agents registered on the engine.
+                # Never invent a synthetic agent ID. Advance to ASSIGNED with no assignee so the
+                # control loop state machine remains valid; the missing agent is audited.
                 task.assigned_agent_id = None
-                task.status = TaskStatus.PENDING
+                if task.status == TaskStatus.PENDING:
+                    StateMachine.transition_task(task, TaskStatus.ASSIGNED)
                 self.event_store.append_event(
                     actor_id="ORCHESTRATOR",
                     event_type="TASK_ASSIGNMENT_FAILED",
@@ -121,7 +122,6 @@ class OrchestrationEngine:
         actual = self._task_id(task_id); task = self.tasks[actual]; proposal.task_id = task.id
         if task.status == TaskStatus.FAILED:
             raise PolicyViolationError(f"Task {actual} is already FAILED and cannot accept proposals")
-        # Allow PENDING / IN_PROGRESS / REJECTED recovery paths into SUBMITTED.
         if task.status != TaskStatus.SUBMITTED:
             StateMachine.transition_task(task, TaskStatus.SUBMITTED)
         task.proposals.append(proposal)
@@ -155,7 +155,6 @@ class OrchestrationEngine:
             replanned = self.ceo.replan_after_rejection(task_id=task_id, rejected_proposal=proposal, violated_rule_id=decision.violated_rule_id or "RULE-UNKNOWN", violated_rule_description=decision.violated_rule_description or "Rejected", attempt_number=attempts)
             self._sync_state(); return self.process_action_proposal(actual, replanned)
         if decision.result == PolicyResult.ESCALATE_TO_HUMAN:
-            # Deterministic pause: no spend, no silent continuation, audit the escalation.
             if self.org.state != OrgState.PAUSED:
                 StateMachine.transition_org(self.org, OrgState.PAUSED)
             self.event_store.append_event(
@@ -176,7 +175,6 @@ class OrchestrationEngine:
 
     def complete_mission(self) -> MissionReviewOutput:
         if self.org.state == OrgState.PAUSED:
-            # Escalation paused missions are not auto-completed.
             review = self.ceo.review_mission(self.org.mission, [r.model_dump() for r in self.execution_receipts])
             self.event_store.append_event(
                 actor_id=self.ceo.agent_id, event_type="MISSION_PAUSED_ESCALATION",
