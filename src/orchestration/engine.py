@@ -2,7 +2,7 @@ import uuid
 from typing import Dict, List, Optional, Tuple, Any
 from src.domain.entities import Organisation, Task, ActionProposal, PolicyDecision, ExecutionReceipt
 from src.domain.enums import OrgState, TaskStatus, PolicyResult
-from src.domain.exceptions import PolicyViolationError
+from src.domain.exceptions import PolicyViolationError, NoEligibleAgentException
 from src.governance.policy_engine import PolicyEngine
 from src.governance.human_gate import HumanGate
 from src.economy.reputation import ReputationEngine
@@ -15,7 +15,6 @@ from src.agents.roles.researcher import ResearcherAgent
 from src.agents.roles.strategist import StrategistAgent
 from src.agents.roles.financial_analyst import FinancialAnalystAgent
 from src.agents.schemas import ResearchOutput, StrategyOutput, FinancialProposalOutput, MissionReviewOutput
-from src.domain.exceptions import NoEligibleAgentException
 
 
 class TaskRegistry(dict):
@@ -65,34 +64,53 @@ class OrchestrationEngine:
         self.event_store.append_event(actor_id=self.ceo.agent_id, event_type="MISSION_PLAN_CREATED", entity_id=self.org.id, payload=plan.model_dump())
         created = []
         for item in plan.tasks:
-            logical_id = item.task_id; actual_id = f"{self.org.id}-{logical_id}-{uuid.uuid4().hex[:8]}"; self._task_aliases[logical_id] = actual_id
-            task = Task(id=actual_id, mission_id=self.org.id, assigned_agent_id=None, objective=item.objective,
-                        allocated_credits=item.allocated_credits, status=TaskStatus.PENDING)
+            logical_id = item.task_id
+            actual_id = f"{self.org.id}-{logical_id}-{uuid.uuid4().hex[:8]}"
+            self._task_aliases[logical_id] = actual_id
+            task = Task(
+                id=actual_id, mission_id=self.org.id, assigned_agent_id=None,
+                objective=item.objective, allocated_credits=item.allocated_credits, status=TaskStatus.PENDING,
+            )
             try:
-                AgentAssignmentEngine.assign_and_allocate(task=task, org=self.org, required_role=item.assigned_role, requested_credits=item.allocated_credits)
-            except NoEligibleAgentException:
-                task.assigned_agent_id = f"agent-{item.assigned_role.value.lower()}"
-                StateMachine.transition_task(task, TaskStatus.ASSIGNED)
-            self.tasks[actual_id] = task; self.tasks.bind(logical_id, actual_id); created.append(task)
-        StateMachine.transition_org(self.org, OrgState.EXECUTING); self._sync_state(); return created
+                AgentAssignmentEngine.assign_and_allocate(
+                    task=task, org=self.org, required_role=item.assigned_role, requested_credits=item.allocated_credits,
+                )
+            except NoEligibleAgentException as exc:
+                # Never invent a synthetic agent ID. Fail the task deterministically.
+                task.status = TaskStatus.FAILED
+                self.event_store.append_event(
+                    actor_id="ORCHESTRATOR",
+                    event_type="TASK_ASSIGNMENT_FAILED",
+                    entity_id=task.id,
+                    payload={"reason": str(exc), "required_role": getattr(item.assigned_role, "value", None)},
+                )
+            self.tasks[actual_id] = task
+            self.tasks.bind(logical_id, actual_id)
+            created.append(task)
+        StateMachine.transition_org(self.org, OrgState.EXECUTING)
+        self._sync_state()
+        return created
 
     def run_intelligence_pipeline(self) -> Tuple[ResearchOutput, StrategyOutput, FinancialProposalOutput]:
         rt = self.tasks.get(self._task_id("task-01"))
-        if rt: StateMachine.transition_task(rt, TaskStatus.IN_PROGRESS)
+        if rt and rt.status != TaskStatus.FAILED:
+            StateMachine.transition_task(rt, TaskStatus.IN_PROGRESS)
         research = self.researcher.conduct_research("Analyze available investment options")
         self.event_store.append_event(actor_id=self.researcher.agent_id, event_type="RESEARCH_COMPLETED", entity_id=rt.id if rt else self._task_id("task-01"), payload=research.model_dump())
-        if rt:
+        if rt and rt.status != TaskStatus.FAILED:
             rt.output_evidence = research.model_dump(); StateMachine.transition_task(rt, TaskStatus.COMPLETED)
             if (a := self.org.agents.get(self.researcher.agent_id)): ReputationEngine.record_task_success(a)
         st = self.tasks.get(self._task_id("task-02"))
-        if st: StateMachine.transition_task(st, TaskStatus.IN_PROGRESS)
+        if st and st.status != TaskStatus.FAILED:
+            StateMachine.transition_task(st, TaskStatus.IN_PROGRESS)
         strategy = self.strategist.evaluate_strategy(research)
         self.event_store.append_event(actor_id=self.strategist.agent_id, event_type="STRATEGY_EVALUATED", entity_id=st.id if st else self._task_id("task-02"), payload=strategy.model_dump())
-        if st:
+        if st and st.status != TaskStatus.FAILED:
             st.output_evidence = strategy.model_dump(); StateMachine.transition_task(st, TaskStatus.COMPLETED)
             if (a := self.org.agents.get(self.strategist.agent_id)): ReputationEngine.record_task_success(a)
         ft = self.tasks.get(self._task_id("task-03"))
-        if ft: StateMachine.transition_task(ft, TaskStatus.IN_PROGRESS)
+        if ft and ft.status != TaskStatus.FAILED:
+            StateMachine.transition_task(ft, TaskStatus.IN_PROGRESS)
         finance = self.financial_analyst.formulate_proposal(strategy)
         self.event_store.append_event(actor_id=self.financial_analyst.agent_id, event_type="FINANCIAL_PROPOSAL_FORMULATED", entity_id=ft.id if ft else self._task_id("task-03"), payload=finance.model_dump())
         self._sync_state(); return research, strategy, finance
@@ -129,9 +147,37 @@ class OrchestrationEngine:
             StateMachine.transition_task(task, TaskStatus.IN_PROGRESS)
             replanned = self.ceo.replan_after_rejection(task_id=task_id, rejected_proposal=proposal, violated_rule_id=decision.violated_rule_id or "RULE-UNKNOWN", violated_rule_description=decision.violated_rule_description or "Rejected", attempt_number=attempts)
             self._sync_state(); return self.process_action_proposal(actual, replanned)
-        raise NotImplementedError(f"Handling for decision result {decision.result} not implemented")
+        if decision.result == PolicyResult.ESCALATE_TO_HUMAN:
+            # Deterministic pause: no spend, no silent continuation, audit the escalation.
+            StateMachine.transition_task(task, TaskStatus.SUBMITTED)
+            if self.org.state != OrgState.PAUSED:
+                StateMachine.transition_org(self.org, OrgState.PAUSED)
+            self.event_store.append_event(
+                actor_id="POLICY_ENGINE",
+                event_type="ESCALATION_REQUIRED",
+                entity_id=task.id,
+                payload={
+                    "proposal_id": proposal.id,
+                    "decision_id": decision.id,
+                    "reason": decision.violated_rule_description,
+                    "requested_credits": proposal.requested_credits,
+                    "org_state": self.org.state.value,
+                },
+            )
+            self._sync_state()
+            return decision, None
+        raise PolicyViolationError(f"Unhandled policy decision result: {decision.result}")
 
     def complete_mission(self) -> MissionReviewOutput:
+        if self.org.state == OrgState.PAUSED:
+            # Escalation paused missions are not auto-completed.
+            review = self.ceo.review_mission(self.org.mission, [r.model_dump() for r in self.execution_receipts])
+            self.event_store.append_event(
+                actor_id=self.ceo.agent_id, event_type="MISSION_PAUSED_ESCALATION",
+                entity_id=self.org.id, payload=review.model_dump(),
+            )
+            self._sync_state()
+            return review
         StateMachine.transition_org(self.org, OrgState.COMPLETED)
         review = self.ceo.review_mission(self.org.mission, [r.model_dump() for r in self.execution_receipts])
         self.event_store.append_event(actor_id=self.ceo.agent_id, event_type="MISSION_COMPLETED", entity_id=self.org.id, payload=review.model_dump())
