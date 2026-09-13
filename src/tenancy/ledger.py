@@ -29,7 +29,10 @@ class TenantScopedLedger:
         return account if account.startswith(f"{self.tenant_id}:") else f"{self.tenant_id}:{account}"
 
     def _tx(self, transaction_id: Optional[str]) -> Optional[str]:
-        return None if transaction_id is None else f"{self.tenant_id}:{transaction_id}"
+        # Transaction IDs are globally unique. Account namespacing provides the
+        # tenant boundary; a cross-tenant duplicate transaction is rejected,
+        # never silently treated as a new spend.
+        return transaction_id
 
     def _mint_scoped(self, amount: int, memo: str) -> LedgerEntry:
         if amount <= 0:
@@ -54,7 +57,6 @@ class TenantScopedLedger:
                 transaction_id=self._tx(transaction_id), tenant_id=self.tenant_id,
             )
         except TypeError:
-            # Compatibility path for legacy ledger implementations only.
             entry = self.ledger.transfer(
                 self._account(from_account), self._account(to_account), amount, memo,
                 transaction_id=self._tx(transaction_id),
@@ -71,29 +73,23 @@ class TenantScopedLedger:
         prefix = f"{self.tenant_id}:"
         result = []
         for e in entries:
-            # Mint entries originate from SYSTEM_MINT; transfers must have both
-            # endpoints inside the tenant namespace.
             if e.from_account != SYSTEM_MINT and not e.from_account.startswith(prefix):
                 continue
             if not e.to_account.startswith(prefix):
                 continue
             result.append(LedgerEntry(
-                id=e.id,
-                timestamp=e.timestamp,
-                transaction_id=e.transaction_id,
+                id=e.id, timestamp=e.timestamp, transaction_id=e.transaction_id,
                 from_account=e.from_account if e.from_account == SYSTEM_MINT else e.from_account.removeprefix(prefix),
-                to_account=e.to_account.removeprefix(prefix),
-                amount=e.amount,
-                memo=e.memo,
+                to_account=e.to_account.removeprefix(prefix), amount=e.amount, memo=e.memo,
             ))
         return result
 
     def verify_conservation(self) -> bool:
         entries = self.get_entries()
-        minted = sum(e.amount for e in entries if e.from_account == SYSTEM_MINT)
+        minted = sum(e.amount for e in entries if e.from_account == "SYSTEM_MINT")
         net = {}
         for entry in entries:
-            if entry.from_account != SYSTEM_MINT:
+            if entry.from_account != "SYSTEM_MINT":
                 net[entry.from_account] = net.get(entry.from_account, 0) - entry.amount
             net[entry.to_account] = net.get(entry.to_account, 0) + entry.amount
         return sum(net.values()) == minted
