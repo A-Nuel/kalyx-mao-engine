@@ -1,16 +1,11 @@
-from typing import Any, List, Optional
+from typing import List, Optional
 
 from src.domain.entities import LedgerEntry
 from src.persistence.repositories import SqliteLedger
 
 
 class TenantScopedLedger:
-    """Tenant-isolated facade over the authoritative SQLite ledger.
-
-    Public account names remain stable (TREASURY, ESCROW, EXTERNAL_SINK), while
-    physical SQLite accounts are namespaced by tenant. This lets existing policy,
-    execution, and audit code keep its domain vocabulary without sharing balances.
-    """
+    """Tenant-isolated facade over the authoritative SQLite ledger."""
 
     def __init__(self, ledger: SqliteLedger, tenant_id: str, initial_treasury: int = 0):
         if not tenant_id or ":" in tenant_id:
@@ -18,24 +13,34 @@ class TenantScopedLedger:
         self.ledger = ledger
         self.tenant_id = tenant_id
         if initial_treasury > 0 and self.get_balance("TREASURY") == 0:
-            self.ledger._mint(self._account("TREASURY"), initial_treasury, f"Initial treasury for {tenant_id}")
+            entry = self.ledger._mint(self._account("TREASURY"), initial_treasury, f"Initial treasury for {tenant_id}")
+            self._mark_tenant(entry.id)
 
     def _account(self, account: str) -> str:
         if account.startswith(f"{self.tenant_id}:"):
             return account
         return f"{self.tenant_id}:{account}"
 
+    def _mark_tenant(self, entry_id: str) -> None:
+        with self.ledger.db.conn:
+            self.ledger.db.conn.execute(
+                "UPDATE ledger_entries SET tenant_id = ? WHERE id = ?",
+                (self.tenant_id, entry_id),
+            )
+
     def get_balance(self, account: str) -> int:
         return self.ledger.get_balance(self._account(account))
 
     def transfer(self, from_account: str, to_account: str, amount: int, memo: str, transaction_id: Optional[str] = None) -> LedgerEntry:
-        return self.ledger.transfer(
+        entry = self.ledger.transfer(
             self._account(from_account),
             self._account(to_account),
             amount,
             memo,
             transaction_id=transaction_id,
         )
+        self._mark_tenant(entry.id)
+        return entry
 
     def get_entries(self, account: Optional[str] = None) -> List[LedgerEntry]:
         entries = self.ledger.get_entries(self._account(account) if account else None)
