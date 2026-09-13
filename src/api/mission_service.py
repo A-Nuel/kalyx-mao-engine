@@ -19,22 +19,20 @@ from src.persistence.repositories import SqliteEventStore, SqliteRepository
 from src.security.atomic_ledger import AtomicSqliteLedger
 from src.security.durable_executor import DurableControlledExternalExecutor
 from src.tenancy.ledger import TenantScopedLedger
+from src.tenancy.organisation_ledger import OrganisationScopedLedger
 
 
 def run_mission(mission: str, budget: int, *, live: bool = False, db_path: str | None = None, tenant_id: str = "tenant-demo") -> Dict[str, Any]:
-    """Run one bounded MAO mission through the deterministic control loop."""
-    if not mission.strip():
-        raise ValueError("Mission cannot be empty")
-    if budget < 1 or budget > 10_000:
-        raise ValueError("Budget must be between 1 and 10,000 ORG Credits")
-    if not tenant_id.strip() or ":" in tenant_id:
-        raise ValueError("tenant_id must be a non-empty identifier without ':'")
+    """Run one bounded MAO mission with organisation-scoped resources."""
+    if not mission.strip(): raise ValueError("Mission cannot be empty")
+    if budget < 1 or budget > 10_000: raise ValueError("Budget must be between 1 and 10,000 ORG Credits")
+    if not tenant_id.strip() or ":" in tenant_id: raise ValueError("tenant_id must be a non-empty identifier without ':'")
     path = db_path or os.getenv("KALYX_DB", "data/kalyx.db")
     db = Database(path)
     try:
-        if db.conn.execute("SELECT id FROM organisations LIMIT 1").fetchone():
-            raise ValueError("Phase 7 MVP supports one persistent organisation per database; use a new database for a new mission")
-        ledger = TenantScopedLedger(AtomicSqliteLedger(db, initial_treasury=0), tenant_id, initial_treasury=budget)
+        organisation_id = f"mao-{uuid.uuid4().hex[:12]}"
+        tenant_ledger = TenantScopedLedger(AtomicSqliteLedger(db, initial_treasury=0), tenant_id)
+        ledger = OrganisationScopedLedger(tenant_ledger, organisation_id, initial_treasury=budget)
         event_store = SqliteEventStore(db, verify_on_startup=True)
         repo = SqliteRepository(db)
         policy_secret = os.getenv("KALYX_POLICY_SECRET", "phase7-demo-policy-secret")
@@ -45,29 +43,26 @@ def run_mission(mission: str, budget: int, *, live: bool = False, db_path: str |
             mock_handler=lambda target, params: (200, {"status": "success", "target": target, "data": "executed_cleanly"}),
         )
         auditor = Auditor(verification_secret=policy_secret)
-        org = Organisation(id=f"mao-{uuid.uuid4().hex[:10]}", tenant_id=tenant_id, mission=mission.strip(), treasury_balance=budget)
+        ids = {role: f"{organisation_id}-agent-{role}" for role in ("ceo", "research", "strategy", "finance")}
+        org = Organisation(id=organisation_id, tenant_id=tenant_id, mission=mission.strip(), treasury_balance=budget)
         agents = {
-            "agent-ceo": AgentRecord(id="agent-ceo", role=AgentRole.CEO, authority_ceiling=min(25, budget), allowed_action_types=[ActionType.INTERNAL_ANALYSIS, ActionType.SIMULATED_ALLOCATION, ActionType.REPLAN]),
-            "agent-research": AgentRecord(id="agent-research", role=AgentRole.RESEARCHER, authority_ceiling=min(20, budget), allowed_action_types=[ActionType.DATA_FETCH, ActionType.INTERNAL_ANALYSIS]),
-            "agent-strategy": AgentRecord(id="agent-strategy", role=AgentRole.STRATEGIST, authority_ceiling=min(20, budget), allowed_action_types=[ActionType.INTERNAL_ANALYSIS]),
-            "agent-finance": AgentRecord(id="agent-finance", role=AgentRole.FINANCIAL_ANALYST, authority_ceiling=min(25, budget), allowed_action_types=[ActionType.INTERNAL_ANALYSIS, ActionType.DATA_FETCH, ActionType.EXTERNAL_API_CALL, ActionType.SIMULATED_ALLOCATION]),
+            ids["ceo"]: AgentRecord(id=ids["ceo"], role=AgentRole.CEO, authority_ceiling=min(25, budget), allowed_action_types=[ActionType.INTERNAL_ANALYSIS, ActionType.SIMULATED_ALLOCATION, ActionType.REPLAN]),
+            ids["research"]: AgentRecord(id=ids["research"], role=AgentRole.RESEARCHER, authority_ceiling=min(20, budget), allowed_action_types=[ActionType.DATA_FETCH, ActionType.INTERNAL_ANALYSIS]),
+            ids["strategy"]: AgentRecord(id=ids["strategy"], role=AgentRole.STRATEGIST, authority_ceiling=min(20, budget), allowed_action_types=[ActionType.INTERNAL_ANALYSIS]),
+            ids["finance"]: AgentRecord(id=ids["finance"], role=AgentRole.FINANCIAL_ANALYST, authority_ceiling=min(25, budget), allowed_action_types=[ActionType.INTERNAL_ANALYSIS, ActionType.DATA_FETCH, ActionType.EXTERNAL_API_CALL, ActionType.SIMULATED_ALLOCATION]),
         }
         org.agents.update(agents)
         repo.save_organisation(org)
-        db.conn.execute("UPDATE organisations SET tenant_id = ? WHERE id = ?", (tenant_id, org.id))
-        db.conn.commit()
-        for agent in agents.values():
-            repo.save_agent(agent, org.id)
+        for agent in agents.values(): repo.save_agent(agent, org.id)
         mock = MockAgentAdapter()
         adapter = OpenRouterAgentAdapter(fallback_adapter=mock, fallback_on_error=True) if live and os.getenv("OPENROUTER_API_KEY") else mock
         engine = OrchestrationEngine(
             org=org, ledger=ledger, policy_engine=policy, executor=executor, event_store=event_store,
-            human_gate=HumanGate(), ceo=CEOAgent("agent-ceo", adapter), researcher=ResearcherAgent("agent-research", adapter),
-            strategist=StrategistAgent("agent-strategy", adapter), financial_analyst=FinancialAnalystAgent("agent-finance", adapter),
+            human_gate=HumanGate(), ceo=CEOAgent(ids["ceo"], adapter), researcher=ResearcherAgent(ids["research"], adapter),
+            strategist=StrategistAgent(ids["strategy"], adapter), financial_analyst=FinancialAnalystAgent(ids["finance"], adapter),
             auditor=auditor, repository=repo, max_replan_attempts=3,
         )
-        engine.start_mission()
-        tasks = engine.decompose_and_plan()
+        engine.start_mission(); tasks = engine.decompose_and_plan()
         research, strategy, finance = engine.run_intelligence_pipeline()
         proposal = engine.ceo.formulate_action_proposal("task-03", finance)
         decision, receipt = engine.process_action_proposal("task-03", proposal)
