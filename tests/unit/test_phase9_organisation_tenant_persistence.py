@@ -4,8 +4,21 @@ from src.persistence.database import Database
 from src.persistence.repositories import SqliteRepository
 
 
-def test_organisation_tenant_id_round_trips_through_repository():
+def _db() -> Database:
     db = Database(":memory:")
+    db.conn.execute(
+        "INSERT INTO tenants (id, name, status, created_at) VALUES (?, ?, ?, datetime('now'))",
+        ("tenant-a", "Tenant A", "active"),
+    )
+    db.conn.execute(
+        "INSERT INTO tenants (id, name, status, created_at) VALUES (?, ?, ?, datetime('now'))",
+        ("tenant-b", "Tenant B", "active"),
+    )
+    return db
+
+
+def test_organisation_tenant_id_round_trips_through_repository():
+    db = _db()
     repo = SqliteRepository(db)
     original = Organisation(
         id="org-tenant-roundtrip",
@@ -23,7 +36,7 @@ def test_organisation_tenant_id_round_trips_through_repository():
 
 
 def test_organisation_update_cannot_silently_reassign_tenant():
-    db = Database(":memory:")
+    db = _db()
     repo = SqliteRepository(db)
     original = Organisation(id="org-tenant-immutable", tenant_id="tenant-a", mission="Original")
     repo.save_organisation(original)
