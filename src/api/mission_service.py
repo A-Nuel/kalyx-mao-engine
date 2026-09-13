@@ -11,7 +11,6 @@ from src.agents.roles.strategist import StrategistAgent
 from src.audit.auditor import Auditor
 from src.domain.entities import AgentRecord, Organisation
 from src.domain.enums import ActionType, AgentRole
-from src.agents.roles.ceo import CEOAgent
 from src.governance.human_gate import HumanGate
 from src.governance.policy_engine import PolicyEngine
 from src.orchestration.engine import OrchestrationEngine
@@ -30,7 +29,6 @@ def run_mission(mission: str, budget: int, *, live: bool = False, db_path: str |
         raise ValueError("Budget must be between 1 and 10,000 ORG Credits")
     if not tenant_id.strip() or ":" in tenant_id:
         raise ValueError("tenant_id must be a non-empty identifier without ':'")
-
     path = db_path or os.getenv("KALYX_DB", "data/kalyx.db")
     db = Database(path)
     try:
@@ -42,9 +40,7 @@ def run_mission(mission: str, budget: int, *, live: bool = False, db_path: str |
         policy_secret = os.getenv("KALYX_POLICY_SECRET", "phase7-demo-policy-secret")
         policy = PolicyEngine(signing_secret=policy_secret)
         executor = DurableControlledExternalExecutor(
-            policy_engine=policy,
-            ledger=ledger,
-            db_conn=db.conn,
+            policy_engine=policy, ledger=ledger, db_conn=db.conn,
             allowlist={"sandbox://market_index_fund", "sandbox://verified_bonds", "api://market_data/v1/summary"},
             mock_handler=lambda target, params: (200, {"status": "success", "target": target, "data": "executed_cleanly"}),
         )
