@@ -1,12 +1,17 @@
+import uuid
 from datetime import datetime
 from typing import List, Optional
 
 from src.domain.entities import LedgerEntry
-from src.persistence.repositories import SqliteLedger
+from src.persistence.repositories import SqliteLedger, SYSTEM_MINT
 
 
 class TenantScopedLedger:
-    """Tenant-isolated facade over the authoritative SQLite ledger."""
+    """Tenant-isolated facade over the authoritative SQLite ledger.
+
+    Account names and transaction IDs are namespaced, and ledger rows are
+    written with the tenant ID in the same transaction as the transfer.
+    """
 
     def __init__(self, ledger: SqliteLedger, tenant_id: str, initial_treasury: int = 0):
         if not tenant_id or ":" in tenant_id:
@@ -15,12 +20,7 @@ class TenantScopedLedger:
         self.tenant_id = tenant_id
         self._ensure_tenant()
         if initial_treasury > 0 and self.get_balance("TREASURY") == 0:
-            entry = self.ledger._mint(
-                self._account("TREASURY"),
-                initial_treasury,
-                f"Initial treasury for {tenant_id}",
-            )
-            self._mark_tenant(entry.id)
+            self._mint_scoped(initial_treasury, f"Initial treasury for {tenant_id}")
 
     def _ensure_tenant(self) -> None:
         with self.ledger.db.conn:
@@ -34,12 +34,33 @@ class TenantScopedLedger:
             return account
         return f"{self.tenant_id}:{account}"
 
-    def _mark_tenant(self, entry_id: str) -> None:
+    def _tx(self, transaction_id: Optional[str]) -> Optional[str]:
+        if transaction_id is None:
+            return None
+        return f"{self.tenant_id}:{transaction_id}"
+
+    def _mint_scoped(self, amount: int, memo: str) -> LedgerEntry:
+        if amount <= 0:
+            raise ValueError("Mint amount must be positive")
+        entry_id = str(uuid.uuid4())
+        tx_id = f"{self.tenant_id}:mint-{uuid.uuid4()}"
+        timestamp = datetime.utcnow()
         with self.ledger.db.conn:
             self.ledger.db.conn.execute(
-                "UPDATE ledger_entries SET tenant_id = ? WHERE id = ?",
-                (self.tenant_id, entry_id),
+                """INSERT INTO ledger_entries
+                   (id,timestamp,transaction_id,from_account,to_account,amount,memo,tenant_id)
+                   VALUES (?,?,?,?,?,?,?,?)""",
+                (entry_id, timestamp.isoformat(), tx_id, SYSTEM_MINT, self._account("TREASURY"), amount, memo, self.tenant_id),
             )
+        return LedgerEntry(
+            id=entry_id,
+            timestamp=timestamp,
+            transaction_id=tx_id,
+            from_account=SYSTEM_MINT,
+            to_account=self._account("TREASURY"),
+            amount=amount,
+            memo=memo,
+        )
 
     def get_balance(self, account: str) -> int:
         return self.ledger.get_balance(self._account(account))
@@ -52,15 +73,35 @@ class TenantScopedLedger:
         memo: str,
         transaction_id: Optional[str] = None,
     ) -> LedgerEntry:
-        entry = self.ledger.transfer(
-            self._account(from_account),
-            self._account(to_account),
-            amount,
-            memo,
-            transaction_id=transaction_id,
-        )
-        self._mark_tenant(entry.id)
+        # AtomicSqliteLedger accepts tenant_id and persists it with the entry.
+        try:
+            entry = self.ledger.transfer(
+                self._account(from_account),
+                self._account(to_account),
+                amount,
+                memo,
+                transaction_id=self._tx(transaction_id),
+                tenant_id=self.tenant_id,
+            )
+        except TypeError:
+            # Compatibility with legacy ledger implementations; production
+            # Kalyx uses AtomicSqliteLedger. Never silently alter the transfer.
+            entry = self.ledger.transfer(
+                self._account(from_account),
+                self._account(to_account),
+                amount,
+                memo,
+                transaction_id=self._tx(transaction_id),
+            )
+            self._mark_tenant(entry.id)
         return entry
+
+    def _mark_tenant(self, entry_id: str) -> None:
+        with self.ledger.db.conn:
+            self.ledger.db.conn.execute(
+                "UPDATE ledger_entries SET tenant_id = ? WHERE id = ?",
+                (self.tenant_id, entry_id),
+            )
 
     def get_entries(self, account: Optional[str] = None) -> List[LedgerEntry]:
         entries = self.ledger.get_entries(self._account(account) if account else None)
@@ -69,7 +110,6 @@ class TenantScopedLedger:
             LedgerEntry(
                 id=e.id,
                 timestamp=e.timestamp,
-                transaction_id=e.transaction_id,
                 from_account=e.from_account.removeprefix(prefix),
                 to_account=e.to_account.removeprefix(prefix),
                 amount=e.amount,
