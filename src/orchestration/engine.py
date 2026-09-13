@@ -18,6 +18,22 @@ from src.agents.schemas import ResearchOutput, StrategyOutput, FinancialProposal
 from src.domain.exceptions import NoEligibleAgentException
 
 
+class TaskRegistry(dict):
+    """Organisation-scoped task storage with backwards-compatible logical lookup."""
+    def __init__(self):
+        super().__init__()
+        self.aliases: Dict[str, str] = {}
+
+    def __getitem__(self, key: str) -> Task:
+        return super().__getitem__(self.aliases.get(key, key))
+
+    def get(self, key: str, default=None):
+        return super().get(self.aliases.get(key, key), default)
+
+    def bind(self, logical_id: str, actual_id: str) -> None:
+        self.aliases[logical_id] = actual_id
+
+
 class OrchestrationEngine:
     """Deterministic coordinator whose persisted resources are scoped to one organisation."""
     def __init__(self, org: Organisation, ledger: Any, policy_engine: PolicyEngine, executor: BaseExecutor,
@@ -28,7 +44,7 @@ class OrchestrationEngine:
         self.event_store, self.human_gate = event_store, human_gate
         self.ceo, self.researcher, self.strategist, self.financial_analyst = ceo, researcher, strategist, financial_analyst
         self.auditor, self.repository, self.max_replan_attempts = auditor or Auditor(), repository, max_replan_attempts
-        self.tasks: Dict[str, Task] = {}; self._task_aliases: Dict[str, str] = {}; self.replan_counts: Dict[str, int] = {}
+        self.tasks: TaskRegistry = TaskRegistry(); self._task_aliases: Dict[str, str] = self.tasks.aliases; self.replan_counts: Dict[str, int] = {}
         self.execution_receipts: List[ExecutionReceipt] = []; self.verification_receipts: List[VerificationReceipt] = []
 
     def _task_id(self, logical_id: str) -> str: return self._task_aliases.get(logical_id, logical_id)
@@ -57,7 +73,7 @@ class OrchestrationEngine:
             except NoEligibleAgentException:
                 task.assigned_agent_id = f"agent-{item.assigned_role.value.lower()}"
                 StateMachine.transition_task(task, TaskStatus.ASSIGNED)
-            self.tasks[actual_id] = task; created.append(task)
+            self.tasks[actual_id] = task; self.tasks.bind(logical_id, actual_id); created.append(task)
         StateMachine.transition_org(self.org, OrgState.EXECUTING); self._sync_state(); return created
 
     def run_intelligence_pipeline(self) -> Tuple[ResearchOutput, StrategyOutput, FinancialProposalOutput]:
