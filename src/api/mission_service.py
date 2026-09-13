@@ -16,7 +16,8 @@ from src.governance.human_gate import HumanGate
 from src.governance.policy_engine import PolicyEngine
 from src.orchestration.engine import OrchestrationEngine
 from src.persistence.database import Database
-from src.persistence.repositories import SqliteEventStore, SqliteLedger, SqliteRepository
+from src.persistence.repositories import SqliteEventStore, SqliteRepository
+from src.security.atomic_ledger import AtomicSqliteLedger
 from src.tenancy.ledger import TenantScopedLedger
 
 
@@ -28,11 +29,10 @@ def run_mission(
     db_path: str | None = None,
     tenant_id: str = "tenant-demo",
 ) -> Dict[str, Any]:
-    """Run one bounded MAO mission through the real Phase 7 control loop.
+    """Run one bounded MAO mission through the Phase 7 control loop.
 
-    Tenant identity is persisted now, while the Phase 7 SQLite deployment keeps
-    one organisation per database so task/agent IDs cannot collide. Multi-org
-    persistence is deliberately deferred to the next tenancy phase.
+    Phase 8 uses serialized SQLite ledger transfers so concurrent workers cannot
+    pass the balance check against the same treasury at the same time.
     """
     if not mission.strip():
         raise ValueError("Mission cannot be empty")
@@ -48,7 +48,7 @@ def run_mission(
         if existing:
             raise ValueError("Phase 7 MVP supports one persistent organisation per database; use a new database for a new mission")
 
-        ledger = TenantScopedLedger(SqliteLedger(db, initial_treasury=0), tenant_id, initial_treasury=budget)
+        ledger = TenantScopedLedger(AtomicSqliteLedger(db, initial_treasury=0), tenant_id, initial_treasury=budget)
         event_store = SqliteEventStore(db, verify_on_startup=True)
         repo = SqliteRepository(db)
         policy = PolicyEngine(signing_secret=os.getenv("KALYX_POLICY_SECRET", "phase7-demo-policy-secret"))
