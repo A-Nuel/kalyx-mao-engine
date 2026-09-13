@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS verification_receipts (
 class Database:
     def __init__(self, db_path: str = ":memory:"):
         self.db_path = db_path
-        if db_path != ":memory":
+        if db_path != ":memory:":
             os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
         self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
@@ -85,7 +85,6 @@ class Database:
         with self.conn:
             self.conn.executescript(SCHEMA_SQL)
             cur = self.conn.cursor()
-            # Backward-compatible migrations for databases created before tenancy.
             cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='tenants'")
             if cur.fetchone():
                 self.conn.execute(
