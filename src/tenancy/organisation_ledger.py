@@ -1,3 +1,4 @@
+import uuid
 from typing import Optional
 from src.domain.entities import LedgerEntry
 from src.tenancy.ledger import TenantScopedLedger
@@ -13,12 +14,17 @@ class OrganisationScopedLedger:
         self.tenant_id = tenant_ledger.tenant_id
         self.organisation_id = organisation_id
         if initial_treasury > 0 and self.get_balance("TREASURY") == 0:
-            self.tenant_ledger.ledger.db.conn.execute(
-                "INSERT OR IGNORE INTO ledger_entries (id,timestamp,transaction_id,from_account,to_account,amount,memo,tenant_id) "
-                "VALUES (lower(hex(randomblob(16))),datetime('now'),?,?,?,'Initial organisation treasury',?)",
-                (f"{self.tenant_id}:SYSTEM_MINT", self._account("TREASURY"), initial_treasury, self.tenant_id),
+            entry = LedgerEntry(
+                id=str(uuid.uuid4()), timestamp=__import__('datetime').datetime.utcnow(),
+                transaction_id=f"{self.tenant_id}:org-{organisation_id}:mint-{uuid.uuid4()}",
+                from_account="SYSTEM_MINT", to_account=self._account("TREASURY"), amount=initial_treasury,
+                memo=f"Initial organisation treasury for {organisation_id}",
             )
-            self.tenant_ledger.ledger.db.conn.commit()
+            with self.db.conn:
+                self.db.conn.execute(
+                    "INSERT INTO ledger_entries (id,timestamp,transaction_id,from_account,to_account,amount,memo,tenant_id) VALUES (?,?,?,?,?,?,?,?)",
+                    (entry.id, entry.timestamp.isoformat(), entry.transaction_id, entry.from_account, f"{self.tenant_id}:{entry.to_account}", entry.amount, entry.memo, self.tenant_id),
+                )
 
     def _account(self, account: str) -> str:
         return f"{self.organisation_id}:{account}"
@@ -34,10 +40,8 @@ class OrganisationScopedLedger:
         entries = self.tenant_ledger.get_entries(self._account(account) if account else None)
         result = []
         for entry in entries:
-            if entry.from_account != "SYSTEM_MINT" and not entry.from_account.startswith(prefix):
-                continue
-            if not entry.to_account.startswith(prefix):
-                continue
+            if entry.from_account != "SYSTEM_MINT" and not entry.from_account.startswith(prefix): continue
+            if not entry.to_account.startswith(prefix): continue
             result.append(entry.model_copy(update={
                 "from_account": entry.from_account.removeprefix(prefix) if entry.from_account != "SYSTEM_MINT" else entry.from_account,
                 "to_account": entry.to_account.removeprefix(prefix),
