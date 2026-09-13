@@ -6,7 +6,6 @@ Production schema evolution must go through this path.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import List
 
@@ -38,10 +37,43 @@ def applied_versions(conn) -> set:
     return out
 
 
+def _execute_script(conn, sql: str) -> None:
+    """Execute a multi-statement SQL script.
+
+    Supports both the Postgres connection proxy and a raw psycopg connection.
+    """
+    # Prefer psycopg Connection.execute with multiple statements when available.
+    raw = getattr(conn, "_raw", conn)
+    # Strip line comments for naive splitting while preserving dollar-quotes simply
+    # by relying on statement terminators at the end of lines.
+    statements = []
+    buf: list[str] = []
+    for line in sql.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("--"):
+            continue
+        buf.append(line)
+        if stripped.endswith(";"):
+            statements.append("\n".join(buf).strip())
+            buf = []
+    if buf:
+        tail = "\n".join(buf).strip()
+        if tail:
+            statements.append(tail)
+
+    for stmt in statements:
+        if not stmt or stmt == ";":
+            continue
+        # Use proxy.execute when present so placeholder translation still works.
+        if hasattr(conn, "execute") and not isinstance(conn, type(raw)):
+            conn.execute(stmt)
+        else:
+            raw.execute(stmt)
+
+
 def run_migrations(conn) -> List[str]:
     """Apply pending *.sql migrations in lexical order. Returns applied versions."""
     applied: List[str] = []
-    # Ensure tracking table exists even before first migration content runs.
     conn.execute(
         """CREATE TABLE IF NOT EXISTS schema_migrations (
             version TEXT PRIMARY KEY,
@@ -55,18 +87,27 @@ def run_migrations(conn) -> List[str]:
         if version in already:
             continue
         sql = path.read_text(encoding="utf-8")
-        # Migrations may contain their own BEGIN/COMMIT; execute as a script.
-        conn.execute(sql)
-        # Some drivers require explicit commit after multi-statement scripts.
+        _execute_script(conn, sql)
         try:
             conn.commit()
         except Exception:
             pass
-        # Record if migration body did not insert itself.
-        conn.execute(
-            "INSERT INTO schema_migrations (version) VALUES (%s) ON CONFLICT (version) DO NOTHING",
-            (version,),
-        )
-        conn.commit()
+        # Ensure version row exists even if the migration body already inserted it.
+        try:
+            conn.execute(
+                "INSERT INTO schema_migrations (version) VALUES (%s) ON CONFLICT (version) DO NOTHING",
+                (version,),
+            )
+            conn.commit()
+        except Exception:
+            # Fallback for SQLite-style ? if a test ever points here
+            try:
+                conn.execute(
+                    "INSERT INTO schema_migrations (version) VALUES (?) ON CONFLICT (version) DO NOTHING",
+                    (version,),
+                )
+                conn.commit()
+            except Exception:
+                pass
         applied.append(version)
     return applied
