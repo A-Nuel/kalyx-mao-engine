@@ -12,6 +12,8 @@ from src.api.identity_auth import require_identity_for_org, require_identity_for
 from src.api.mission_service import run_mission
 from src.persistence.database import Database
 from src.persistence.repositories import SqliteEventStore, SqliteLedger
+from src.tenancy.ledger import TenantScopedLedger
+from src.tenancy.organisation_ledger import OrganisationScopedLedger
 
 app = FastAPI(title="Kalyx Command Centre API", version="0.8.0")
 app.add_middleware(CORSMiddleware, allow_origins=cors_origins(), allow_credentials=False, allow_methods=["GET", "POST"], allow_headers=["*"])
@@ -67,6 +69,13 @@ def _org_id_or_404(db: Database, org_id: str) -> Dict[str, Any]:
     if not row:
         raise HTTPException(status_code=404, detail="Organisation not found")
     return dict(row)
+
+
+def _org_scoped_ledger(db: Database, org: Dict[str, Any]):
+    """Build an organisation-scoped ledger from persisted org ownership."""
+    tenant_id = org.get("tenant_id") or "tenant-demo"
+    tenant_ledger = TenantScopedLedger(SqliteLedger(db, initial_treasury=0), tenant_id)
+    return OrganisationScopedLedger(tenant_ledger, org["id"], initial_treasury=0)
 
 
 def _require_operator(x_api_key: str | None) -> None:
@@ -131,7 +140,8 @@ def organisations(x_tenant_id: str | None = Header(default=None, alias="X-Tenant
 def organisation(org_id: str) -> Dict[str, Any]:
     db = _db()
     try:
-        org = _org_id_or_404(db, org_id); ledger = SqliteLedger(db, initial_treasury=0)
+        org = _org_id_or_404(db, org_id)
+        ledger = _org_scoped_ledger(db, org)
         agents = db.conn.execute("SELECT * FROM agents WHERE org_id = ? ORDER BY reputation_score DESC", (org_id,)).fetchall()
         tasks = db.conn.execute("SELECT * FROM tasks WHERE org_id = ? ORDER BY created_at DESC", (org_id,)).fetchall()
         return {"organisation": org, "treasury": ledger.get_balance("TREASURY"), "agents": [dict(a) for a in agents], "tasks": [dict(t) for t in tasks]}
@@ -174,7 +184,9 @@ def decisions(org_id: str, limit: int = Query(default=100, ge=1, le=500)) -> lis
 def ledger(org_id: str, limit: int = Query(default=200, ge=1, le=1000)) -> Dict[str, Any]:
     db = _db()
     try:
-        _org_id_or_404(db, org_id); l = SqliteLedger(db, initial_treasury=0); entries = l.get_entries()[-limit:]
+        org = _org_id_or_404(db, org_id)
+        l = _org_scoped_ledger(db, org)
+        entries = l.get_entries()[-limit:]
         return {"treasury": l.get_balance("TREASURY"), "escrow": l.get_balance("ESCROW"), "external_sink": l.get_balance("EXTERNAL_SINK"), "conserved": l.verify_conservation(), "entries": [e.model_dump(mode="json") for e in entries]}
     finally: db.close()
 
