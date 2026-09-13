@@ -11,8 +11,12 @@ COPY pyproject.toml README.md ./
 COPY src ./src
 COPY apps ./apps
 COPY scripts ./scripts
+COPY migrations ./migrations
 
-RUN pip install --no-cache-dir . && mkdir -p /app/data
+# Install runtime + optional postgres driver so production images can use
+# KALYX_DATABASE_URL without a separate build stage. Credentials come only
+# from environment at runtime — never baked into the image.
+RUN pip install --no-cache-dir ".[postgres]" && mkdir -p /app/data
 
 EXPOSE 8000
 

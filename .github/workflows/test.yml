@@ -14,6 +14,21 @@ jobs:
       matrix:
         python-version: ["3.11", "3.12"]
 
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: kalyx
+          POSTGRES_PASSWORD: kalyx
+          POSTGRES_DB: kalyx
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U kalyx -d kalyx"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,5 +52,10 @@ jobs:
         if: matrix.python-version == '3.12'
         run: docker build --tag kalyx-ci .
 
-      - name: Run test suite
-        run: python -m pytest -q
+      - name: Run SQLite test suite
+        run: python -m pytest -q -m "not postgres"
+
+      - name: Run PostgreSQL integration suite
+        env:
+          KALYX_DATABASE_URL: postgresql://kalyx:kalyx@localhost:5432/kalyx
+        run: python -m pytest -q -m postgres
