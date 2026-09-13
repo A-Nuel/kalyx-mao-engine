@@ -6,22 +6,22 @@ PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS tenants (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'active',
-    created_at TEXT NOT NULL
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active', created_at TEXT NOT NULL
 );
-
+CREATE TABLE IF NOT EXISTS principals (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS tenant_memberships (
+    principal_id TEXT NOT NULL, tenant_id TEXT NOT NULL, role TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL,
+    PRIMARY KEY (principal_id, tenant_id),
+    FOREIGN KEY (principal_id) REFERENCES principals(id), FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+);
 CREATE TABLE IF NOT EXISTS organisations (
-    id TEXT PRIMARY KEY,
-    tenant_id TEXT NOT NULL DEFAULT 'tenant-demo',
-    mission TEXT NOT NULL,
-    treasury_balance INTEGER NOT NULL,
-    state TEXT NOT NULL,
-    created_at TEXT NOT NULL,
+    id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL DEFAULT 'tenant-demo', mission TEXT NOT NULL,
+    treasury_balance INTEGER NOT NULL, state TEXT NOT NULL, created_at TEXT NOT NULL,
     FOREIGN KEY (tenant_id) REFERENCES tenants(id)
 );
-
 CREATE TABLE IF NOT EXISTS agents (
     id TEXT PRIMARY KEY, org_id TEXT NOT NULL, role TEXT NOT NULL, model_name TEXT NOT NULL,
     credit_balance INTEGER NOT NULL, reputation_score REAL NOT NULL, authority_ceiling INTEGER NOT NULL,
@@ -31,7 +31,6 @@ CREATE TABLE IF NOT EXISTS agents (
     resource_efficiency REAL NOT NULL DEFAULT 1.0, reliability_score REAL NOT NULL DEFAULT 100.0,
     task_history TEXT NOT NULL DEFAULT '[]', FOREIGN KEY (org_id) REFERENCES organisations(id)
 );
-
 CREATE TABLE IF NOT EXISTS tasks (
     id TEXT PRIMARY KEY, org_id TEXT NOT NULL, assigned_agent_id TEXT, objective TEXT NOT NULL,
     allocated_credits INTEGER NOT NULL, status TEXT NOT NULL, output_evidence TEXT,
@@ -75,8 +74,7 @@ CREATE TABLE IF NOT EXISTS verification_receipts (
 class Database:
     def __init__(self, db_path: str = ":memory:"):
         self.db_path = db_path
-        if db_path != ":memory:":
-            os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
+        if db_path != ":memory:": os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
         self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self._init_schema()
@@ -84,35 +82,22 @@ class Database:
     def _init_schema(self) -> None:
         with self.conn:
             self.conn.executescript(SCHEMA_SQL)
+            self.conn.execute("INSERT OR IGNORE INTO tenants (id, name, status, created_at) VALUES (?, ?, ?, datetime('now'))", ("tenant-demo", "Demo Workspace", "active"))
+            self.conn.execute("INSERT OR IGNORE INTO principals (id, name, active, created_at) VALUES (?, ?, ?, datetime('now'))", ("principal-demo", "Demo Operator", 1))
+            self.conn.execute("INSERT OR IGNORE INTO tenant_memberships (principal_id, tenant_id, role, active, created_at) VALUES (?, ?, ?, ?, datetime('now'))", ("principal-demo", "tenant-demo", "owner", 1))
             cur = self.conn.cursor()
-            cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='tenants'")
-            if cur.fetchone():
-                self.conn.execute(
-                    "INSERT OR IGNORE INTO tenants (id, name, status, created_at) VALUES (?, ?, ?, datetime('now'))",
-                    ("tenant-demo", "Demo Workspace", "active"),
-                )
             cur.execute("PRAGMA table_info(organisations)")
             org_columns = [row["name"] for row in cur.fetchall()]
-            if "tenant_id" not in org_columns:
-                self.conn.execute("ALTER TABLE organisations ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'tenant-demo'")
+            if "tenant_id" not in org_columns: self.conn.execute("ALTER TABLE organisations ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'tenant-demo'")
             cur.execute("PRAGMA table_info(ledger_entries)")
             ledger_columns = [row["name"] for row in cur.fetchall()]
-            if "tenant_id" not in ledger_columns:
-                self.conn.execute("ALTER TABLE ledger_entries ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'tenant-demo'")
+            if "tenant_id" not in ledger_columns: self.conn.execute("ALTER TABLE ledger_entries ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'tenant-demo'")
             cur.execute("PRAGMA table_info(agents)")
             columns = [row["name"] for row in cur.fetchall()]
-            for col_name, col_type in [
-                ("performance_score", "REAL NOT NULL DEFAULT 100.0"),
-                ("risk_score", "REAL NOT NULL DEFAULT 0.0"),
-                ("resource_efficiency", "REAL NOT NULL DEFAULT 1.0"),
-                ("reliability_score", "REAL NOT NULL DEFAULT 100.0"),
-                ("task_history", "TEXT NOT NULL DEFAULT '[]'"),
-            ]:
-                if col_name not in columns:
-                    self.conn.execute(f"ALTER TABLE agents ADD COLUMN {col_name} {col_type}")
+            for col_name, col_type in [("performance_score", "REAL NOT NULL DEFAULT 100.0"), ("risk_score", "REAL NOT NULL DEFAULT 0.0"), ("resource_efficiency", "REAL NOT NULL DEFAULT 1.0"), ("reliability_score", "REAL NOT NULL DEFAULT 100.0"), ("task_history", "TEXT NOT NULL DEFAULT '[]'")]:
+                if col_name not in columns: self.conn.execute(f"ALTER TABLE agents ADD COLUMN {col_name} {col_type}")
             self.conn.execute("UPDATE organisations SET tenant_id = 'tenant-demo' WHERE tenant_id IS NULL OR tenant_id = ''")
             self.conn.execute("UPDATE ledger_entries SET tenant_id = 'tenant-demo' WHERE tenant_id IS NULL OR tenant_id = ''")
 
     def close(self) -> None:
-        if self.conn:
-            self.conn.close()
+        if self.conn: self.conn.close()
