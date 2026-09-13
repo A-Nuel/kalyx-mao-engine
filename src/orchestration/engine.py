@@ -76,8 +76,10 @@ class OrchestrationEngine:
                     task=task, org=self.org, required_role=item.assigned_role, requested_credits=item.allocated_credits,
                 )
             except NoEligibleAgentException as exc:
-                # Never invent a synthetic agent ID. Fail the task deterministically.
-                task.status = TaskStatus.FAILED
+                # Never invent a synthetic agent ID. Keep the task PENDING with no assignee;
+                # later stages may still run with explicit role agents registered on the engine.
+                task.assigned_agent_id = None
+                task.status = TaskStatus.PENDING
                 self.event_store.append_event(
                     actor_id="ORCHESTRATOR",
                     event_type="TASK_ASSIGNMENT_FAILED",
@@ -93,23 +95,23 @@ class OrchestrationEngine:
 
     def run_intelligence_pipeline(self) -> Tuple[ResearchOutput, StrategyOutput, FinancialProposalOutput]:
         rt = self.tasks.get(self._task_id("task-01"))
-        if rt and rt.status != TaskStatus.FAILED:
+        if rt and rt.status not in {TaskStatus.FAILED, TaskStatus.COMPLETED}:
             StateMachine.transition_task(rt, TaskStatus.IN_PROGRESS)
         research = self.researcher.conduct_research("Analyze available investment options")
         self.event_store.append_event(actor_id=self.researcher.agent_id, event_type="RESEARCH_COMPLETED", entity_id=rt.id if rt else self._task_id("task-01"), payload=research.model_dump())
-        if rt and rt.status != TaskStatus.FAILED:
+        if rt and rt.status not in {TaskStatus.FAILED, TaskStatus.COMPLETED}:
             rt.output_evidence = research.model_dump(); StateMachine.transition_task(rt, TaskStatus.COMPLETED)
             if (a := self.org.agents.get(self.researcher.agent_id)): ReputationEngine.record_task_success(a)
         st = self.tasks.get(self._task_id("task-02"))
-        if st and st.status != TaskStatus.FAILED:
+        if st and st.status not in {TaskStatus.FAILED, TaskStatus.COMPLETED}:
             StateMachine.transition_task(st, TaskStatus.IN_PROGRESS)
         strategy = self.strategist.evaluate_strategy(research)
         self.event_store.append_event(actor_id=self.strategist.agent_id, event_type="STRATEGY_EVALUATED", entity_id=st.id if st else self._task_id("task-02"), payload=strategy.model_dump())
-        if st and st.status != TaskStatus.FAILED:
+        if st and st.status not in {TaskStatus.FAILED, TaskStatus.COMPLETED}:
             st.output_evidence = strategy.model_dump(); StateMachine.transition_task(st, TaskStatus.COMPLETED)
             if (a := self.org.agents.get(self.strategist.agent_id)): ReputationEngine.record_task_success(a)
         ft = self.tasks.get(self._task_id("task-03"))
-        if ft and ft.status != TaskStatus.FAILED:
+        if ft and ft.status not in {TaskStatus.FAILED, TaskStatus.COMPLETED}:
             StateMachine.transition_task(ft, TaskStatus.IN_PROGRESS)
         finance = self.financial_analyst.formulate_proposal(strategy)
         self.event_store.append_event(actor_id=self.financial_analyst.agent_id, event_type="FINANCIAL_PROPOSAL_FORMULATED", entity_id=ft.id if ft else self._task_id("task-03"), payload=finance.model_dump())
@@ -117,7 +119,12 @@ class OrchestrationEngine:
 
     def process_action_proposal(self, task_id: str, proposal: ActionProposal) -> Tuple[PolicyDecision, Optional[ExecutionReceipt]]:
         actual = self._task_id(task_id); task = self.tasks[actual]; proposal.task_id = task.id
-        StateMachine.transition_task(task, TaskStatus.SUBMITTED); task.proposals.append(proposal)
+        if task.status == TaskStatus.FAILED:
+            raise PolicyViolationError(f"Task {actual} is already FAILED and cannot accept proposals")
+        # Allow PENDING / IN_PROGRESS / REJECTED recovery paths into SUBMITTED.
+        if task.status != TaskStatus.SUBMITTED:
+            StateMachine.transition_task(task, TaskStatus.SUBMITTED)
+        task.proposals.append(proposal)
         if self.repository: self.repository.save_proposal(proposal)
         self.event_store.append_event(actor_id=proposal.proposing_agent_id, event_type="PROPOSAL_SUBMITTED", entity_id=proposal.id, payload=proposal.model_dump())
         decision = self.policy_engine.evaluate(proposal, self.org, ledger=self.ledger)
@@ -149,7 +156,6 @@ class OrchestrationEngine:
             self._sync_state(); return self.process_action_proposal(actual, replanned)
         if decision.result == PolicyResult.ESCALATE_TO_HUMAN:
             # Deterministic pause: no spend, no silent continuation, audit the escalation.
-            StateMachine.transition_task(task, TaskStatus.SUBMITTED)
             if self.org.state != OrgState.PAUSED:
                 StateMachine.transition_org(self.org, OrgState.PAUSED)
             self.event_store.append_event(
