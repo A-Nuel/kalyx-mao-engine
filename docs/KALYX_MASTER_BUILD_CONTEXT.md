@@ -129,7 +129,7 @@ Core layers:
 - `src/execution/` — controlled execution and authorization
 - `src/audit/` — independent verification
 - `src/orchestration/` — mission/task coordination
-- `src/persistence/` — SQLite persistence/repositories
+- `src/persistence/` — SQLite (local/demo/tests) + PostgreSQL (production path)
 - `src/identity/` — principals, memberships, identity context
 - `src/tenancy/` — tenant and organisation scoping
 - `src/settlement/` — settlement abstraction/simulation
@@ -142,6 +142,12 @@ Conceptual tenancy:
 
 Required resource identifiers:
 `tenant_id`, `organisation_id`, `mission_id`, `agent_id`.
+
+Persistence backends:
+- **SQLite** — default for local development, unit tests, and deterministic demo
+- **PostgreSQL** — production via `KALYX_DATABASE_URL` (fail-closed when `KALYX_ENV=production`)
+
+See `docs/persistence_postgres.md`.
 
 ## 8. Engineering roadmap: Phase 1–12
 
@@ -209,7 +215,20 @@ Required boundary behaviour:
 - same-tenant cross-organisation resource -> isolated;
 - client tenant headers are scope selectors, never proof of authorization.
 
-**Current gate:** fix organisation tenant persistence/loading and make the full Phase 9 API isolation matrix green.
+**Status:** Phase 9 isolation gate closed (organisation tenant persistence fixed; API ledger scoped; adversarial identity tests present).
+
+### Phase 9.5 — Dual-backend persistence (SQLite + PostgreSQL)
+
+Infrastructure phase between identity isolation and real execution adapters.
+
+- SQLite remains for local/demo/tests
+- PostgreSQL production path via `KALYX_DATABASE_URL`
+- Ordered migrations under `migrations/postgres/`
+- Connection pooling
+- Ledger concurrency via advisory locks
+- Fail-closed production configuration
+
+**Gate:** both backends covered by CI; SQLite suite green; Postgres migration + concurrent ledger tests green; Docker build remains green.
 
 ### Phase 10 — Real execution and settlement adapters
 
@@ -237,8 +256,9 @@ Production configuration, deployment, migrations, secrets/key management, rate/b
 
 ## 9. Completed implementation state
 
-Through Phase 8 the repo has implemented:
-- SQLite persistence;
+Through Phase 9 + persistence infrastructure the repo has implemented:
+- SQLite persistence (local/demo/tests);
+- PostgreSQL production path (schema, migrations, pool, ledger concurrency);
 - authoritative ledger;
 - append-only SHA-256 audit chain;
 - independent auditor;
@@ -255,60 +275,16 @@ Through Phase 8 the repo has implemented:
 - provider idempotency keys;
 - DNS-based SSRF protection and redirect blocking;
 - tenant-scoped ledger primitives;
+- identity / membership / organisation isolation;
 - production API/container/CI foundations.
 
-The Phase 8 suite had reached 143 passing tests on the reported Python 3.11/3.12 CI run.
+## 10. Current work focus
 
-## 10. Current Phase 9 state
+Phase 9 isolation is closed. Dual-backend persistence is in place.
 
-Already implemented:
-- identity models and roles;
-- identity context and membership checks;
-- identity repository;
-- tenant-aware database schema;
-- organisation-scoped ledger;
-- organisation-scoped task/agent identifiers;
-- multiple organisations sharing a database;
-- API identity enforcement foundations;
-- Phase 9 unit/integration tests.
+**Do not begin Phase 10 real execution or settlement adapters until CI confirms SQLite + PostgreSQL suites are green.**
 
-Current known CI failure:
-
-`tests/integration/test_phase9_api_identity.py::test_cross_tenant_org_returns_not_found`
-
-Reported result: **149 passed, 1 failed** on Python 3.11.
-
-Expected: HTTP 404 with safe `Organisation not found` behaviour.
-
-Observed: HTTP 404 whose detail was effectively `"'NoneType' object has no attribute 'tenant_id'"`.
-
-This is not merely a test mismatch. Investigation found a source-level persistence defect:
-
-`SqliteRepository.save_organisation()` does not persist `Organisation.tenant_id`, and `load_organisation()` does not restore it. The database schema has a `tenant_id` column, but the repository currently omits it from the INSERT/UPDATE/load path, causing the schema default (`tenant-demo`) to be used.
-
-**Do not mask this by weakening the test. Fix persistence and then rerun the complete CI matrix.**
-
-## 11. Current Phase 9 work order
-
-1. Fix `SqliteRepository.save_organisation()` to persist `tenant_id`.
-2. Fix organisation update/upsert semantics so tenant identity cannot silently change across updates.
-3. Fix `load_organisation()` to restore `tenant_id`.
-4. Add regression tests proving tenant identity survives save/load and restart.
-5. Verify `require_identity_for_org()` handles nonexistent resources safely before dereferencing tenant state.
-6. Run the Phase 9 API isolation matrix:
-   - missing identity;
-   - inactive principal;
-   - inactive membership;
-   - wrong tenant header;
-   - cross-tenant org;
-   - same-tenant cross-org;
-   - allowed owner/admin/operator/viewer actions.
-7. Verify API read paths for organisations, agents, tasks, proposals, decisions, ledger, events, audit and policies are tenant/org scoped.
-8. Run migration/restart tests against existing databases.
-9. Run Python 3.11 + 3.12 CI and production container checks.
-10. Only after the gate is green, move to Phase 10.
-
-## 12. Delegation rules for other AI models
+## 11. Delegation rules for other AI models
 
 Other AI models may review or implement **bounded work packages**, but must not redefine the product or roadmap.
 
@@ -337,7 +313,7 @@ Do not introduce:
 - autonomous self-preservation objectives;
 - unnecessary new agent roles when deterministic infrastructure is sufficient.
 
-## 13. Definition of Done
+## 12. Definition of Done
 
 A phase is not complete because code was written.
 
@@ -347,7 +323,7 @@ A phase is complete only when:
 
 The next phase must not silently absorb unresolved Critical issues from the previous phase.
 
-## 14. Source-of-truth hierarchy
+## 13. Source-of-truth hierarchy
 
 When sources disagree, use this order:
 
@@ -359,6 +335,6 @@ When sources disagree, use this order:
 
 External suggestions are inputs, not authority.
 
-## 15. One-line project status
+## 14. One-line project status
 
-**Kalyx has a hardened autonomous-organisation control plane through Phase 8 and is currently closing Phase 9 identity/tenant isolation before progressing to real execution adapters, deeper observability, and production readiness.**
+**Kalyx has closed Phase 9 identity/tenant isolation and introduced a dual-backend persistence path (SQLite local + PostgreSQL production) before Phase 10 real execution adapters.**
