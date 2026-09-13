@@ -28,7 +28,12 @@ def run_mission(
     db_path: str | None = None,
     tenant_id: str = "tenant-demo",
 ) -> Dict[str, Any]:
-    """Run one bounded MAO mission inside an explicit tenant boundary."""
+    """Run one bounded MAO mission through the real Phase 7 control loop.
+
+    Tenant identity is persisted now, while the Phase 7 SQLite deployment keeps
+    one organisation per database so task/agent IDs cannot collide. Multi-org
+    persistence is deliberately deferred to the next tenancy phase.
+    """
     if not mission.strip():
         raise ValueError("Mission cannot be empty")
     if budget < 1 or budget > 10_000:
@@ -39,6 +44,10 @@ def run_mission(
     path = db_path or os.getenv("KALYX_DB", "data/kalyx.db")
     db = Database(path)
     try:
+        existing = db.conn.execute("SELECT id FROM organisations LIMIT 1").fetchone()
+        if existing:
+            raise ValueError("Phase 7 MVP supports one persistent organisation per database; use a new database for a new mission")
+
         ledger = TenantScopedLedger(SqliteLedger(db, initial_treasury=0), tenant_id, initial_treasury=budget)
         event_store = SqliteEventStore(db, verify_on_startup=True)
         repo = SqliteRepository(db)
@@ -55,12 +64,7 @@ def run_mission(
         )
         auditor = Auditor(verification_secret=os.getenv("KALYX_POLICY_SECRET", "phase7-demo-policy-secret"))
 
-        org = Organisation(
-            id=f"mao-{uuid.uuid4().hex[:10]}",
-            tenant_id=tenant_id,
-            mission=mission.strip(),
-            treasury_balance=budget,
-        )
+        org = Organisation(id=f"mao-{uuid.uuid4().hex[:10]}", tenant_id=tenant_id, mission=mission.strip(), treasury_balance=budget)
         agents = {
             "agent-ceo": AgentRecord(id="agent-ceo", role=AgentRole.CEO, authority_ceiling=min(25, budget), allowed_action_types=[ActionType.INTERNAL_ANALYSIS, ActionType.SIMULATED_ALLOCATION, ActionType.REPLAN]),
             "agent-research": AgentRecord(id="agent-research", role=AgentRole.RESEARCHER, authority_ceiling=min(20, budget), allowed_action_types=[ActionType.DATA_FETCH, ActionType.INTERNAL_ANALYSIS]),
@@ -69,6 +73,8 @@ def run_mission(
         }
         org.agents.update(agents)
         repo.save_organisation(org)
+        db.conn.execute("UPDATE organisations SET tenant_id = ? WHERE id = ?", (tenant_id, org.id))
+        db.conn.commit()
         for agent in agents.values():
             repo.save_agent(agent, org.id)
 
