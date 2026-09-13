@@ -1,14 +1,14 @@
 """Hardened external executor facade.
 
-External providers must honor the idempotency key for non-idempotent requests.
-Kalyx cannot mathematically provide exactly-once semantics for an arbitrary
-HTTP server that ignores the key, so such providers must not be treated as
-money-safe settlement adapters.
+For non-idempotent external work, Kalyx sends a stable Idempotency-Key. The
+provider must honor it; arbitrary HTTP servers cannot provide exactly-once
+semantics without provider cooperation.
 """
 
 import hashlib
 import json
-from typing import Any, Dict, Optional, Tuple
+from datetime import datetime
+from typing import Any, Dict, Tuple
 
 import httpx
 
@@ -26,8 +26,12 @@ class DurableControlledExternalExecutor(ControlledExternalExecutor):
         super().__init__(*args, **kwargs)
         self.journal = SQLiteIdempotencyJournal(db_conn) if db_conn is not None else None
 
-    def _fingerprint(self, proposal: ActionProposal) -> str:
+    def _operation_key(self, proposal: ActionProposal, org) -> str:
+        return f"{org.id}:{proposal.id}"
+
+    def _fingerprint(self, proposal: ActionProposal, org) -> str:
         return hashlib.sha256(canonical_json({
+            "org_id": org.id,
             "proposal_id": proposal.id,
             "action_type": proposal.action_type.value,
             "target": proposal.target,
@@ -38,14 +42,14 @@ class DurableControlledExternalExecutor(ControlledExternalExecutor):
     def execute(self, proposal, decision, org) -> ExecutionReceipt:
         if self.journal is None:
             return super().execute(proposal, decision, org)
-        fingerprint = self._fingerprint(proposal)
-        prior_receipt_id = self.journal.begin(proposal.id, fingerprint)
+        operation_key = self._operation_key(proposal, org)
+        fingerprint = self._fingerprint(proposal, org)
+        existing = self.journal.get(operation_key)
+        if existing is not None and existing[2] == "started":
+            raise ExternalExecutionError("Operation is unresolved; reconcile the external provider before retrying")
+        prior_receipt_id = self.journal.begin(operation_key, fingerprint)
         if prior_receipt_id:
-            # A successful operation is immutable; callers should retrieve the
-            # canonical persisted receipt rather than dispatching again.
-            row = self.ledger.db.conn.execute(
-                "SELECT * FROM execution_receipts WHERE id = ?", (prior_receipt_id,)
-            ).fetchone()
+            row = self.ledger.db.conn.execute("SELECT * FROM execution_receipts WHERE id = ?", (prior_receipt_id,)).fetchone()
             if row is None:
                 raise ExternalExecutionError("Idempotency journal references a missing execution receipt")
             from src.domain.enums import ActionType
@@ -53,24 +57,21 @@ class DurableControlledExternalExecutor(ControlledExternalExecutor):
                 id=row["id"], proposal_id=row["proposal_id"], authorization_token=row["authorization_token"],
                 action_type=ActionType(row["action_type"]), target=row["target"], http_status=row["http_status"],
                 raw_response_hash=row["raw_response_hash"], raw_output=json.loads(row["raw_output"]),
-                cost_credits=row["cost_credits"], executed_at=__import__("datetime").datetime.fromisoformat(row["executed_at"]),
+                cost_credits=row["cost_credits"], executed_at=datetime.fromisoformat(row["executed_at"]),
             )
         try:
             receipt = super().execute(proposal, decision, org)
-            self.journal.succeed(proposal.id, fingerprint, receipt.id)
+            self.journal.succeed(operation_key, fingerprint, receipt.id)
             return receipt
         except Exception:
-            self.journal.fail(proposal.id, fingerprint)
+            self.journal.fail(operation_key, fingerprint)
             raise
 
     def _dispatch(self, proposal: ActionProposal, http_method: str = "GET") -> Tuple[int, Dict[str, Any]]:
         if self.mock_handler or proposal.target.startswith("api://") or proposal.target.startswith("sandbox://"):
             return super()._dispatch(proposal, http_method=http_method)
         try:
-            headers = {}
-            if http_method == "POST":
-                # Provider-side support is required for exactly-once semantics.
-                headers["Idempotency-Key"] = proposal.id
+            headers = {"Idempotency-Key": proposal.id} if http_method == "POST" else {}
             with httpx.Client(timeout=self.timeout_seconds, follow_redirects=False, headers=headers) as client:
                 if http_method == "GET":
                     resp = client.get(proposal.target, params=proposal.parameters)
