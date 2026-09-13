@@ -23,6 +23,8 @@ class DurableControlledExternalExecutor(ControlledExternalExecutor):
     """ControlledExternalExecutor with durable operation journaling."""
 
     def __init__(self, *args, db_conn=None, **kwargs):
+        # Pass db_conn into BaseExecutor for durable authorization consumption.
+        kwargs["db_conn"] = db_conn
         super().__init__(*args, **kwargs)
         self.journal = SQLiteIdempotencyJournal(db_conn) if db_conn is not None else None
 
@@ -46,10 +48,14 @@ class DurableControlledExternalExecutor(ControlledExternalExecutor):
         fingerprint = self._fingerprint(proposal, org)
         existing = self.journal.get(operation_key)
         if existing is not None and existing[2] == "started":
-            raise ExternalExecutionError("Operation is unresolved; reconcile the external provider before retrying")
+            raise ExternalExecutionError(
+                "Operation is unresolved (STARTED); reconcile the external provider before retrying"
+            )
         prior_receipt_id = self.journal.begin(operation_key, fingerprint)
         if prior_receipt_id:
-            row = self.ledger.db.conn.execute("SELECT * FROM execution_receipts WHERE id = ?", (prior_receipt_id,)).fetchone()
+            row = self.ledger.db.conn.execute(
+                "SELECT * FROM execution_receipts WHERE id = ?", (prior_receipt_id,)
+            ).fetchone()
             if row is None:
                 raise ExternalExecutionError("Idempotency journal references a missing execution receipt")
             from src.domain.enums import ActionType
