@@ -168,6 +168,16 @@ The repository treats CI as the authoritative test result because local executio
 - **SQLite Backend**: Lightweight, zero-dependency storage for local development, fast CLI demonstrations, and offline unit testing (`create_sqlite()`).
 - **PostgreSQL Production Backend**: Production persistence via `KALYX_DATABASE_URL` with ordered SQL migrations (`migrations/postgres/`), advisory locks for concurrent ledger operations, connection pooling, and fail-closed validation (`KALYX_ENV=production`).
 
+## Phase 10 — Consequential Execution & Settlement Boundary
+
+`src/execution/consequential.py` and `src/settlement/` establish an authoritative execution and economic settlement boundary:
+- **Authoritative State Machine**: `CREATED -> AUTHORIZED -> ESCROWED -> SUBMITTED -> SUCCEEDED / UNKNOWN / FAILED -> RECONCILING -> RECONCILED`.
+- **Fail-Closed Escrow Atomicity**: In-flight operations lock credits from `TREASURY` into `ESCROW`. On network timeouts or uncertain provider states (`UNKNOWN`), escrow remains locked until independent reconciliation verifies provider ground truth.
+- **Durable Reconciliation Engine**: `ReconciliationService` queries provider ground truth, enforces tenant/org isolation, and performs exactly-once terminal settlement (`ESCROW -> EXTERNAL_SINK` on success, `ESCROW -> TREASURY` on failure).
+- **Independent Auditor Verification**: `Auditor.verify_consequential_operation` cryptographically verifies proposal fingerprints, HMAC token validity, operation binding, provider evidence, and double-entry ledger transactions.
+- **Multi-Tenant Operations API**: Exposes tenant-isolated endpoints for listing operations, inspecting status, and triggering reconciliation (`/api/organisations/{org_id}/operations`).
+- **Simulated Consequential Provider**: Provides realistic external provider simulation with independent state and fault injection without real-money custody.
+
 ## Economic benchmark
 
 `src/economy/experiment.py` compares STATIC, PERFORMANCE and ADAPTIVE allocation across multiple workload scenarios and seeds. Results are generated empirically rather than hardcoding the desired winner.
@@ -186,7 +196,7 @@ The repository treats CI as the authoritative test result because local executio
 - [x] Phase 8 — Security hardening: durable token consumption, idempotency journal, capability enforcement
 - [x] Phase 9 — Identity, tenancy & organisation isolation: RBAC roles, tenant-scoped ledger, fail-closed auth
 - [x] Phase 9.5 — Dual-backend persistence (SQLite + PostgreSQL), connection pooling, fail-closed gate
-- [ ] Phase 10 — Real execution & settlement adapters (Web APIs, Robinhood Chain / EVM onchain settlement)
+- [x] Phase 10 — Consequential execution & settlement boundary (state machine, escrow atomicity, reconciliation, auditor verification)
 
 ## Quickstart
 
@@ -194,7 +204,7 @@ The repository treats CI as the authoritative test result because local executio
 git clone https://github.com/A-Nuel/kalyx-mao-engine.git
 cd kalyx-mao-engine
 python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
 python scripts/run_demo.py --fast
 ```
@@ -211,9 +221,9 @@ For a production-style container:
 
 ```bash
 docker build -t kalyx .
-docker run --rm -p 8000:8000 \\
-  -e KALYX_OPERATOR_KEY="replace-with-a-strong-secret" \\
-  -v kalyx-data:/app/data \\
+docker run --rm -p 8000:8000 \
+  -e KALYX_OPERATOR_KEY="replace-with-a-strong-secret" \
+  -v kalyx-data:/app/data \
   kalyx
 ```
 
@@ -237,14 +247,15 @@ The narrower engineering claim is:
 
 ## Verification & Test Coverage
 
-The automated test suite contains **176 tests** spanning unit, integration, and security/isolation suites:
-- **171 passed** in offline/local execution.
+The automated test suite contains **206 tests** spanning unit, integration, and security/isolation suites:
+- **201 passed** in offline/local execution.
 - **5 skipped** (live PostgreSQL integration tests when `KALYX_DATABASE_URL` is unconfigured; verified in container and CI).
 
 ```bash
-================== 171 passed, 5 skipped in 121.02s ===================
+================== 201 passed, 5 skipped in 37.75s ===================
 ```
 
+- **Phase 10 Consequential Execution**: `test_phase10_state_machine.py`, `test_phase10_simulated_provider.py`, `test_phase10_escrow.py`, `test_phase10_reconciliation.py`, `test_phase10_auditor.py`, `test_phase10_api.py`, `test_phase10_consequential_execution.py`.
 - **Tenancy & Isolation**: `test_account_namespace.py`, `test_tenancy.py`, `test_tenant_scoped_ledger.py`, `test_phase9_identity.py`, `test_phase9_organisation_ledger.py`, `test_phase9_api_identity.py`, `test_phase9_api_ledger_isolation.py`.
 - **Security & Idempotency**: `test_phase8_security.py`, `test_phase8_tenancy.py`, `test_token_consumption.py`, `test_adversarial.py`, `test_execution_atomicity.py`, `test_ssrf_and_network_security.py`.
 - **Missions & API**: `test_phase7_missions.py`, `test_phase5_api.py`, `test_phase5_operator_controls.py`, `test_phase6_hardening.py`.

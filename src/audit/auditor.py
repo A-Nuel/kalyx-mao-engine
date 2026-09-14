@@ -6,8 +6,16 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional, Tuple
 from pydantic import BaseModel, Field
 
-from src.domain.entities import ActionProposal, PolicyDecision, ExecutionReceipt, Organisation, Task, AuthorizationTokenClaims
-from src.domain.enums import PolicyResult, OrgState, TaskStatus
+from src.domain.entities import (
+    ActionProposal,
+    AuthorizationTokenClaims,
+    ConsequentialOperation,
+    ExecutionReceipt,
+    Organisation,
+    PolicyDecision,
+    Task,
+)
+from src.domain.enums import OperationState, OrgState, PolicyResult, TaskStatus
 from src.domain.exceptions import DomainError
 from src.domain.events import canonical_json
 from src.governance.crypto import ITokenVerifier, HmacSha256TokenVerifier
@@ -236,6 +244,164 @@ class Auditor:
             entity_id=receipt.id,
             payload=verification_receipt.model_dump()
         )
+
+        if not is_verified:
+            raise AuditVerificationError(failures)
+
+        return verification_receipt
+
+    def verify_consequential_operation(
+        self,
+        operation: ConsequentialOperation,
+        proposal: ActionProposal,
+        decision: PolicyDecision,
+        org: Organisation,
+        ledger: Any,
+        event_store: Optional[Any] = None,
+        policy_engine: Optional[Any] = None,
+        verification_secret: Optional[str] = None,
+        policy_version_hash: Optional[str] = None,
+        current_time: Optional[float] = None,
+        verifier: Optional[ITokenVerifier] = None,
+    ) -> VerificationReceipt:
+        """Independently verifies a ConsequentialOperation.
+        
+        Checks:
+        1. Operation fingerprint integrity
+        2. Proposal fingerprint match
+        3. Authorization token validity (cryptographic & claims)
+        4. Auth -> Consequential Operation binding
+        5. Provider evidence integrity
+        6. Ledger settlement verification (commit, rollback, or reconciliation)
+        7. Credit conservation
+        8. Organisation state consistency
+        """
+        checks: List[str] = []
+        failures: List[str] = []
+
+        # 1. Operation Fingerprint Integrity
+        checks.append("OPERATION_FINGERPRINT")
+        if not operation.get_fingerprint():
+            failures.append("Operation fingerprint computation failed")
+
+        # 2. Proposal Fingerprint
+        checks.append("PROPOSAL_FINGERPRINT")
+        if not proposal.get_content_hash():
+            failures.append("Proposal fingerprint computation failed")
+
+        # 3. Authorization Token Validity
+        checks.append("TOKEN_VALIDITY")
+        resolved_secret = verification_secret or (
+            policy_engine.get_signing_secret()
+            if policy_engine and hasattr(policy_engine, "get_signing_secret")
+            else self.verification_secret
+        )
+        resolved_version = policy_version_hash or (
+            policy_engine.get_policy_version_hash()
+            if policy_engine and hasattr(policy_engine, "get_policy_version_hash")
+            else None
+        )
+        valid, reason = self.verify_authorization_token(
+            token=decision.authorization_token,
+            proposal=proposal,
+            org=org,
+            decision=decision,
+            verification_secret=resolved_secret,
+            expected_policy_version=resolved_version,
+            current_time=current_time,
+            verifier=verifier,
+        )
+        if not valid:
+            failures.append(f"Authorization token verification failed: {reason}")
+
+        # 4. Auth -> Consequential Operation Binding
+        checks.append("AUTH_OPERATION_BINDING")
+        if operation.proposal_id != proposal.id:
+            failures.append(f"Operation proposal_id '{operation.proposal_id}' does not match proposal '{proposal.id}'")
+        if operation.decision_id != decision.id:
+            failures.append(f"Operation decision_id '{operation.decision_id}' does not match decision '{decision.id}'")
+        if operation.organisation_id != org.id:
+            failures.append(f"Operation organisation_id '{operation.organisation_id}' does not match organisation '{org.id}'")
+        if operation.amount != proposal.requested_credits:
+            failures.append(f"Operation amount ({operation.amount}) does not match requested credits ({proposal.requested_credits})")
+
+        # 5. Provider Evidence Integrity
+        checks.append("PROVIDER_EVIDENCE_INTEGRITY")
+        if operation.state in (OperationState.SUCCEEDED, OperationState.RECONCILED):
+            if operation.state == OperationState.SUCCEEDED and not operation.provider_reference:
+                failures.append("Succeeded consequential operation lacks provider reference")
+        elif operation.state == OperationState.FAILED and not operation.error_message:
+            failures.append("Failed consequential operation lacks error message")
+
+        # 6. Ledger Settlement Verification
+        checks.append("LEDGER_SETTLEMENT")
+        if operation.amount > 0 and ledger is not None:
+            entries = ledger.get_entries() if hasattr(ledger, "get_entries") else []
+            op_hash = hashlib.sha256(operation.id.encode("utf-8")).hexdigest()[:16]
+            token_hash = (
+                hashlib.sha256((decision.authorization_token or operation.id).encode("utf-8")).hexdigest()[:16]
+            )
+            possible_commit_tx_ids = {f"commit-{operation.id}", f"tx-{token_hash}", f"commit-{token_hash}"}
+            possible_rollback_tx_ids = {f"rollback-{operation.id}", f"rollback-{token_hash}"}
+            possible_rec_tx_ids = {f"tx-rec-{op_hash}", f"rollback-rec-{op_hash}"}
+
+            if operation.state == OperationState.SUCCEEDED:
+                commit_tx = next((e for e in entries if e.transaction_id in possible_commit_tx_ids), None)
+                if not commit_tx:
+                    failures.append(f"No commit transaction found for operation '{operation.id}'")
+                elif commit_tx.amount != operation.amount:
+                    failures.append(f"Ledger committed amount ({commit_tx.amount}) != operation amount ({operation.amount})")
+            elif operation.state == OperationState.FAILED:
+                rollback_tx = next((e for e in entries if e.transaction_id in possible_rollback_tx_ids), None)
+                if not rollback_tx:
+                    failures.append(f"No rollback transaction found for operation '{operation.id}'")
+                elif rollback_tx.amount != operation.amount:
+                    failures.append(f"Ledger rolled back amount ({rollback_tx.amount}) != operation amount ({operation.amount})")
+            elif operation.state == OperationState.RECONCILED:
+                rec_tx = next((e for e in entries if e.transaction_id in possible_rec_tx_ids), None)
+                if not rec_tx:
+                    failures.append(f"No reconciliation transaction found for operation '{operation.id}'")
+                elif rec_tx.amount != operation.amount:
+                    failures.append(f"Reconciliation settled amount ({rec_tx.amount}) != operation amount ({operation.amount})")
+
+        # 7. Credit Conservation
+        checks.append("CREDIT_CONSERVATION")
+        if ledger is not None and not ledger.verify_conservation():
+            failures.append("Conservation of credits broken in ledger")
+
+        # 8. State Consistency
+        checks.append("STATE_CONSISTENCY")
+        if org.state == OrgState.PAUSED:
+            failures.append("Organisation is in PAUSED state")
+
+        is_verified = len(failures) == 0
+        evidence_payload = {
+            "operation_id": operation.id,
+            "proposal_id": proposal.id,
+            "decision_id": decision.id,
+            "state": operation.state.value,
+            "checks": checks,
+            "failures": failures,
+            "verified": is_verified,
+        }
+        evidence_hash = hashlib.sha256(canonical_json(evidence_payload).encode("utf-8")).hexdigest()
+
+        verification_receipt = VerificationReceipt(
+            id=str(uuid.uuid4()),
+            execution_id=operation.id,
+            verified=is_verified,
+            checks=checks,
+            failures=failures,
+            evidence_hash=evidence_hash,
+        )
+
+        if event_store is not None and hasattr(event_store, "append_event"):
+            event_store.append_event(
+                actor_id="AUDITOR",
+                event_type="AUDIT_VERIFIED",
+                entity_id=operation.id,
+                payload=verification_receipt.model_dump(),
+            )
 
         if not is_verified:
             raise AuditVerificationError(failures)

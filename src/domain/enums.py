@@ -42,3 +42,20 @@ class ActionType(str, Enum):
     EXTERNAL_API_CALL = "EXTERNAL_API_CALL"
     SIMULATED_ALLOCATION = "SIMULATED_ALLOCATION"
     REPLAN = "REPLAN"
+
+class OperationState(str, Enum):
+    CREATED = "created"
+    AUTHORIZED = "authorized"
+    ESCROWED = "escrowed"
+    SUBMITTED = "submitted"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    UNKNOWN = "unknown"
+    RECONCILING = "reconciling"
+    RECONCILED = "reconciled"
+
+class ProviderOutcome(str, Enum):
+    SUCCESS = "SUCCESS"
+    FAILURE = "FAILURE"
+    TIMEOUT = "TIMEOUT"
+    UNKNOWN = "UNKNOWN"

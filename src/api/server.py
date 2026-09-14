@@ -12,7 +12,13 @@ from src.api.config import cors_origins, operator_key, require_operator_auth
 from src.api.identity_auth import require_identity_for_org, require_identity_for_tenant
 from src.api.mission_service import run_mission
 from src.persistence.factory import create_database
+from src.domain.entities import Organisation
+from src.domain.enums import OrgState
+from src.domain.exceptions import ReconciliationError, UnauthorizedActionError
+from src.execution.consequential import ConsequentialOperationRepository
 from src.persistence.repositories import SqliteEventStore, SqliteLedger
+from src.settlement.reconciliation import ReconciliationService
+from src.settlement.simulated_provider import SimulatedConsequentialProvider
 from src.tenancy.ledger import TenantScopedLedger
 from src.tenancy.organisation_ledger import OrganisationScopedLedger
 
@@ -21,6 +27,12 @@ ensure_started()
 
 app = FastAPI(title="Kalyx Command Centre API", version="0.9.5")
 app.add_middleware(CORSMiddleware, allow_origins=cors_origins(), allow_credentials=False, allow_methods=["GET", "POST"], allow_headers=["*"])
+
+_default_settlement_provider = SimulatedConsequentialProvider()
+
+
+def get_settlement_provider() -> SimulatedConsequentialProvider:
+    return getattr(app.state, "settlement_provider", _default_settlement_provider)
 
 
 def _identity_enabled() -> bool:
@@ -280,6 +292,71 @@ def audit(org_id: str) -> Dict[str, Any]:
 @app.get("/api/organisations/{org_id}/policies")
 def policies(org_id: str) -> Dict[str, Any]:
     return {"policy_decisions": decisions(org_id)}
+
+
+@app.get("/api/organisations/{org_id}/operations")
+def list_operations(org_id: str, state: str | None = Query(default=None)) -> Dict[str, Any]:
+    db = _db()
+    try:
+        _org_id_or_404(db, org_id)
+        repo = ConsequentialOperationRepository(db.conn)
+        operations = repo.list_for_org(org_id, state=state)
+        return {"operations": [op.model_dump(mode="json") for op in operations]}
+    finally:
+        db.close()
+
+
+@app.get("/api/organisations/{org_id}/operations/{op_id}")
+def get_operation(org_id: str, op_id: str) -> Dict[str, Any]:
+    db = _db()
+    try:
+        _org_id_or_404(db, org_id)
+        repo = ConsequentialOperationRepository(db.conn)
+        op = repo.get(op_id)
+        if not op or op.organisation_id != org_id:
+            raise HTTPException(status_code=404, detail="Operation not found")
+        return {"operation": op.model_dump(mode="json")}
+    finally:
+        db.close()
+
+
+@app.post("/api/organisations/{org_id}/operations/{op_id}/reconcile")
+def reconcile_operation_endpoint(org_id: str, op_id: str) -> Dict[str, Any]:
+    db = _db()
+    try:
+        org_row = _org_id_or_404(db, org_id)
+        repo = ConsequentialOperationRepository(db.conn)
+        op = repo.get(op_id)
+        if not op or op.organisation_id != org_id:
+            raise HTTPException(status_code=404, detail="Operation not found")
+
+        ledger = _org_scoped_ledger(db, org_row)
+        event_store = SqliteEventStore(db, verify_on_startup=False)
+        provider = get_settlement_provider()
+        reconciliation_service = ReconciliationService(
+            repo=repo,
+            ledger=ledger,
+            provider=provider,
+            event_store=event_store,
+        )
+
+        org_entity = Organisation(
+            id=org_row["id"],
+            tenant_id=org_row.get("tenant_id", "tenant-demo"),
+            mission=org_row["mission"],
+            treasury_balance=ledger.get_balance("TREASURY"),
+            state=OrgState(org_row["state"]),
+        )
+
+        try:
+            reconciled_op = reconciliation_service.reconcile_operation(op.id, org_entity)
+            return {"operation": reconciled_op.model_dump(mode="json")}
+        except UnauthorizedActionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except ReconciliationError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+    finally:
+        db.close()
 
 
 @app.post("/api/organisations/{org_id}/pause")

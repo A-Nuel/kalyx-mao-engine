@@ -38,3 +38,12 @@ class ExternalExecutionError(DomainError):
     """Raised when an external execution call fails, times out, or returns a 4xx/5xx status."""
     pass
 
+class ReconciliationError(DomainError):
+    """Raised when reconciliation encounters an unresolvable or illegal state."""
+    pass
+
+
+class IdempotencyConflict(DomainError):
+    """Raised when an operation key or idempotency token is reused with different content."""
+    pass
+

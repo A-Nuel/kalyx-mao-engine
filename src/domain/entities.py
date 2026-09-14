@@ -2,10 +2,11 @@ import base64
 import json
 import hashlib
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 from pydantic import BaseModel, Field
-from src.domain.enums import OrgState, AgentRole, AgentStatus, TaskStatus, PolicyResult, ActionType
+from src.domain.enums import OrgState, AgentRole, AgentStatus, TaskStatus, PolicyResult, ActionType, OperationState, ProviderOutcome
 from src.domain.events import compute_payload_hash, canonical_json
+from src.domain.exceptions import InvalidStateTransitionError
 
 class AuthorizationTokenClaims(BaseModel):
     org_id: str
@@ -128,3 +129,67 @@ class Organisation(BaseModel):
     agents: Dict[str, AgentRecord] = Field(default_factory=dict)
     active_policy_ids: List[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=datetime.utcnow)
+
+VALID_OPERATION_TRANSITIONS: Dict[OperationState, Set[OperationState]] = {
+    OperationState.CREATED: {OperationState.AUTHORIZED, OperationState.FAILED},
+    OperationState.AUTHORIZED: {OperationState.ESCROWED, OperationState.FAILED},
+    OperationState.ESCROWED: {OperationState.SUBMITTED, OperationState.FAILED},
+    OperationState.SUBMITTED: {OperationState.SUCCEEDED, OperationState.FAILED, OperationState.UNKNOWN, OperationState.RECONCILING},
+    OperationState.UNKNOWN: {OperationState.RECONCILING},
+    OperationState.RECONCILING: {OperationState.RECONCILED, OperationState.UNKNOWN},
+    OperationState.SUCCEEDED: set(),
+    OperationState.FAILED: set(),
+    OperationState.RECONCILED: set(),
+}
+
+class ConsequentialOperation(BaseModel):
+    id: str
+    tenant_id: str = "tenant-demo"
+    organisation_id: str
+    proposal_id: str
+    decision_id: str
+    idempotency_key: str
+    action_type: ActionType
+    target: str
+    parameters: Dict[str, Any] = Field(default_factory=dict)
+    amount: int = Field(ge=0, default=0)
+    provider_name: str
+    provider_reference: Optional[str] = None
+    state: OperationState = OperationState.CREATED
+    error_message: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    def transition_to(
+        self,
+        new_state: OperationState,
+        error_message: Optional[str] = None,
+        provider_reference: Optional[str] = None
+    ) -> None:
+        allowed = VALID_OPERATION_TRANSITIONS.get(self.state, set())
+        if new_state not in allowed:
+            raise InvalidStateTransitionError(
+                f"Invalid operation state transition: {self.state.value} -> {new_state.value}"
+            )
+        self.state = new_state
+        if error_message is not None:
+            self.error_message = error_message
+        if provider_reference is not None:
+            self.provider_reference = provider_reference
+        self.updated_at = datetime.utcnow()
+
+    def get_fingerprint(self) -> str:
+        data = {
+            "tenant_id": self.tenant_id,
+            "organisation_id": self.organisation_id,
+            "proposal_id": self.proposal_id,
+            "decision_id": self.decision_id,
+            "idempotency_key": self.idempotency_key,
+            "action_type": self.action_type.value,
+            "target": self.target,
+            "parameters": self.parameters,
+            "amount": self.amount,
+            "provider_name": self.provider_name,
+        }
+        return hashlib.sha256(canonical_json(data).encode("utf-8")).hexdigest()
+
