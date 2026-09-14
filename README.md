@@ -142,6 +142,32 @@ GitHub Actions runs the test matrix on Python 3.11 and 3.12, verifies dependency
 
 The repository treats CI as the authoritative test result because local execution is environment-dependent.
 
+## Phase 7 — Mission Lifecycle & Autonomous Experience
+
+`src/api/mission_service.py` elevates Mission to a first-class operational entity with explicit lifecycle transitions (`DRAFT -> PLANNED -> RUNNING -> COMPLETED / FAILED / CANCELLED`), durable event persistence, live telemetry, visible policy rejection/replanning events, and the deterministic 3-minute Judge Demo Mode.
+
+## Phase 8 — Security & Reliability Hardening
+
+`src/security/` establishes defense-in-depth primitives:
+- **Durable Token Consumption**: `token_consumption.py` records consumed authorization token nonces in persistent storage; token replay across server restarts is deterministically rejected.
+- **Durable Idempotency Journal**: `idempotency.py` tracks incoming mutation keys with state and payload hashes, preventing double-invocation of state transitions.
+- **Least-Privilege Capabilities**: `capabilities.py` enforces fine-grained permission scopes for each actor.
+- **Durable External-Operation Journal**: `durable_executor.py` records in-flight external operations to prevent duplicate financial or external calls during transient failures.
+
+## Phase 9 — Identity, Multi-Tenancy & Organisation Isolation
+
+`src/identity/` and `src/tenancy/` establish strict multi-tenant boundaries:
+- **Tenancy Hierarchy**: `Principal -> Tenant/Workspace -> Organisation -> Missions`.
+- **Role-Based Access Control**: `OWNER`, `ADMIN`, `OPERATOR`, and `VIEWER` roles enforced via `src/api/identity_auth.py`.
+- **Canonical Account Namespacing**: `src/tenancy/account_namespace.py` deterministically isolates ledger balances at `{tenant_id}:{organisation_id}:{logical_account}`. No tenant can read or mutate another tenant's treasury.
+- **Cross-Tenant Isolation**: Requests accessing out-of-tenant resources return safe 404s without leaking existence. Client-provided tenant headers are scope selectors, never proofs of authorization.
+
+## Phase 9.5 — Dual-Backend Persistence (SQLite + PostgreSQL)
+
+`src/persistence/` provides a unified persistence layer with dual backends:
+- **SQLite Backend**: Lightweight, zero-dependency storage for local development, fast CLI demonstrations, and offline unit testing (`create_sqlite()`).
+- **PostgreSQL Production Backend**: Production persistence via `KALYX_DATABASE_URL` with ordered SQL migrations (`migrations/postgres/`), advisory locks for concurrent ledger operations, connection pooling, and fail-closed validation (`KALYX_ENV=production`).
+
 ## Economic benchmark
 
 `src/economy/experiment.py` compares STATIC, PERFORMANCE and ADAPTIVE allocation across multiple workload scenarios and seeds. Results are generated empirically rather than hardcoding the desired winner.
@@ -154,8 +180,13 @@ The repository treats CI as the authoritative test result because local executio
 - [x] Phase 3.5 — Cryptographic & policy hardening
 - [x] Phase 4 — Agent economy & controlled execution
 - [x] Phase 4 hardening — escrow atomicity, DNS SSRF validation, ledger authority, empirical benchmark
-- [x] Phase 5 — Command Centre, API/read model, operator controls, Ed25519 identity primitive, settlement boundary, CI
-- [x] Phase 6 — API security boundary, audit resilience, production configuration, container healthcheck, CI quality gates
+- [x] Phase 5 — Foundation, packaging, production containerisation, CI test environments
+- [x] Phase 6 — Command Centre API/UI, operational controls, security headers, container healthcheck
+- [x] Phase 7 — Mission lifecycle state machine, deterministic Judge Demo Mode, live telemetry
+- [x] Phase 8 — Security hardening: durable token consumption, idempotency journal, capability enforcement
+- [x] Phase 9 — Identity, tenancy & organisation isolation: RBAC roles, tenant-scoped ledger, fail-closed auth
+- [x] Phase 9.5 — Dual-backend persistence (SQLite + PostgreSQL), connection pooling, fail-closed gate
+- [ ] Phase 10 — Real execution & settlement adapters (Web APIs, Robinhood Chain / EVM onchain settlement)
 
 ## Quickstart
 
@@ -204,7 +235,21 @@ The narrower engineering claim is:
 
 > **AI agents can operate as an economically constrained organisation when delegation, authority, execution and verification are explicit system primitives rather than prompt instructions.**
 
-The long-term direction is an infrastructure layer for autonomous workforces, autonomous businesses and machine-native organisations.
+## Verification & Test Coverage
+
+The automated test suite contains **176 tests** spanning unit, integration, and security/isolation suites:
+- **171 passed** in offline/local execution.
+- **5 skipped** (live PostgreSQL integration tests when `KALYX_DATABASE_URL` is unconfigured; verified in container and CI).
+
+```bash
+================== 171 passed, 5 skipped in 121.02s ===================
+```
+
+- **Tenancy & Isolation**: `test_account_namespace.py`, `test_tenancy.py`, `test_tenant_scoped_ledger.py`, `test_phase9_identity.py`, `test_phase9_organisation_ledger.py`, `test_phase9_api_identity.py`, `test_phase9_api_ledger_isolation.py`.
+- **Security & Idempotency**: `test_phase8_security.py`, `test_phase8_tenancy.py`, `test_token_consumption.py`, `test_adversarial.py`, `test_execution_atomicity.py`, `test_ssrf_and_network_security.py`.
+- **Missions & API**: `test_phase7_missions.py`, `test_phase5_api.py`, `test_phase5_operator_controls.py`, `test_phase6_hardening.py`.
+- **Audit & Ledger Invariants**: `test_auditor.py`, `test_hash_chain.py`, `test_ledger.py`, `test_treasury_source_of_truth.py`, `test_audit_tamper_exhaustive.py`.
+- **Persistence & Bootstrap**: `test_persistence_config.py`, `test_production_bootstrap.py`, `test_sqlite_persistence.py`, `test_postgres_persistence.py`.
 
 ## License
 
