@@ -1,5 +1,6 @@
 import json
 import uuid
+import sqlite3
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple, Set, Any
 from src.persistence.database import Database
@@ -83,12 +84,17 @@ class SqliteLedger:
                 raise InsufficientCreditsError(
                     f"Account '{from_account}' has {current_balance} credits, cannot transfer {amount}"
                 )
-            self.db.conn.execute(
-                """
-                INSERT INTO ledger_entries (id, timestamp, transaction_id, from_account, to_account, amount, memo)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (entry_id, now_iso, tx_id, from_account, to_account, amount, memo)
-            )
+            try:
+                self.db.conn.execute(
+                    """
+                    INSERT INTO ledger_entries (id, timestamp, transaction_id, from_account, to_account, amount, memo)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (entry_id, now_iso, tx_id, from_account, to_account, amount, memo)
+                )
+            except sqlite3.IntegrityError as e:
+                if "transaction_id" in str(e):
+                    raise ValueError(f"Duplicate transaction ID '{tx_id}' detected. Transfer aborted to prevent double-spending.") from e
+                raise
         return LedgerEntry(id=entry_id, timestamp=datetime.fromisoformat(now_iso), transaction_id=tx_id,
                            from_account=from_account, to_account=to_account, amount=amount, memo=memo)
 

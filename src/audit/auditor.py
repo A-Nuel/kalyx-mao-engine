@@ -343,7 +343,13 @@ class Auditor:
             )
             possible_commit_tx_ids = {f"commit-{operation.id}", f"tx-{token_hash}", f"commit-{token_hash}"}
             possible_rollback_tx_ids = {f"rollback-{operation.id}", f"rollback-{token_hash}"}
-            possible_rec_tx_ids = {f"tx-rec-{op_hash}", f"rollback-rec-{op_hash}"}
+            possible_rec_tx_ids = {
+                f"tx-rec-{op_hash}",
+                f"rollback-rec-{op_hash}",
+                f"tx-{token_hash}",
+                f"commit-{token_hash}",
+                f"rollback-{token_hash}",
+            }
 
             if operation.state == OperationState.SUCCEEDED:
                 commit_tx = next((e for e in entries if e.transaction_id in possible_commit_tx_ids), None)

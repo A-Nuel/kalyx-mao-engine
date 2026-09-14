@@ -498,7 +498,7 @@ class ConsequentialExecutionManager:
                 cost_credits=op.amount,
                 executed_at=datetime.utcnow(),
             )
-        if op.state in (OperationState.UNKNOWN, OperationState.RECONCILING):
+        if op.state in (OperationState.UNKNOWN, OperationState.RECONCILING, OperationState.SUBMITTED):
             raise ExternalExecutionError(
                 f"Operation '{op.id}' is unresolved ({op.state.value}); must be reconciled before retry"
             )
