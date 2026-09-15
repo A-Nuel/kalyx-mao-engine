@@ -1,55 +1,875 @@
-<!doctype html>
-<html lang="en">
+<!DOCTYPE html>
+<html class="dark" lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="theme-color" content="#080b10" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#07080b" />
   <title>Kalyx — Command Centre</title>
   <link rel="stylesheet" href="/assets/app.css" />
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            surface: "#07080b",
+            "surface-container": "#12151d",
+            "surface-high": "#1e222d",
+            "surface-highest": "#282d3b",
+            primary: "#3b82f6",
+            secondary: "#94a3b8",
+            tertiary: "#f59e0b",
+            error: "#ef4444"
+          }
+        }
+      }
+    };
+  </script>
 </head>
-<body>
-  <header class="topbar">
-    <div><span class="brand">KALYX</span><span class="muted"> / COMMAND CENTRE</span></div>
-    <div class="status"><span id="dot"></span><span id="health">CONNECTING</span><span class="muted" id="clock"></span></div>
+<body class="bg-[#07080b] text-slate-300 font-sans antialiased min-h-screen selection:bg-blue-600/30 selection:text-white">
+
+  <!-- TOPBAR HEADER -->
+  <header class="fixed top-0 left-0 right-0 z-40 bg-[#07080b]/80 backdrop-blur-xl border-b border-white/[0.08] shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
+    <div class="h-16 w-full max-w-[1720px] mx-auto px-4 md:px-8 flex items-center justify-between gap-4">
+      
+      <!-- Brand & Section Tabs -->
+      <div class="flex items-center gap-6 shrink-0">
+        <a href="#overview" class="flex items-center gap-2.5 group cursor-pointer">
+          <div class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-sm tracking-widest shadow-[0_0_16px_rgba(59,130,246,0.6)]">
+            K
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="font-bold text-lg text-white tracking-tight">KALYX</span>
+            <span class="hidden sm:inline text-[11px] font-mono uppercase px-2 py-0.5 rounded-full bg-white/[0.06] border border-white/[0.08] text-slate-400">Command Centre</span>
+          </div>
+        </a>
+
+        <!-- 9 Primary Navigation Links -->
+        <nav class="hidden 2xl:flex items-center gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/[0.06] text-xs font-mono" id="mainNav">
+          <a href="#overview" class="nav-tab px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-all" data-nav="overview">Overview</a>
+          <a href="#missions" class="nav-tab px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-all" data-nav="missions">Missions</a>
+          <a href="#organisation" class="nav-tab px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-all" data-nav="organisation">Organisation</a>
+          <a href="#treasury" class="nav-tab px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-all" data-nav="treasury">Treasury</a>
+          <a href="#policies" class="nav-tab px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-all" data-nav="policies">Policies</a>
+          <a href="#operations" class="nav-tab px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-all relative" data-nav="operations">
+            Operations
+            <span id="navOperationsBadge" class="hidden absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400"></span>
+          </a>
+          <a href="#audit" class="nav-tab px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-all" data-nav="audit">Audit</a>
+          <a href="#experiments" class="nav-tab px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-all" data-nav="experiments">Experiments</a>
+          <a href="#settings" class="nav-tab px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-all" data-nav="settings">Settings</a>
+        </nav>
+      </div>
+
+      <!-- Controls & Organisation Scope -->
+      <div class="flex items-center gap-3">
+        <!-- Organisation Select -->
+        <div class="flex items-center gap-2 px-3 py-1 rounded-lg bg-zinc-900/80 border border-white/10 text-xs">
+          <span class="text-slate-500 font-mono">ORG:</span>
+          <select id="orgSelect" aria-label="Select Autonomous Organisation" class="bg-transparent text-white font-mono focus:outline-none cursor-pointer border-none py-0 pl-1 pr-6 text-xs">
+            <option value="">Loading...</option>
+          </select>
+        </div>
+
+        <!-- 1-Click Demo Trigger -->
+        <button id="btnRunDemo" type="button" class="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 hover:text-white border border-blue-500/30 text-xs font-mono transition-all">
+          <span class="material-symbols-outlined text-[15px]">play_circle</span>
+          <span>1-Click Demo</span>
+        </button>
+
+        <!-- New Mission Composer Button -->
+        <button id="btnOpenComposer" type="button" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs shadow-md transition-all">
+          <span class="material-symbols-outlined text-[15px]">rocket_launch</span>
+          <span class="hidden sm:inline">New Mission</span>
+        </button>
+
+        <!-- Circuit Breaker Kill Switch -->
+        <button id="btnCircuitBreaker" type="button" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/25 border border-red-500/30 text-red-400 text-xs font-mono transition-all" title="Emergency Pause / Resume">
+          <span class="material-symbols-outlined text-[15px]">power_settings_new</span>
+          <span id="circuitBreakerLabel" class="hidden md:inline">PAUSE</span>
+        </button>
+
+        <!-- Engine Health Indicator -->
+        <div class="flex items-center gap-2 px-2.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+          <span id="engineStatusDot" class="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]"></span>
+          <span id="engineStatusText" class="text-[11px] font-mono text-emerald-300 uppercase tracking-wider hidden lg:inline">ONLINE</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mobile Navigation Sub-bar -->
+    <div class="2xl:hidden flex items-center overflow-x-auto px-4 py-1.5 border-t border-white/[0.06] bg-[#07080b]/90 gap-1 text-xs font-mono">
+      <a href="#overview" class="nav-tab px-2.5 py-1 rounded text-slate-400 hover:text-white" data-nav="overview">Overview</a>
+      <a href="#missions" class="nav-tab px-2.5 py-1 rounded text-slate-400 hover:text-white" data-nav="missions">Missions</a>
+      <a href="#organisation" class="nav-tab px-2.5 py-1 rounded text-slate-400 hover:text-white" data-nav="organisation">Organisation</a>
+      <a href="#treasury" class="nav-tab px-2.5 py-1 rounded text-slate-400 hover:text-white" data-nav="treasury">Treasury</a>
+      <a href="#policies" class="nav-tab px-2.5 py-1 rounded text-slate-400 hover:text-white" data-nav="policies">Policies</a>
+      <a href="#operations" class="nav-tab px-2.5 py-1 rounded text-slate-400 hover:text-white" data-nav="operations">Operations</a>
+      <a href="#audit" class="nav-tab px-2.5 py-1 rounded text-slate-400 hover:text-white" data-nav="audit">Audit</a>
+      <a href="#experiments" class="nav-tab px-2.5 py-1 rounded text-slate-400 hover:text-white" data-nav="experiments">Experiments</a>
+      <a href="#settings" class="nav-tab px-2.5 py-1 rounded text-slate-400 hover:text-white" data-nav="settings">Settings</a>
+    </div>
   </header>
-  <main>
-    <section class="hero">
-      <div class="hero-copy"><div class="eyebrow">AUTONOMOUS ORGANISATION · CONTROL PLANE</div><h1 id="mission">No organisation loaded</h1><div class="muted" id="orgMeta">Create a mission to start an autonomous organisation.</div></div>
-      <div class="controls"><select id="orgSelect" aria-label="Organisation"></select><button id="pause">PAUSE</button><button id="resume">RESUME</button></div>
+
+  <!-- MAIN VIEWPORT -->
+  <main class="w-full max-w-[1720px] mx-auto pt-24 pb-16 px-4 md:px-8">
+
+    <!-- 1. OVERVIEW VIEW -->
+    <section id="view-overview" class="view-panel space-y-6">
+      <!-- Executive State Bar (3 Cards) -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Card 1: Organisation Status -->
+        <div class="glass-panel p-6 rounded-xl flex flex-col justify-between relative overflow-hidden group">
+          <div class="flex items-center justify-between mb-4">
+            <span class="text-xs font-mono uppercase tracking-wider text-slate-500 font-medium">Organisation State</span>
+            <span id="cardOrgBadge" class="px-2.5 py-0.5 rounded-full text-xs font-mono font-medium badge-ok">NOMINAL</span>
+          </div>
+          <div>
+            <h2 id="cardOrgStateText" class="text-2xl font-bold text-white tracking-tight">Active Operations</h2>
+            <p id="cardOrgSubtitle" class="text-xs text-slate-400 mt-1">Autonomous orchestration running normally</p>
+          </div>
+          <div class="mt-6 pt-4 border-t border-white/[0.06] flex items-center justify-between text-xs font-mono">
+            <span id="cardOrgId" class="text-slate-400 truncate max-w-[200px]">—</span>
+            <span id="cardOrgConsensus" class="text-blue-400 font-medium">Consensus 100%</span>
+          </div>
+        </div>
+
+        <!-- Card 2: Treasury Health -->
+        <div class="glass-panel p-6 rounded-xl flex flex-col justify-between relative overflow-hidden group">
+          <div class="flex items-center justify-between mb-4">
+            <span class="text-xs font-mono uppercase tracking-wider text-slate-500 font-medium">Available Credits</span>
+            <span id="cardConservationBadge" class="px-2.5 py-0.5 rounded-full text-xs font-mono font-medium badge-ok">CONSERVED</span>
+          </div>
+          <div>
+            <div class="flex items-baseline gap-2">
+              <span id="cardTreasuryBalance" class="text-3xl font-mono font-bold text-white tracking-tight">—</span>
+              <span class="text-xs font-mono text-slate-500">ORG CR</span>
+            </div>
+            <p id="cardTreasuryBreakdown" class="text-xs text-slate-400 mt-1">Escrowed: 0 CR • External Sink: 0 CR</p>
+          </div>
+          <div class="mt-6 pt-4 border-t border-white/[0.06] flex items-center justify-between text-xs font-mono">
+            <span class="text-slate-400">Double-Entry Invariant</span>
+            <span class="text-emerald-400 font-medium">VERIFIED</span>
+          </div>
+        </div>
+
+        <!-- Card 3: Active Mission / Workforce -->
+        <div class="glass-panel p-6 rounded-xl flex flex-col justify-between relative overflow-hidden group">
+          <div class="flex items-center justify-between mb-4">
+            <span class="text-xs font-mono uppercase tracking-wider text-slate-500 font-medium">Workforce Telemetry</span>
+            <span id="cardWorkforceCount" class="px-2.5 py-0.5 rounded-full text-xs font-mono font-medium badge-blue">0 Active</span>
+          </div>
+          <div>
+            <h2 id="cardMissionTitle" class="text-lg font-bold text-white truncate tracking-tight">No Mission Loaded</h2>
+            <p id="cardMissionPhase" class="text-xs text-slate-400 mt-1">Select or start a mission to initiate execution</p>
+          </div>
+          <div class="mt-6 pt-4 border-t border-white/[0.06] flex items-center justify-between text-xs font-mono">
+            <span id="cardTasksCount" class="text-slate-400">0 Tasks</span>
+            <button id="btnOpenMissionConsoleFromCard" type="button" class="text-blue-400 hover:text-blue-300 font-medium flex items-center gap-1">
+              <span>Inspect Mission</span>
+              <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Attention Queue / Operational Banner -->
+      <div id="attentionQueueContainer">
+        <!-- Populated dynamically: Shows UNKNOWN alert or nominal state -->
+      </div>
+
+      <!-- Milestone Pipeline -->
+      <div class="glass-panel p-6 rounded-xl space-y-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-blue-400 text-base">route</span>
+            <h3 class="text-sm font-mono font-semibold uppercase tracking-wider text-white">Execution & Verification Pipeline</h3>
+          </div>
+          <span id="pipelineProgressLabel" class="text-xs font-mono text-slate-400">Stage 0 of 7</span>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 pt-2" id="pipelineSteps">
+          <!-- Step 1: PLAN -->
+          <div class="pipeline-step p-3 rounded-lg bg-zinc-900/60 border border-white/[0.06] flex flex-col gap-1" data-step="PLAN">
+            <span class="text-[10px] font-mono text-slate-500">STAGE 1</span>
+            <span class="text-xs font-bold text-slate-300">PLAN</span>
+            <span class="text-[11px] text-slate-500 step-status">Pending</span>
+          </div>
+          <!-- Step 2: RESEARCH -->
+          <div class="pipeline-step p-3 rounded-lg bg-zinc-900/60 border border-white/[0.06] flex flex-col gap-1" data-step="RESEARCH">
+            <span class="text-[10px] font-mono text-slate-500">STAGE 2</span>
+            <span class="text-xs font-bold text-slate-300">RESEARCH</span>
+            <span class="text-[11px] text-slate-500 step-status">Pending</span>
+          </div>
+          <!-- Step 3: STRATEGY -->
+          <div class="pipeline-step p-3 rounded-lg bg-zinc-900/60 border border-white/[0.06] flex flex-col gap-1" data-step="STRATEGY">
+            <span class="text-[10px] font-mono text-slate-500">STAGE 3</span>
+            <span class="text-xs font-bold text-slate-300">STRATEGY</span>
+            <span class="text-[11px] text-slate-500 step-status">Pending</span>
+          </div>
+          <!-- Step 4: PROPOSAL -->
+          <div class="pipeline-step p-3 rounded-lg bg-zinc-900/60 border border-white/[0.06] flex flex-col gap-1" data-step="PROPOSAL">
+            <span class="text-[10px] font-mono text-slate-500">STAGE 4</span>
+            <span class="text-xs font-bold text-slate-300">PROPOSAL</span>
+            <span class="text-[11px] text-slate-500 step-status">Pending</span>
+          </div>
+          <!-- Step 5: POLICY -->
+          <div class="pipeline-step p-3 rounded-lg bg-zinc-900/60 border border-white/[0.06] flex flex-col gap-1" data-step="POLICY">
+            <span class="text-[10px] font-mono text-slate-500">STAGE 5</span>
+            <span class="text-xs font-bold text-slate-300">POLICY CHECK</span>
+            <span class="text-[11px] text-slate-500 step-status">Pending</span>
+          </div>
+          <!-- Step 6: EXECUTION -->
+          <div class="pipeline-step p-3 rounded-lg bg-zinc-900/60 border border-white/[0.06] flex flex-col gap-1" data-step="EXECUTION">
+            <span class="text-[10px] font-mono text-slate-500">STAGE 6</span>
+            <span class="text-xs font-bold text-slate-300">EXECUTION</span>
+            <span class="text-[11px] text-slate-500 step-status">Pending</span>
+          </div>
+          <!-- Step 7: AUDIT -->
+          <div class="pipeline-step p-3 rounded-lg bg-zinc-900/60 border border-white/[0.06] flex flex-col gap-1" data-step="AUDIT">
+            <span class="text-[10px] font-mono text-slate-500">STAGE 7</span>
+            <span class="text-xs font-bold text-slate-300">VERIFICATION</span>
+            <span class="text-[11px] text-slate-500 step-status">Pending</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Grid: Workforce Pulse & Live Event Stream -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Left: Workforce Pulse (5 cols) -->
+        <div class="lg:col-span-5 glass-panel p-6 rounded-xl space-y-4">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="material-symbols-outlined text-blue-400 text-base">group</span>
+              <h3 class="text-sm font-mono font-semibold uppercase tracking-wider text-white">Workforce Pulse</h3>
+            </div>
+            <a href="#organisation" class="text-xs text-blue-400 hover:text-blue-300 font-mono">View All &rarr;</a>
+          </div>
+          <div id="overviewAgentList" class="space-y-2.5 max-h-[360px] overflow-y-auto pr-1">
+            <div class="text-xs text-slate-500 py-4 text-center">Loading workforce...</div>
+          </div>
+        </div>
+
+        <!-- Right: Live Event Stream (7 cols) -->
+        <div class="lg:col-span-7 glass-panel p-6 rounded-xl space-y-4">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="material-symbols-outlined text-emerald-400 text-base">format_list_bulleted</span>
+              <h3 class="text-sm font-mono font-semibold uppercase tracking-wider text-white">Live Event Telemetry</h3>
+            </div>
+            <span class="text-xs font-mono text-slate-500">Append-Only Event Store</span>
+          </div>
+          <div id="overviewEventStream" class="space-y-2 max-h-[360px] overflow-y-auto pr-1 font-mono text-xs">
+            <div class="text-xs text-slate-500 py-4 text-center">No telemetry events logged yet.</div>
+          </div>
+        </div>
+      </div>
     </section>
 
-    <section class="mission-composer panel">
-      <div class="panel-head"><div><span class="eyebrow">NEW MISSION</span><h2>Give the organisation a mission</h2></div><span class="tag">BOUNDED EXECUTION</span></div>
-      <form id="missionForm" class="mission-form">
-        <label>Objective<input id="missionInput" name="mission" minlength="3" maxlength="2000" required placeholder="Find the highest-value opportunity under strict risk limits" /></label>
-        <label>Budget<input id="budgetInput" name="budget" type="number" min="1" max="10000" value="100" required /></label>
-        <label class="checkbox"><input id="liveInput" type="checkbox" /> Allow live reasoning if configured</label>
-        <button id="runMission" type="submit">START MISSION</button>
-      </form>
-      <div id="missionStatus" class="muted" role="status"></div>
+    <!-- 2. MISSIONS VIEW -->
+    <section id="view-missions" class="view-panel space-y-6 hidden">
+      <!-- Missions Header -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 class="text-2xl font-bold text-white tracking-tight">Expeditions & Missions</h1>
+          <p class="text-xs text-slate-400">Autonomous goal decomposition, task allocation, and bound progression.</p>
+        </div>
+        <button id="btnNewMissionAction" type="button" class="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs shadow-md transition-all self-start sm:self-auto">
+          <span class="material-symbols-outlined text-[16px]">add_circle</span>
+          <span>Start New Mission</span>
+        </button>
+      </div>
+
+      <!-- Active Mission Hero Card -->
+      <div id="missionsHeroContainer">
+        <!-- Rendered dynamically -->
+      </div>
+
+      <!-- Mission Tasks Roster -->
+      <div class="glass-panel p-6 rounded-xl space-y-4">
+        <h3 class="text-sm font-mono font-semibold uppercase tracking-wider text-white">Delegated Tasks & Deliverables</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs font-mono">
+            <thead>
+              <tr class="border-b border-white/[0.08] text-slate-400">
+                <th class="py-2.5 px-3">TASK ID</th>
+                <th class="py-2.5 px-3">ASSIGNED AGENT</th>
+                <th class="py-2.5 px-3">OBJECTIVE</th>
+                <th class="py-2.5 px-3">ALLOCATED</th>
+                <th class="py-2.5 px-3">STATUS</th>
+                <th class="py-2.5 px-3 text-right">EVIDENCE</th>
+              </tr>
+            </thead>
+            <tbody id="missionsTasksTableBody" class="divide-y divide-white/[0.04]">
+              <tr><td colspan="6" class="py-6 text-center text-slate-500">No tasks currently recorded.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Past Organisations / Missions Chronology -->
+      <div class="glass-panel p-6 rounded-xl space-y-4">
+        <h3 class="text-sm font-mono font-semibold uppercase tracking-wider text-white">Mission History</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs font-mono">
+            <thead>
+              <tr class="border-b border-white/[0.08] text-slate-400">
+                <th class="py-2.5 px-3">ORGANISATION ID</th>
+                <th class="py-2.5 px-3">MISSION OBJECTIVE</th>
+                <th class="py-2.5 px-3">INITIAL TREASURY</th>
+                <th class="py-2.5 px-3">STATE</th>
+                <th class="py-2.5 px-3">CREATED AT</th>
+                <th class="py-2.5 px-3 text-right">ACTION</th>
+              </tr>
+            </thead>
+            <tbody id="missionsHistoryTableBody" class="divide-y divide-white/[0.04]">
+              <tr><td colspan="6" class="py-6 text-center text-slate-500">Loading missions...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </section>
 
-    <section class="metrics">
-      <article><span>TREASURY</span><strong id="treasury">—</strong><small>ORG credits</small></article>
-      <article><span>WORKFORCE</span><strong id="agents">—</strong><small>active agents</small></article>
-      <article><span>MISSIONS / TASKS</span><strong id="tasks">—</strong><small>persistent state</small></article>
-      <article><span>AUDIT CHAIN</span><strong id="audit">—</strong><small>cryptographic integrity</small></article>
+    <!-- 3. ORGANISATION VIEW -->
+    <section id="view-organisation" class="view-panel space-y-6 hidden">
+      <div>
+        <h1 class="text-2xl font-bold text-white tracking-tight">Organisation & Workforce Architecture</h1>
+        <p class="text-xs text-slate-400">Hierarchical division of labour, capability boundaries, and agent performance.</p>
+      </div>
+
+      <!-- Visual Hierarchy Organogram Graph -->
+      <div class="glass-panel p-6 rounded-xl space-y-4 overflow-x-auto">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-mono uppercase tracking-wider text-slate-500 font-semibold">Operational Chain of Mandate</span>
+          <span class="text-xs font-mono text-blue-400">Agents Propose &bull; Policies Authorize &bull; Executors Execute &bull; Auditors Verify</span>
+        </div>
+
+        <div class="min-w-[800px] flex flex-col items-center gap-4 py-4">
+          <!-- Level 0: Human Operator -->
+          <div class="organogram-node p-3 rounded-xl bg-zinc-900 border border-white/10 w-64 text-center shadow-md">
+            <span class="text-[10px] font-mono text-amber-400 font-semibold">LEVEL 0 &bull; OPERATOR GATE</span>
+            <div class="font-bold text-sm text-white mt-0.5">HUMAN OPERATOR</div>
+            <div class="text-[11px] text-slate-400">Mission Intent &bull; Emergency Circuit Breaker</div>
+          </div>
+          <div class="w-px h-6 bg-white/20"></div>
+
+          <!-- Level 1: CEO Orchestrator -->
+          <div class="organogram-node p-3 rounded-xl bg-zinc-900 border border-blue-500/30 w-72 text-center shadow-md">
+            <span class="text-[10px] font-mono text-blue-400 font-semibold">LEVEL 1 &bull; EXECUTIVE DECOMPOSITION</span>
+            <div class="font-bold text-sm text-white mt-0.5">CEO-ORCHESTRATOR</div>
+            <div class="text-[11px] text-slate-400">Plan Formulation &bull; Task Delegation &bull; Replanning</div>
+          </div>
+          <div class="w-px h-6 bg-white/20"></div>
+
+          <!-- Level 2: Specialist Agents -->
+          <div class="grid grid-cols-3 gap-4 w-full max-w-3xl">
+            <div class="organogram-node p-3 rounded-xl bg-zinc-900/80 border border-white/10 text-center">
+              <span class="text-[10px] font-mono text-blue-400">SPECIALIST</span>
+              <div class="font-bold text-xs text-white mt-0.5">RESEARCHER</div>
+              <div class="text-[10px] text-slate-400">Market Intelligence &bull; Evidence</div>
+            </div>
+            <div class="organogram-node p-3 rounded-xl bg-zinc-900/80 border border-white/10 text-center">
+              <span class="text-[10px] font-mono text-blue-400">SPECIALIST</span>
+              <div class="font-bold text-xs text-white mt-0.5">STRATEGIST</div>
+              <div class="text-[10px] text-slate-400">Option Ranking &bull; Risk Analysis</div>
+            </div>
+            <div class="organogram-node p-3 rounded-xl bg-zinc-900/80 border border-white/10 text-center">
+              <span class="text-[10px] font-mono text-blue-400">SPECIALIST</span>
+              <div class="font-bold text-xs text-white mt-0.5">FINANCIAL ANALYST</div>
+              <div class="text-[10px] text-slate-400">Capital Proposals &bull; Parameters</div>
+            </div>
+          </div>
+          <div class="w-px h-6 bg-white/20"></div>
+
+          <!-- Level 3: Deterministic Policy Engine -->
+          <div class="organogram-node p-3 rounded-xl bg-zinc-900 border border-emerald-500/30 w-80 text-center shadow-md">
+            <span class="text-[10px] font-mono text-emerald-400 font-semibold">LEVEL 3 &bull; DETERMINISTIC GOVERNANCE</span>
+            <div class="font-bold text-sm text-white mt-0.5">POLICY ENGINE (RULE-01 .. RULE-08)</div>
+            <div class="text-[11px] text-slate-400">Zero-LLM Authority &bull; HMAC Authorization Tokens</div>
+          </div>
+          <div class="w-px h-6 bg-white/20"></div>
+
+          <!-- Level 4 & 5: Controlled Execution & Independent Auditor -->
+          <div class="grid grid-cols-2 gap-4 w-full max-w-xl">
+            <div class="organogram-node p-3 rounded-xl bg-zinc-900/80 border border-purple-500/30 text-center">
+              <span class="text-[10px] font-mono text-purple-400">LEVEL 4 &bull; BOUNDARY</span>
+              <div class="font-bold text-xs text-white mt-0.5">CONTROLLED EXECUTOR</div>
+              <div class="text-[10px] text-slate-400">Capability Checks &bull; Escrow &bull; Provider Adapter</div>
+            </div>
+            <div class="organogram-node p-3 rounded-xl bg-zinc-900/80 border border-amber-500/30 text-center">
+              <span class="text-[10px] font-mono text-amber-400">LEVEL 5 &bull; VERIFICATION</span>
+              <div class="font-bold text-xs text-white mt-0.5">INDEPENDENT AUDITOR</div>
+              <div class="text-[10px] text-slate-400">8-Point Verification &bull; Merkle Hash Seal</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Agent Roster Table -->
+      <div class="glass-panel p-6 rounded-xl space-y-4">
+        <h3 class="text-sm font-mono font-semibold uppercase tracking-wider text-white">Agent Personnel & Authority Roster</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs font-mono">
+            <thead>
+              <tr class="border-b border-white/[0.08] text-slate-400">
+                <th class="py-2.5 px-3">AGENT ID</th>
+                <th class="py-2.5 px-3">ROLE</th>
+                <th class="py-2.5 px-3">STATUS</th>
+                <th class="py-2.5 px-3">AUTHORITY CEILING</th>
+                <th class="py-2.5 px-3">BALANCE</th>
+                <th class="py-2.5 px-3">REPUTATION</th>
+                <th class="py-2.5 px-3">PERFORMANCE</th>
+                <th class="py-2.5 px-3 text-right">ACTION</th>
+              </tr>
+            </thead>
+            <tbody id="organisationAgentsTableBody" class="divide-y divide-white/[0.04]">
+              <tr><td colspan="8" class="py-6 text-center text-slate-500">Loading agents...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </section>
 
-    <section class="mission-bar panel">
-      <div><span class="eyebrow">MISSION REPLAY</span><strong id="replayTitle">Select an event</strong><div class="muted" id="replayDetail">The organisation's decisions are replayed from its append-only event history.</div></div>
-      <div class="replay-controls"><button id="replayPrev">←</button><button id="replayPlay">PLAY</button><button id="replayNext">→</button><span id="replayCount" class="muted">0 / 0</span></div>
+    <!-- 4. TREASURY VIEW -->
+    <section id="view-treasury" class="view-panel space-y-6 hidden">
+      <div>
+        <h1 class="text-2xl font-bold text-white tracking-tight">Treasury & Resource Allocation</h1>
+        <p class="text-xs text-slate-400">Authoritative double-entry ledger balances, escrow allocations, and conservation invariants.</p>
+      </div>
+
+      <!-- Ledger Accounts Cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div class="glass-panel p-6 rounded-xl flex flex-col justify-between">
+          <span class="text-xs font-mono uppercase tracking-wider text-slate-500">Treasury Account</span>
+          <div class="my-3">
+            <span id="treasuryAvailableBalance" class="text-3xl font-mono font-bold text-white">—</span>
+            <span class="text-xs font-mono text-slate-500 ml-1">CR</span>
+          </div>
+          <span class="text-[11px] font-mono text-slate-400">Uncommitted Operating Capital</span>
+        </div>
+        <div class="glass-panel p-6 rounded-xl flex flex-col justify-between">
+          <span class="text-xs font-mono uppercase tracking-wider text-amber-500">Escrow Reserved</span>
+          <div class="my-3">
+            <span id="treasuryEscrowBalance" class="text-3xl font-mono font-bold text-amber-400">—</span>
+            <span class="text-xs font-mono text-slate-500 ml-1">CR</span>
+          </div>
+          <span class="text-[11px] font-mono text-slate-400">Locked Pending Execution Settlement</span>
+        </div>
+        <div class="glass-panel p-6 rounded-xl flex flex-col justify-between">
+          <span class="text-xs font-mono uppercase tracking-wider text-blue-400">External Sink</span>
+          <div class="my-3">
+            <span id="treasuryExternalSinkBalance" class="text-3xl font-mono font-bold text-blue-400">—</span>
+            <span class="text-xs font-mono text-slate-500 ml-1">CR</span>
+          </div>
+          <span class="text-[11px] font-mono text-slate-400">Permanently Settled Consequential Actions</span>
+        </div>
+        <div class="glass-panel p-6 rounded-xl flex flex-col justify-between">
+          <span class="text-xs font-mono uppercase tracking-wider text-emerald-400">Conservation Status</span>
+          <div class="my-3 flex items-center gap-2">
+            <span id="treasuryConservationText" class="text-2xl font-mono font-bold text-emerald-400">VALID</span>
+          </div>
+          <span class="text-[11px] font-mono text-slate-400">&Delta; Balance Invariant: Exact Zero Leak</span>
+        </div>
+      </div>
+
+      <!-- Immutable Double-Entry Transactions Table -->
+      <div class="glass-panel p-6 rounded-xl space-y-4">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-mono font-semibold uppercase tracking-wider text-white">Immutable Double-Entry Ledger</h3>
+          <span class="text-xs font-mono text-slate-500">Strict Conservation Enforced</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs font-mono">
+            <thead>
+              <tr class="border-b border-white/[0.08] text-slate-400">
+                <th class="py-2.5 px-3">SEQ</th>
+                <th class="py-2.5 px-3">TIMESTAMP</th>
+                <th class="py-2.5 px-3">DEBIT (FROM)</th>
+                <th class="py-2.5 px-3">CREDIT (TO)</th>
+                <th class="py-2.5 px-3">AMOUNT</th>
+                <th class="py-2.5 px-3">MEMO</th>
+              </tr>
+            </thead>
+            <tbody id="treasuryLedgerTableBody" class="divide-y divide-white/[0.04]">
+              <tr><td colspan="6" class="py-6 text-center text-slate-500">Loading ledger records...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </section>
 
-    <section class="grid">
-      <article class="panel wide"><div class="panel-head"><h2>Organisation graph</h2><span class="tag">CONTROL PLANE</span></div><div id="graph" class="graph"></div></article>
-      <article class="panel"><div class="panel-head"><h2>Agent economy</h2><span class="tag">LIVE</span></div><div id="agentList"></div></article>
-      <article class="panel wide"><div class="panel-head"><h2>Mission timeline</h2><span class="tag">APPEND-ONLY EVENTS</span></div><div id="events" class="events"></div></article>
-      <article class="panel"><div class="panel-head"><h2>Policy telemetry</h2><span class="tag">DETERMINISTIC</span></div><div id="decisions" class="events"></div></article>
-      <article class="panel"><div class="panel-head"><h2>Ledger</h2><span class="tag">DOUBLE ENTRY</span></div><div id="ledger"></div></article>
+    <!-- 5. POLICIES VIEW -->
+    <section id="view-policies" class="view-panel space-y-6 hidden">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 class="text-2xl font-bold text-white tracking-tight">Policy Centre & Safety Guardrails</h1>
+          <p class="text-xs text-slate-400">Deterministic rule suite, strict invariants, and live policy decision telemetry.</p>
+        </div>
+        <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900 border border-white/10 text-xs font-mono">
+          <span class="text-slate-500">VERSION HASH:</span>
+          <span id="policyVersionHash" class="text-blue-400 font-semibold">—</span>
+        </div>
+      </div>
+
+      <!-- Active Guardrails Cards (RULE-01 to RULE-08) -->
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4" id="policyRulesGrid">
+        <!-- Rendered dynamically -->
+      </div>
+
+      <!-- Live Policy Decisions Table -->
+      <div class="glass-panel p-6 rounded-xl space-y-4">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-mono font-semibold uppercase tracking-wider text-white">Live Policy Decisions Log</h3>
+          <span class="text-xs font-mono text-slate-500">Every decision backed by cryptographic audit</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs font-mono">
+            <thead>
+              <tr class="border-b border-white/[0.08] text-slate-400">
+                <th class="py-2.5 px-3">TIMESTAMP</th>
+                <th class="py-2.5 px-3">PROPOSAL ID</th>
+                <th class="py-2.5 px-3">RESULT</th>
+                <th class="py-2.5 px-3">VIOLATED RULE</th>
+                <th class="py-2.5 px-3">EXACT RATIONALE</th>
+                <th class="py-2.5 px-3 text-right">AUTH TOKEN</th>
+              </tr>
+            </thead>
+            <tbody id="policiesDecisionsTableBody" class="divide-y divide-white/[0.04]">
+              <tr><td colspan="6" class="py-6 text-center text-slate-500">Loading policy decisions...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </section>
-    <footer>AGENTS PROPOSE → POLICIES AUTHORIZE → EXECUTORS EXECUTE → AUDITORS VERIFY</footer>
+
+    <!-- 6. OPERATIONS VIEW -->
+    <section id="view-operations" class="view-panel space-y-6 hidden">
+      <div>
+        <h1 class="text-2xl font-bold text-white tracking-tight">Operations & Consequential Actions</h1>
+        <p class="text-xs text-slate-400">The authoritative consequential execution boundary, idempotency locks, and reconciliation queue.</p>
+      </div>
+
+      <!-- Operations State Summary Banner -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-4" id="operationsSummaryGrid">
+        <!-- Rendered dynamically -->
+      </div>
+
+      <!-- UNKNOWN / Needs Attention Callout -->
+      <div id="operationsUnknownAlertContainer">
+        <!-- Populated if any operation is in UNKNOWN state -->
+      </div>
+
+      <!-- Consequential Operations Table -->
+      <div class="glass-panel p-6 rounded-xl space-y-4">
+        <div class="flex items-center justify-between">
+          <h3 class="text-sm font-mono font-semibold uppercase tracking-wider text-white">Consequential Execution Ledger</h3>
+          <span class="text-xs font-mono text-slate-500">State Machine: CREATED &rarr; AUTHORIZED &rarr; ESCROWED &rarr; SUBMITTED &rarr; SUCCEEDED / FAILED / UNKNOWN</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs font-mono">
+            <thead>
+              <tr class="border-b border-white/[0.08] text-slate-400">
+                <th class="py-2.5 px-3">OPERATION ID</th>
+                <th class="py-2.5 px-3">ACTION TYPE</th>
+                <th class="py-2.5 px-3">TARGET</th>
+                <th class="py-2.5 px-3">AMOUNT</th>
+                <th class="py-2.5 px-3">STATE</th>
+                <th class="py-2.5 px-3">PROVIDER REF</th>
+                <th class="py-2.5 px-3">UPDATED</th>
+                <th class="py-2.5 px-3 text-right">ACTION</th>
+              </tr>
+            </thead>
+            <tbody id="operationsTableBody" class="divide-y divide-white/[0.04]">
+              <tr><td colspan="8" class="py-6 text-center text-slate-500">Loading consequential operations...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 7. AUDIT VIEW -->
+    <section id="view-audit" class="view-panel space-y-6 hidden">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 class="text-2xl font-bold text-white tracking-tight">Audit View & Verifiable Ledger</h1>
+          <p class="text-xs text-slate-400">Cryptographically sealed audit log of every autonomous action, policy check, and settlement event.</p>
+        </div>
+        <button id="btnVerifyAuditChain" type="button" class="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 font-mono text-xs transition-all">
+          <span class="material-symbols-outlined text-[16px]">verified_user</span>
+          <span>Verify Hash Chain</span>
+        </button>
+      </div>
+
+      <!-- Audit Integrity Cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+        <div class="glass-panel p-6 rounded-xl flex flex-col justify-between">
+          <span class="text-xs font-mono uppercase tracking-wider text-slate-500">Chain Integrity</span>
+          <div class="my-3 flex items-center gap-2">
+            <span id="auditChainStatusText" class="text-2xl font-mono font-bold text-emerald-400">VALID</span>
+          </div>
+          <span id="auditChainErrorText" class="text-[11px] font-mono text-slate-400">0 Merkle or Hash Tamper Flaws</span>
+        </div>
+        <div class="glass-panel p-6 rounded-xl flex flex-col justify-between">
+          <span class="text-xs font-mono uppercase tracking-wider text-slate-500">Verification Receipts</span>
+          <div class="my-3">
+            <span id="auditReceiptsCount" class="text-3xl font-mono font-bold text-white">—</span>
+          </div>
+          <span class="text-[11px] font-mono text-slate-400">8-Point Independent Auditor Checks</span>
+        </div>
+        <div class="glass-panel p-6 rounded-xl flex flex-col justify-between">
+          <span class="text-xs font-mono uppercase tracking-wider text-slate-500">Total Audited Events</span>
+          <div class="my-3">
+            <span id="auditTotalEventsCount" class="text-3xl font-mono font-bold text-white">—</span>
+          </div>
+          <span class="text-[11px] font-mono text-slate-400">Immutable Hash Chain Elements</span>
+        </div>
+      </div>
+
+      <!-- Verification Receipts Table -->
+      <div class="glass-panel p-6 rounded-xl space-y-4">
+        <h3 class="text-sm font-mono font-semibold uppercase tracking-wider text-white">Cryptographic Verification Receipts</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs font-mono">
+            <thead>
+              <tr class="border-b border-white/[0.08] text-slate-400">
+                <th class="py-2.5 px-3">RECEIPT ID</th>
+                <th class="py-2.5 px-3">EXECUTION ID</th>
+                <th class="py-2.5 px-3">PROPOSAL ID</th>
+                <th class="py-2.5 px-3">TIMESTAMP</th>
+                <th class="py-2.5 px-3">STATUS</th>
+                <th class="py-2.5 px-3 text-right">EVIDENCE HASH</th>
+              </tr>
+            </thead>
+            <tbody id="auditReceiptsTableBody" class="divide-y divide-white/[0.04]">
+              <tr><td colspan="6" class="py-6 text-center text-slate-500">Loading verification receipts...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Full Chronological Events Inspector -->
+      <div class="glass-panel p-6 rounded-xl space-y-4">
+        <h3 class="text-sm font-mono font-semibold uppercase tracking-wider text-white">Full Event Chronology</h3>
+        <div id="auditEventsContainer" class="space-y-2 max-h-[500px] overflow-y-auto pr-1 font-mono text-xs">
+          <!-- Rendered dynamically -->
+        </div>
+      </div>
+    </section>
+
+    <!-- 8. EXPERIMENTS VIEW -->
+    <section id="view-experiments" class="view-panel space-y-6 hidden">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 class="text-2xl font-bold text-white tracking-tight">Empirical Economic Experiments</h1>
+          <p class="text-xs text-slate-400">Multi-scenario comparative benchmark: Static vs Performance vs Adaptive allocation. Zero fabricated numbers.</p>
+        </div>
+        <button id="btnRunExperiment" type="button" class="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs shadow-md transition-all">
+          <span class="material-symbols-outlined text-[16px]">science</span>
+          <span>Run 3-Round Benchmark</span>
+        </button>
+      </div>
+
+      <!-- Experiments Output Container -->
+      <div id="experimentsOutputContainer" class="space-y-6">
+        <div class="glass-panel p-8 rounded-xl text-center space-y-3">
+          <span class="material-symbols-outlined text-4xl text-slate-600">bar_chart</span>
+          <p class="text-slate-400 text-sm">No benchmark has been executed in this runtime session yet.</p>
+          <p class="text-slate-500 text-xs">Click "Run 3-Round Benchmark" above to trigger real multi-scenario empirical evaluation.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 9. SETTINGS VIEW -->
+    <section id="view-settings" class="view-panel space-y-6 hidden">
+      <div>
+        <h1 class="text-2xl font-bold text-white tracking-tight">System Settings & Runtime Configuration</h1>
+        <p class="text-xs text-slate-400">Autonomous organisation kernel configuration, execution providers, and deterministic security posture.</p>
+      </div>
+
+      <!-- Settings Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Kernel & Environment -->
+        <div class="glass-panel p-6 rounded-xl space-y-4">
+          <h3 class="text-sm font-mono font-semibold uppercase tracking-wider text-white">Runtime Kernel</h3>
+          <div class="space-y-3 text-xs font-mono">
+            <div class="flex items-center justify-between py-1.5 border-b border-white/[0.04]">
+              <span class="text-slate-500">Service</span>
+              <span id="settingService" class="text-white">Kalyx Command Centre</span>
+            </div>
+            <div class="flex items-center justify-between py-1.5 border-b border-white/[0.04]">
+              <span class="text-slate-500">Engine Version</span>
+              <span id="settingVersion" class="text-blue-400">0.9.5</span>
+            </div>
+            <div class="flex items-center justify-between py-1.5 border-b border-white/[0.04]">
+              <span class="text-slate-500">Environment</span>
+              <span id="settingEnvironment" class="badge-blue px-2 py-0.5 rounded text-[11px]">development</span>
+            </div>
+            <div class="flex items-center justify-between py-1.5 border-b border-white/[0.04]">
+              <span class="text-slate-500">Database Backend</span>
+              <span id="settingDatabase" class="text-white">SQLite</span>
+            </div>
+            <div class="flex items-center justify-between py-1.5 border-b border-white/[0.04]">
+              <span class="text-slate-500">Multi-Tenant Isolation</span>
+              <span id="settingIdentityAuth" class="badge-ok px-2 py-0.5 rounded text-[11px]">ACTIVE</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Governance & Execution Safety -->
+        <div class="glass-panel p-6 rounded-xl space-y-4">
+          <h3 class="text-sm font-mono font-semibold uppercase tracking-wider text-white">Governance & Execution Safety</h3>
+          <div class="space-y-3 text-xs font-mono">
+            <div class="flex items-center justify-between py-1.5 border-b border-white/[0.04]">
+              <span class="text-slate-500">Settlement Provider</span>
+              <span id="settingProvider" class="text-white">SimulatedConsequentialProvider (v1.0)</span>
+            </div>
+            <div class="flex items-center justify-between py-1.5 border-b border-white/[0.04]">
+              <span class="text-slate-500">Policy Rules Enforced</span>
+              <span id="settingRuleCount" class="text-white">8 Deterministic Guardrails</span>
+            </div>
+            <div class="flex items-center justify-between py-1.5 border-b border-white/[0.04]">
+              <span class="text-slate-500">Policy Version Hash</span>
+              <span id="settingPolicyHash" class="text-blue-400">—</span>
+            </div>
+            <div class="flex items-center justify-between py-1.5 border-b border-white/[0.04]">
+              <span class="text-slate-500">Circuit Breaker</span>
+              <span class="badge-danger px-2 py-0.5 rounded text-[11px]">ARMED</span>
+            </div>
+            <div class="flex items-center justify-between py-1.5 border-b border-white/[0.04]">
+              <span class="text-slate-500">Zero-Secrets Policy</span>
+              <span class="badge-ok px-2 py-0.5 rounded text-[11px]">ENFORCED (0 Secrets Exposed)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
   </main>
+
+  <!-- ==================== DRAWERS ==================== -->
+
+  <!-- DRAWER: MISSION CONSOLE -->
+  <div id="drawerMissionConsole" class="fixed inset-0 z-50 overflow-hidden hidden">
+    <div class="drawer-backdrop absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="App.closeDrawers()"></div>
+    <div class="drawer-content absolute inset-y-0 right-0 max-w-2xl w-full bg-[#0d0f14] border-l border-white/10 shadow-2xl p-6 overflow-y-auto space-y-6">
+      <div class="flex items-center justify-between border-b border-white/[0.08] pb-4">
+        <div>
+          <span class="text-[10px] font-mono uppercase text-blue-400">Contextual Telemetry</span>
+          <h2 class="text-xl font-bold text-white">Mission Console</h2>
+        </div>
+        <button type="button" onclick="App.closeDrawers()" class="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <div id="drawerMissionConsoleBody" class="space-y-4">
+        <!-- Rendered dynamically -->
+      </div>
+    </div>
+  </div>
+
+  <!-- DRAWER: AGENT DETAIL -->
+  <div id="drawerAgentDetail" class="fixed inset-0 z-50 overflow-hidden hidden">
+    <div class="drawer-backdrop absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="App.closeDrawers()"></div>
+    <div class="drawer-content absolute inset-y-0 right-0 max-w-xl w-full bg-[#0d0f14] border-l border-white/10 shadow-2xl p-6 overflow-y-auto space-y-6">
+      <div class="flex items-center justify-between border-b border-white/[0.08] pb-4">
+        <div>
+          <span class="text-[10px] font-mono uppercase text-blue-400">Workforce Dossier</span>
+          <h2 id="drawerAgentTitle" class="text-xl font-bold text-white">Agent Profile</h2>
+        </div>
+        <button type="button" onclick="App.closeDrawers()" class="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <div id="drawerAgentBody" class="space-y-4">
+        <!-- Rendered dynamically -->
+      </div>
+    </div>
+  </div>
+
+  <!-- DRAWER: OPERATION DETAIL -->
+  <div id="drawerOperationDetail" class="fixed inset-0 z-50 overflow-hidden hidden">
+    <div class="drawer-backdrop absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="App.closeDrawers()"></div>
+    <div class="drawer-content absolute inset-y-0 right-0 max-w-xl w-full bg-[#0d0f14] border-l border-white/10 shadow-2xl p-6 overflow-y-auto space-y-6">
+      <div class="flex items-center justify-between border-b border-white/[0.08] pb-4">
+        <div>
+          <span class="text-[10px] font-mono uppercase text-blue-400">Execution Boundary</span>
+          <h2 id="drawerOperationTitle" class="text-xl font-bold text-white">Operation Detail</h2>
+        </div>
+        <button type="button" onclick="App.closeDrawers()" class="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <div id="drawerOperationBody" class="space-y-4">
+        <!-- Rendered dynamically -->
+      </div>
+    </div>
+  </div>
+
+  <!-- DRAWER: EVIDENCE DETAIL -->
+  <div id="drawerEvidenceDetail" class="fixed inset-0 z-50 overflow-hidden hidden">
+    <div class="drawer-backdrop absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="App.closeDrawers()"></div>
+    <div class="drawer-content absolute inset-y-0 right-0 max-w-xl w-full bg-[#0d0f14] border-l border-white/10 shadow-2xl p-6 overflow-y-auto space-y-6">
+      <div class="flex items-center justify-between border-b border-white/[0.08] pb-4">
+        <div>
+          <span class="text-[10px] font-mono uppercase text-blue-400">Cryptographic Receipt</span>
+          <h2 id="drawerEvidenceTitle" class="text-xl font-bold text-white">Evidence & Proof</h2>
+        </div>
+        <button type="button" onclick="App.closeDrawers()" class="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <div id="drawerEvidenceBody" class="space-y-4 font-mono text-xs">
+        <!-- Rendered dynamically -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MODALS ==================== -->
+
+  <!-- MODAL: MISSION COMPOSER -->
+  <div id="modalMissionComposer" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md hidden">
+    <div class="glass-panel-elevated p-6 rounded-2xl max-w-lg w-full space-y-5 relative">
+      <div class="flex items-center justify-between border-b border-white/[0.08] pb-3">
+        <div class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-blue-400">rocket_launch</span>
+          <h3 class="text-lg font-bold text-white">Compose Autonomous Mission</h3>
+        </div>
+        <button type="button" onclick="App.closeModals()" class="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+
+      <form id="missionComposerForm" class="space-y-4 text-xs font-mono">
+        <div>
+          <label class="block text-slate-400 mb-1">MISSION OBJECTIVE</label>
+          <textarea id="composerObjective" required rows="3" class="w-full bg-zinc-950 border border-white/10 rounded-lg p-3 text-white text-xs focus:border-blue-500 focus:outline-none" placeholder="E.g., Find highest-value market opportunity under strict risk limits"></textarea>
+        </div>
+
+        <div>
+          <label class="block text-slate-400 mb-1">BUDGET (ORG CREDITS)</label>
+          <input id="composerBudget" type="number" min="1" max="10000" value="100" required class="w-full bg-zinc-950 border border-white/10 rounded-lg p-2.5 text-white text-xs focus:border-blue-500 focus:outline-none" />
+        </div>
+
+        <div class="flex items-center gap-2 pt-1">
+          <input id="composerLive" type="checkbox" class="rounded bg-zinc-900 border-white/20 text-blue-600 focus:ring-0 cursor-pointer" />
+          <label for="composerLive" class="text-slate-300 cursor-pointer">Allow live LLM reasoning (OpenRouter) if configured</label>
+        </div>
+
+        <div id="composerFeedback" class="text-xs text-amber-400 min-h-[1rem]"></div>
+
+        <div class="flex items-center justify-end gap-2 pt-2 border-t border-white/[0.08]">
+          <button type="button" onclick="App.closeModals()" class="px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-slate-300">Cancel</button>
+          <button id="btnSubmitMission" type="submit" class="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold flex items-center gap-1.5">
+            <span class="material-symbols-outlined text-[15px]">send</span>
+            <span>START MISSION</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="/assets/api.js"></script>
   <script src="/assets/app.js"></script>
 </body>
 </html>
