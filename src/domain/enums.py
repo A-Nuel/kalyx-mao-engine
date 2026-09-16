@@ -43,6 +43,9 @@ class ActionType(str, Enum):
     SIMULATED_ALLOCATION = "SIMULATED_ALLOCATION"
     REPLAN = "REPLAN"
     BLOCKCHAIN_TRANSACTION = "BLOCKCHAIN_TRANSACTION"
+    # Phase 14A — external economic resources (Orbio)
+    ORBIO_KEY_LIFECYCLE = "ORBIO_KEY_LIFECYCLE"
+    EXTERNAL_INFERENCE = "EXTERNAL_INFERENCE"
 
 class OperationState(str, Enum):
     CREATED = "created"
