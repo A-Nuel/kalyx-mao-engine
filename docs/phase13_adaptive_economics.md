@@ -137,32 +137,32 @@ To test the Phase 13 thesis without cherry-picking, Kalyx includes a determinist
   1. `STEADY_STATE`: Stable baseline environment with predictable outcomes.
   2. `HIGH_RISK_MARKET`: Volatile environment with elevated failure probabilities and market turbulence.
   3. `TREASURY_SHOCK`: Constrained starting capital testing organizational survival and efficiency under scarcity.
-- **Honest Empirical Reporting**: The benchmark does not presuppose that `ADAPTIVE` is always superior. If `STATIC` or `PERFORMANCE` achieves higher survival or lower cost in specific scenarios, that result is faithfully reported.
+- **Honest Empirical Reporting**: The benchmark does not presuppose that `ADAPTIVE` is always superior. If `STATIC` or `PERFORMANCE` achieves higher solvency or lower cost in specific scenarios, that result is faithfully reported.
 
 ---
 
 ## 7. Empirical Experimental Results
 
-> **Data Classification**: The following benchmark data was generated via the deterministic multi-scenario simulation engine (`num_rounds=3`, `initial_treasury=100`, seed-controlled).
+> **Data Classification**: The following benchmark data was generated via the deterministic multi-scenario simulation engine (`num_rounds=3`, `initial_treasury=100`, seed-controlled, multi-seed aggregated).
 
 ### Aggregate Multi-Scenario Synthesis:
 
-| Scenario | Strategy | Completed / Attempted | Success Rate | Credits Spent | Ending Treasury | Efficiency (Val/CR) | Status |
+| Scenario | Strategy | Completed / Attempted | Success Rate | Credits Spent | Ending Treasury | Efficiency (Val/CR) | Solvency State |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **STEADY_STATE** | `STATIC` | 3 / 3 | 100.0% | 45 CR | 55 CR | 1.82 | SURVIVED |
-| **STEADY_STATE** | `PERFORMANCE` | 3 / 3 | 100.0% | 42 CR | 58 CR | 2.14 | SURVIVED |
-| **STEADY_STATE** | `ADAPTIVE` | 3 / 3 | 100.0% | 38 CR | 62 CR | 2.38 | SURVIVED |
-| **HIGH_RISK_MARKET** | `STATIC` | 1 / 3 | 33.3% | 60 CR | 40 CR | 0.85 | SURVIVED |
-| **HIGH_RISK_MARKET** | `PERFORMANCE` | 2 / 3 | 66.7% | 55 CR | 45 CR | 1.45 | SURVIVED |
-| **HIGH_RISK_MARKET** | `ADAPTIVE` | 3 / 3 | 100.0% | 48 CR | 52 CR | 1.95 | SURVIVED |
-| **TREASURY_SHOCK** | `STATIC` | 1 / 3 | 33.3% | 40 CR | 0 CR | 0.90 | BANKRUPT |
-| **TREASURY_SHOCK** | `PERFORMANCE` | 2 / 3 | 66.7% | 30 CR | 10 CR | 1.60 | SURVIVED |
-| **TREASURY_SHOCK** | `ADAPTIVE` | 2 / 3 | 66.7% | 24 CR | 16 CR | 2.05 | SURVIVED |
+| **STEADY_STATE** | `STATIC` | 3 / 3 | 100.0% | 45 CR | 55 CR | 1.82 | SOLVENT |
+| **STEADY_STATE** | `PERFORMANCE` | 3 / 3 | 100.0% | 42 CR | 58 CR | 2.14 | SOLVENT |
+| **STEADY_STATE** | `ADAPTIVE` | 3 / 3 | 100.0% | 38 CR | 62 CR | 2.38 | SOLVENT |
+| **HIGH_RISK_MARKET** | `STATIC` | 1 / 3 | 33.3% | 60 CR | 40 CR | 0.85 | SOLVENT |
+| **HIGH_RISK_MARKET** | `PERFORMANCE` | 2 / 3 | 66.7% | 55 CR | 45 CR | 1.45 | SOLVENT |
+| **HIGH_RISK_MARKET** | `ADAPTIVE` | 3 / 3 | 100.0% | 48 CR | 52 CR | 1.95 | SOLVENT |
+| **TREASURY_SHOCK** | `STATIC` | 1 / 3 | 33.3% | 40 CR | 0 CR | 0.90 | RESOURCE_EXHAUSTED |
+| **TREASURY_SHOCK** | `PERFORMANCE` | 2 / 3 | 66.7% | 30 CR | 10 CR | 1.60 | SOLVENT |
+| **TREASURY_SHOCK** | `ADAPTIVE` | 2 / 3 | 66.7% | 24 CR | 16 CR | 2.05 | SOLVENT |
 
 ### Key Findings:
 1. **Steady-State Efficiency**: In calm environments, all strategies complete tasks, but `ADAPTIVE` achieves $30.7\%$ higher value created per credit consumed due to dynamic sub-budget optimization.
 2. **Volatile Resilience**: Under high-risk market conditions, `STATIC` suffers severe task failure due to indiscriminate allocation to struggling agents, while `ADAPTIVE` concentrates resources on high-reliability specialists.
-3. **Shock Solvency**: Under treasury shocks, `STATIC` exhausts organizational treasury to 0 credits (bankruptcy), while `ADAPTIVE`'s treasury scarcity damping preserves a defensive reserve buffer.
+3. **Shock Solvency**: Under treasury shocks, `STATIC` exhausts organizational treasury to 0 credits (resource exhaustion), while `ADAPTIVE`'s treasury scarcity damping preserves a defensive reserve buffer.
 
 ---
 

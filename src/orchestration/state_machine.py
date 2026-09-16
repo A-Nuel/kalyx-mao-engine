@@ -1,4 +1,4 @@
-﻿from typing import Dict, Set
+from typing import Dict, Set
 from src.domain.enums import OrgState, TaskStatus
 from src.domain.entities import Organisation, Task
 from src.domain.exceptions import InvalidStateTransitionError
@@ -8,7 +8,7 @@ ORG_TRANSITIONS: Dict[OrgState, Set[OrgState]] = {
     OrgState.PLANNING: {OrgState.EXECUTING, OrgState.PAUSED, OrgState.FAILED},
     OrgState.EXECUTING: {OrgState.PLANNING, OrgState.PAUSED, OrgState.COMPLETED, OrgState.FAILED},
     OrgState.PAUSED: {OrgState.EXECUTING, OrgState.FAILED},
-    OrgState.COMPLETED: set(),
+    OrgState.COMPLETED: {OrgState.PLANNING},
     OrgState.FAILED: set()
 }
 

@@ -161,6 +161,23 @@ const API = (() => {
       return request(`/api/experiments/run?num_rounds=${numRounds}`, { method: 'POST' });
     },
 
+    // Phase 13 Organisational Economics
+    async getOrganisationEconomy(orgId) {
+      return request(`/api/organisations/${encodeURIComponent(orgId)}/economy`);
+    },
+    async getAgentPerformance(orgId, agentId) {
+      return request(`/api/organisations/${encodeURIComponent(orgId)}/agents/${encodeURIComponent(agentId)}/performance`);
+    },
+    async getAgentReputationHistory(orgId, agentId, limit = 50) {
+      return request(`/api/organisations/${encodeURIComponent(orgId)}/agents/${encodeURIComponent(agentId)}/reputation?limit=${limit}`);
+    },
+    async getAllocations(orgId, limit = 50) {
+      return request(`/api/organisations/${encodeURIComponent(orgId)}/allocations?limit=${limit}`);
+    },
+    async getOrganisationEconomyEvents(orgId, limit = 50) {
+      return request(`/api/organisations/${encodeURIComponent(orgId)}/economy/events?limit=${limit}`);
+    },
+
     // Scripted Judge Demo
     async runDemo() {
       return request('/api/demo/run', { method: 'POST' });

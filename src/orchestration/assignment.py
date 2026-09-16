@@ -133,6 +133,10 @@ class AgentAssignmentEngine:
         else:
             allocation = 0
 
+        # Cap by agent's allocated credit balance when set by ResourceAllocator
+        if getattr(agent, "_has_allocated_balance", False) or agent.credit_balance > 0:
+            allocation = min(allocation, agent.credit_balance)
+
         return max(0, allocation)
 
     @classmethod

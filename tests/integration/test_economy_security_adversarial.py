@@ -7,10 +7,13 @@ invariants hold under adversarial conditions.
 import sqlite3
 import pytest
 from src.domain.economy import AgentPerformanceRecord, AllocationStrategy
-from src.domain.entities import AgentRecord, Organisation
-from src.domain.enums import AgentRole, AgentStatus
+from src.domain.entities import AgentRecord, Organisation, ActionProposal
+from src.domain.enums import AgentRole, AgentStatus, ActionType, PolicyResult
+from src.domain.exceptions import InsufficientCreditsError
 from src.economy.allocator import ResourceAllocator
 from src.economy.reputation import ReputationEngine
+from src.economy.ledger import DoubleEntryLedger, TREASURY
+from src.governance.policy_engine import PolicyEngine
 from src.persistence.economy_repo import EconomyRepository
 
 
@@ -216,3 +219,91 @@ class TestReputationHistoryImmutability:
         assert e2.evidence_hash != ""
         # Hashes differ because state changed between evaluations
         assert e1.evidence_hash != e2.evidence_hash
+
+
+class TestCrossTenantAllocationAndSecurity:
+    def test_cross_tenant_allocation_query_isolation(self):
+        """Allocations recorded for tenant-A must never be visible to tenant-B."""
+        conn = create_mem_db()
+        repo = EconomyRepository(conn)
+
+        org_a = Organisation(id="org-a", mission="A Mission", treasury_balance=100)
+        org_a.agents["a1"] = AgentRecord(id="a1", role=AgentRole.RESEARCHER, authority_ceiling=20)
+        dec_a = ResourceAllocator.allocate(org_a, strategy=AllocationStrategy.STATIC)
+        dec_a.tenant_id = "tenant-a"
+        repo.save_allocation(dec_a)
+
+        # Tenant B queries
+        allocs_b = repo.list_allocations("tenant-b", "org-a")
+        assert len(allocs_b) == 0
+
+        # Tenant A queries
+        allocs_a = repo.list_allocations("tenant-a", "org-a")
+        assert len(allocs_a) == 1
+
+
+class TestNegativeAndOverflowAdversarial:
+    def test_negative_credit_transfer_raises_value_error(self):
+        """Negative transfers must be rejected by DoubleEntryLedger."""
+        ledger = DoubleEntryLedger(initial_treasury=100)
+        with pytest.raises(ValueError, match="positive"):
+            ledger.transfer(TREASURY, "agent-acc", -50, "Exploit negative transfer")
+
+    def test_overdraft_raises_insufficient_credits(self):
+        """Spending beyond account balance must raise InsufficientCreditsError."""
+        ledger = DoubleEntryLedger(initial_treasury=100)
+        with pytest.raises(InsufficientCreditsError):
+            ledger.transfer(TREASURY, "agent-acc", 500, "Excessive spend")
+
+    def test_duplicate_transaction_id_rejected(self):
+        """Replaying a transaction ID must be rejected to prevent double-spending."""
+        ledger = DoubleEntryLedger(initial_treasury=100)
+        ledger.transfer(TREASURY, "agent-acc", 20, "Legit transfer", transaction_id="tx-unique-123")
+        with pytest.raises(ValueError, match="Duplicate transaction ID"):
+            ledger.transfer(TREASURY, "agent-acc", 20, "Replay attack", transaction_id="tx-unique-123")
+
+    def test_negative_proposal_credits_rejected_by_schema(self):
+        """Proposals with negative requested credits are rejected at validation boundary."""
+        with pytest.raises(Exception):
+            ActionProposal(
+                id="p-neg",
+                task_id="t-neg",
+                proposing_agent_id="ag-1",
+                action_type=ActionType.DATA_FETCH,
+                target="sandbox://data",
+                requested_credits=-10,
+                expected_value_score=0.5,
+                risk_assessment="Low",
+                rationale="Exploit negative credits",
+            )
+
+
+class TestLifecycleDeterminismAndRecovery:
+    def test_demoted_agent_probation_and_recovery(self):
+        """
+        Prove that an agent with consecutive failures enters demoted status (PROBATION/RESTRICTED),
+        and subsequent successful task completions restore it to ACTIVE status.
+        """
+        agent = AgentRecord(id="agent-lifecycle", role=AgentRole.RESEARCHER, authority_ceiling=25, reputation_score=80.0)
+
+        # Incur consecutive failures to trigger demotion
+        for i in range(3):
+            ReputationEngine.record_task_failure(agent, credits_allocated=10, credits_used=10, reason="Failed task")
+
+        assert agent.status in (AgentStatus.PROBATION, AgentStatus.RESTRICTED)
+
+        # Subsequent successes restore reputation and status to ACTIVE
+        for i in range(10):
+            ReputationEngine.record_task_success(agent, credits_allocated=8, credits_used=8, value_score=1.0)
+
+        assert agent.status == AgentStatus.ACTIVE
+        assert agent.reputation_score >= 75.0
+
+    def test_retired_agent_is_terminal(self):
+        """A RETIRED agent has authority ceiling 0 and cannot propose actions."""
+        agent = AgentRecord(id="agent-retired", role=AgentRole.RESEARCHER, authority_ceiling=0, status=AgentStatus.RETIRED)
+
+        can_propose, reason = ReputationEngine.can_propose_action(agent, ActionType.DATA_FETCH, requested_credits=5)
+        assert can_propose is False
+        assert "RETIRED" in reason
+

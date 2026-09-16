@@ -76,6 +76,7 @@ class ResourceAllocator:
         for agent_id, credit in allocations.items():
             if agent_id in org.agents:
                 org.agents[agent_id].credit_balance = credit
+                org.agents[agent_id]._has_allocated_balance = True
 
         decision = ResourceAllocationDecision(
             id=f"alloc-{uuid.uuid4().hex[:12]}",

@@ -140,19 +140,32 @@ class OrchestrationEngine:
             except AuditVerificationError as ave:
                 StateMachine.transition_task(task, TaskStatus.FAILED); StateMachine.transition_org(self.org, OrgState.FAILED)
                 self.event_store.append_event(actor_id="AUDITOR", event_type="AUDIT_FAILED", entity_id=receipt.id, payload={"failures": ave.failures}); self._sync_state(); raise
-            if agent: ReputationEngine.record_task_success(agent, credits_allocated=task.allocated_credits, credits_used=receipt.cost_credits, value_score=proposal.expected_value_score, task_id=task.id)
+            if agent:
+                ReputationEngine.record_task_success(agent, credits_allocated=task.allocated_credits, credits_used=receipt.cost_credits, value_score=proposal.expected_value_score, task_id=task.id)
+            assigned_agent = self.org.agents.get(task.assigned_agent_id) if task.assigned_agent_id else None
+            if assigned_agent and assigned_agent != agent:
+                ReputationEngine.record_task_success(assigned_agent, credits_allocated=task.allocated_credits, credits_used=receipt.cost_credits, value_score=proposal.expected_value_score, task_id=task.id)
             StateMachine.transition_task(task, TaskStatus.COMPLETED); self._sync_state(); return decision, receipt
         if decision.result == PolicyResult.REJECTED:
             StateMachine.transition_task(task, TaskStatus.REJECTED)
-            if agent: ReputationEngine.record_policy_violation(agent, details=f"{decision.violated_rule_id}: {decision.violated_rule_description}", task_id=task.id)
+            if agent:
+                ReputationEngine.record_policy_violation(agent, details=f"{decision.violated_rule_id}: {decision.violated_rule_description}", task_id=task.id)
+            assigned_agent = self.org.agents.get(task.assigned_agent_id) if task.assigned_agent_id else None
+            if assigned_agent and assigned_agent != agent:
+                ReputationEngine.record_policy_violation(assigned_agent, details=f"{decision.violated_rule_id}: {decision.violated_rule_description}", task_id=task.id)
             attempts = self.replan_counts.get(actual, 0) + 1; self.replan_counts[actual] = attempts; self.replan_counts[task_id] = attempts
             if attempts > self.max_replan_attempts:
-                if agent: ReputationEngine.record_task_failure(agent, credits_allocated=task.allocated_credits, credits_used=0, reason="Max replan attempts exceeded", task_id=task.id)
+                if agent:
+                    ReputationEngine.record_task_failure(agent, credits_allocated=task.allocated_credits, credits_used=0, reason="Max replan attempts exceeded", task_id=task.id)
+                if assigned_agent and assigned_agent != agent:
+                    ReputationEngine.record_task_failure(assigned_agent, credits_allocated=task.allocated_credits, credits_used=0, reason="Max replan attempts exceeded", task_id=task.id)
                 StateMachine.transition_task(task, TaskStatus.FAILED); StateMachine.transition_org(self.org, OrgState.FAILED); self._sync_state()
                 raise PolicyViolationError(f"Task {actual} aborted: Max replan attempts ({self.max_replan_attempts}) exceeded. Last violation: {decision.violated_rule_id} - {decision.violated_rule_description}")
             self.event_store.append_event(actor_id="ORCHESTRATOR", event_type="REPLAN_TRIGGERED", entity_id=task.id, payload={"attempt": attempts, "max_attempts": self.max_replan_attempts, "violated_rule_id": decision.violated_rule_id, "reason": decision.violated_rule_description})
             StateMachine.transition_task(task, TaskStatus.IN_PROGRESS)
             replanned = self.ceo.replan_after_rejection(task_id=task_id, rejected_proposal=proposal, violated_rule_id=decision.violated_rule_id or "RULE-UNKNOWN", violated_rule_description=decision.violated_rule_description or "Rejected", attempt_number=attempts)
+            if task and task.allocated_credits > 0:
+                replanned.requested_credits = min(replanned.requested_credits, task.allocated_credits)
             self._sync_state(); return self.process_action_proposal(actual, replanned)
         if decision.result == PolicyResult.ESCALATE_TO_HUMAN:
             if self.org.state != OrgState.PAUSED:

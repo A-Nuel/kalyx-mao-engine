@@ -745,7 +745,7 @@ const App = (() => {
       <div class="glass-panel p-6 rounded-xl space-y-6">
         <div class="flex items-center justify-between border-b border-white/[0.08] pb-4">
           <div>
-            <span class="text-[10px] font-mono uppercase text-blue-400">Empirical Benchmark Results</span>
+            <span class="text-[10px] font-mono uppercase text-blue-400">Empirical Benchmark Results (SIMULATED / EXPERIMENTAL)</span>
             <h2 class="text-xl font-bold text-white">Comparative Allocation Strategy Analysis</h2>
           </div>
           <span class="text-xs font-mono text-slate-400">Rounds: ${report.num_rounds} &bull; Initial Treasury: ${report.initial_treasury} CR</span>
@@ -769,13 +769,15 @@ const App = (() => {
                     <th class="py-2.5 px-3">SPENT</th>
                     <th class="py-2.5 px-3">ENDING TREASURY</th>
                     <th class="py-2.5 px-3">EFFICIENCY (VAL/CR)</th>
-                    <th class="py-2.5 px-3">SURVIVED</th>
+                    <th class="py-2.5 px-3">SOLVENCY STATE</th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-white/[0.04]">
                   ${['STATIC', 'PERFORMANCE', 'ADAPTIVE'].map(strat => {
                     const res = (report.scenario_results || {})[`${sc.id}_${strat}`];
                     if (!res) return '';
+                    const solvency = res.organisational_state || (res.survived ? (res.ending_treasury > 0 ? 'SOLVENT' : 'RESOURCE_EXHAUSTED') : 'INSOLVENT');
+                    const badgeClass = solvency === 'SOLVENT' ? 'badge-ok' : (solvency === 'RESOURCE_EXHAUSTED' ? 'badge-warn' : 'badge-danger');
                     return `
                       <tr class="hover:bg-white/[0.02] transition-colors ${strat === 'ADAPTIVE' ? 'bg-blue-500/[0.03]' : ''}">
                         <td class="py-2.5 px-3 font-bold ${strat === 'ADAPTIVE' ? 'text-blue-400' : 'text-white'}">${strat}</td>
@@ -785,8 +787,8 @@ const App = (() => {
                         <td class="py-2.5 px-3">${res.ending_treasury} CR</td>
                         <td class="py-2.5 px-3 text-emerald-400 font-semibold">${res.credit_efficiency.toFixed(2)}</td>
                         <td class="py-2.5 px-3">
-                          <span class="px-2 py-0.5 rounded text-[10px] uppercase font-semibold ${res.survived ? 'badge-ok' : 'badge-danger'}">
-                            ${res.survived ? 'YES' : 'BANKRUPT'}
+                          <span class="px-2 py-0.5 rounded text-[10px] uppercase font-semibold ${badgeClass}">
+                            ${solvency}
                           </span>
                         </td>
                       </tr>

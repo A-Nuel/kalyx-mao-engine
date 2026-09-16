@@ -60,3 +60,8 @@ class ProviderOutcome(str, Enum):
     FAILURE = "FAILURE"
     TIMEOUT = "TIMEOUT"
     UNKNOWN = "UNKNOWN"
+
+class OrgSolvencyState(str, Enum):
+    SOLVENT = "SOLVENT"
+    RESOURCE_EXHAUSTED = "RESOURCE_EXHAUSTED"
+    INSOLVENT = "INSOLVENT"

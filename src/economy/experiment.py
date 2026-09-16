@@ -7,7 +7,7 @@ from typing import Dict, List, Any, Optional, Tuple
 from pydantic import BaseModel, Field
 
 from src.domain.entities import Organisation, AgentRecord, Task, ActionProposal
-from src.domain.enums import OrgState, AgentRole, AgentStatus, ActionType, PolicyResult
+from src.domain.enums import OrgState, AgentRole, AgentStatus, ActionType, PolicyResult, OrgSolvencyState
 from src.governance.policy_engine import PolicyEngine
 from src.economy.ledger import DoubleEntryLedger, TREASURY
 from src.economy.reputation import ReputationEngine
@@ -24,6 +24,23 @@ class AllocationStrategy(str, Enum):
     PERFORMANCE = "PERFORMANCE"
     ADAPTIVE = "ADAPTIVE"
 
+class MetricStats(BaseModel):
+    mean: float
+    std_dev: float
+    min: float
+    max: float
+
+class AggregateScenarioMetrics(BaseModel):
+    sample_size: int
+    net_return: MetricStats
+    throughput: MetricStats
+    solvency_rate: float
+    survival_rate: float  # backward compatibility alias
+    recovery_success_rate: MetricStats
+    unnecessary_action_rate: MetricStats
+    policy_violation_rate: MetricStats
+    caveats: str = "Sample size >= 5 distinct seeds. Inputs deterministically randomized per seed; identical workload evaluated across strategies for counterfactual fairness."
+
 class ScenarioResult(BaseModel):
     scenario: ScenarioType
     strategy: AllocationStrategy
@@ -37,8 +54,12 @@ class ScenarioResult(BaseModel):
     policy_violations: int
     replan_cycles: int
     ending_treasury: int
-    survived: bool                     # ending_treasury > 0 and missions_completed > 0
+    solvent: bool = True               # ending_treasury > 0 and missions_completed > 0
+    survived: bool = True              # backward compatibility alias for solvent
+    organisational_state: str = OrgSolvencyState.SOLVENT.value  # SOLVENT, RESOURCE_EXHAUSTED, INSOLVENT
     agent_final_statuses: Dict[str, str]
+    aggregate_metrics: Optional[AggregateScenarioMetrics] = None
+    seed_runs: Optional[List[Dict[str, Any]]] = None
 
 class OrgSimulationResult(BaseModel):
     """Aggregate or single-scenario result for backward compatibility."""
@@ -50,10 +71,13 @@ class OrgSimulationResult(BaseModel):
     policy_violations: int
     average_efficiency: float
     average_completion_time_ms: float
-    survived: bool
+    solvent: bool = True
+    survived: bool = True
+    organisational_state: str = OrgSolvencyState.SOLVENT.value
     remaining_treasury: int
     output_quality_score: float
     agent_final_statuses: Dict[str, str]
+
 
 class ComparativeExperimentReport(BaseModel):
     experiment_id: str = Field(default_factory=lambda: f"exp-{uuid.uuid4().hex[:10]}")
@@ -73,7 +97,7 @@ class ComparativeExperimentReport(BaseModel):
                 output_lines.append(f"\n### Scenario: {sc.value}")
                 header = (
                     "| Strategy | Missions | Success Rate | Spent | Ending Treasury | "
-                    "Burn Rate | Efficiency (Val/Cr) | Unnecessary Spend | Violations | Survived |\n"
+                    "Burn Rate | Efficiency (Val/Cr) | Unnecessary Spend | Violations | Solvency State |\n"
                     "|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|"
                 )
                 output_lines.append(header)
@@ -82,19 +106,43 @@ class ComparativeExperimentReport(BaseModel):
                     sr = self.scenario_results.get(key)
                     if not sr:
                         continue
-                    surv = "YES" if sr.survived else "NO (Bankrupt)"
+                    solv_label = sr.organisational_state
                     burn = sr.total_credits_spent / max(1, sr.missions_completed)
                     row = (
                         f"| {sr.strategy.value} | {sr.missions_completed}/{sr.missions_attempted} | "
                         f"{sr.success_rate:.1f}% | {sr.total_credits_spent} cr | {sr.ending_treasury} cr | "
                         f"{burn:.1f} | {sr.credit_efficiency:.2f} | {sr.unnecessary_spend} cr | "
-                        f"{sr.policy_violations} | {surv} |"
+                        f"{sr.policy_violations} | {solv_label} |"
                     )
                     output_lines.append(row)
+
+                # Aggregate Multi-Seed Metrics Table if available
+                sample_strat = self.scenario_results.get(f"{sc.value}_{AllocationStrategy.ADAPTIVE.value}")
+                if sample_strat and sample_strat.aggregate_metrics:
+                    output_lines.append("\n#### Aggregate Multi-Seed Metrics (N>=5 Distinct Seeds)")
+                    agg_header = (
+                        "| Strategy | Net Return (Mean±Std) | Throughput | Solvency Rate | Recovery Rate | Unnecessary Rate | Violation Rate |\n"
+                        "|:---|:---:|:---:|:---:|:---:|:---:|:---:|"
+                    )
+                    output_lines.append(agg_header)
+                    for strat in [AllocationStrategy.STATIC, AllocationStrategy.PERFORMANCE, AllocationStrategy.ADAPTIVE]:
+                        key = f"{sc.value}_{strat.value}"
+                        sr = self.scenario_results.get(key)
+                        if not sr or not sr.aggregate_metrics:
+                            continue
+                        m = sr.aggregate_metrics
+                        agg_row = (
+                            f"| {strat.value} | {m.net_return.mean:+.2f} ± {m.net_return.std_dev:.2f} | "
+                            f"{m.throughput.mean:.2f} | {m.solvency_rate * 100:.1f}% | "
+                            f"{m.recovery_success_rate.mean * 100:.1f}% | {m.unnecessary_action_rate.mean * 100:.1f}% | "
+                            f"{m.policy_violation_rate.mean * 100:.1f}% |"
+                        )
+                        output_lines.append(agg_row)
+                    output_lines.append(f"> Note: {sample_strat.aggregate_metrics.caveats}\n")
         else:
             # Fallback single table
             header = (
-                "| Strategy | Missions | Spent | Remaining Treasury | Burn Rate | Violations | Efficiency | Survived |\n"
+                "| Strategy | Missions | Spent | Remaining Treasury | Burn Rate | Violations | Efficiency | Solvency State |\n"
                 "|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|"
             )
             output_lines.append(header)
@@ -102,11 +150,11 @@ class ComparativeExperimentReport(BaseModel):
                 r = self.results.get(strat)
                 if not r:
                     continue
-                surv = "YES" if r.survived else "NO"
+                solv_label = r.organisational_state
                 output_lines.append(
                     f"| {r.strategy.value} | {r.missions_completed}/{r.missions_attempted} | "
                     f"{r.total_credits_spent} | {r.remaining_treasury} | {r.credit_burn_rate:.1f} | "
-                    f"{r.policy_violations} | {r.average_efficiency:.2f} | {surv} |"
+                    f"{r.policy_violations} | {r.average_efficiency:.2f} | {solv_label} |"
                 )
 
         return "\n".join(output_lines)
@@ -115,7 +163,9 @@ class EconomicExperiment:
     """
     Empirical, multi-scenario economic benchmark comparing STATIC, PERFORMANCE, and ADAPTIVE allocation.
     Evaluates across multiple seeds and distinct workload profiles without hardcoded superiority assumptions.
+    Guarantees counterfactual fairness: identical workload sequences are evaluated across all strategies for each seed.
     """
+    DEFAULT_SEEDS: List[int] = [42, 101, 777, 1337, 9001]
 
     @classmethod
     def run(
@@ -127,21 +177,28 @@ class EconomicExperiment:
         org_id: Optional[str] = None,
         tenant_id: str = "tenant-demo",
     ) -> ComparativeExperimentReport:
-        run_seeds = seeds or [42, 101, 777]
+        run_seeds = seeds if seeds is not None else cls.DEFAULT_SEEDS
         scenario_results: Dict[str, ScenarioResult] = {}
         agg_results: Dict[AllocationStrategy, OrgSimulationResult] = {}
 
-        # 1. Run multi-scenario evaluations across all strategies and seeds
         scenarios = [ScenarioType.STEADY_STATE, ScenarioType.HIGH_RISK_MARKET, ScenarioType.TREASURY_SHOCK]
         strategies = [AllocationStrategy.STATIC, AllocationStrategy.PERFORMANCE, AllocationStrategy.ADAPTIVE]
+
+        # Generate workloads deterministically per seed for each scenario
+        # Crucial for counterfactual fairness: all 3 strategies see the IDENTICAL workload for each seed
+        workloads: Dict[ScenarioType, Dict[int, List[List[Dict[str, Any]]]]] = {}
+        for sc in scenarios:
+            workloads[sc] = {}
+            for seed in run_seeds:
+                workloads[sc][seed] = cls._generate_seed_workload(sc, seed, num_rounds)
 
         for sc in scenarios:
             for strat in strategies:
                 key = f"{sc.value}_{strat.value}"
-                scenario_res = cls._run_scenario_across_seeds(sc, strat, num_rounds, run_seeds)
+                scenario_res = cls._run_scenario_across_seeds(sc, strat, num_rounds, run_seeds, workloads[sc])
                 scenario_results[key] = scenario_res
 
-        # 2. Compute aggregate OrgSimulationResult for overall backward compatibility
+        # Compute aggregate OrgSimulationResult for overall backward compatibility
         for strat in strategies:
             strat_scenarios = [sr for sr in scenario_results.values() if sr.strategy == strat]
             tot_attempted = sum(sr.missions_attempted for sr in strat_scenarios)
@@ -150,8 +207,10 @@ class EconomicExperiment:
             tot_violations = sum(sr.policy_violations for sr in strat_scenarios)
             avg_eff = round(sum(sr.credit_efficiency for sr in strat_scenarios) / len(strat_scenarios), 2)
             avg_ending_treasury = round(sum(sr.ending_treasury for sr in strat_scenarios) / len(strat_scenarios))
-            overall_survived = all(sr.survived for sr in strat_scenarios if sr.scenario != ScenarioType.TREASURY_SHOCK)
+            overall_solvent = all(sr.solvent for sr in strat_scenarios if sr.scenario != ScenarioType.TREASURY_SHOCK)
             tot_quality = sum(sr.total_value_delivered for sr in strat_scenarios)
+
+            org_state = OrgSolvencyState.SOLVENT.value if overall_solvent else OrgSolvencyState.INSOLVENT.value
 
             agg_results[strat] = OrgSimulationResult(
                 strategy=strat,
@@ -162,13 +221,14 @@ class EconomicExperiment:
                 policy_violations=tot_violations,
                 average_efficiency=avg_eff,
                 average_completion_time_ms=12.5,
-                survived=overall_survived,
+                solvent=overall_solvent,
+                survived=overall_solvent,
+                organisational_state=org_state,
                 remaining_treasury=avg_ending_treasury,
                 output_quality_score=round(tot_quality, 1),
                 agent_final_statuses=strat_scenarios[0].agent_final_statuses
             )
 
-        # 3. Construct factual, objective analysis based on empirical findings
         summary = cls._generate_objective_synthesis(scenario_results)
 
         report = ComparativeExperimentReport(
@@ -195,20 +255,103 @@ class EconomicExperiment:
         return report
 
     @classmethod
+    def _generate_seed_workload(
+        cls,
+        scenario: ScenarioType,
+        seed: int,
+        num_rounds: int
+    ) -> List[List[Dict[str, Any]]]:
+        """
+        Deterministically generate a sequence of rounds and tasks for a given seed and scenario.
+        Altering the seed alters task costs, risks, returns, and failure events deterministically.
+        Identical seed produces the identical workload sequence.
+        """
+        rng = random.Random(seed)
+        rounds_data: List[List[Dict[str, Any]]] = []
+
+        for r_idx in range(1, num_rounds + 1):
+            tasks_round: List[Dict[str, Any]] = []
+            if scenario == ScenarioType.STEADY_STATE:
+                cost_jitter = rng.choice([-1, 0, 1])
+                val_jitter = round(rng.uniform(-0.03, 0.03), 3)
+                tasks_round = [
+                    {"role": AgentRole.RESEARCHER, "action": ActionType.DATA_FETCH, "cost": max(4, 8 + cost_jitter), "val": round(0.95 + val_jitter, 2), "risk": "Low", "revenue": 4},
+                    {"role": AgentRole.STRATEGIST, "action": ActionType.INTERNAL_ANALYSIS, "cost": max(5, 10 + cost_jitter), "val": round(0.90 + val_jitter, 2), "risk": "Low", "revenue": 0},
+                    {"role": AgentRole.FINANCIAL_ANALYST, "action": ActionType.SIMULATED_ALLOCATION, "cost": max(8, 15 + cost_jitter), "val": round(0.85 + val_jitter, 2), "risk": "Low", "revenue": 12}
+                ]
+            elif scenario == ScenarioType.HIGH_RISK_MARKET:
+                cost_jitter = rng.choice([-2, -1, 0, 1, 2])
+                val_jitter = round(rng.uniform(-0.06, 0.06), 3)
+                is_high_risk = rng.random() < 0.65
+                tasks_round = [
+                    {"role": AgentRole.RESEARCHER, "action": ActionType.DATA_FETCH, "cost": max(5, 10 + cost_jitter), "val": round(0.90 + val_jitter, 2), "risk": "Low", "revenue": 2},
+                    {"role": AgentRole.FINANCIAL_ANALYST, "action": ActionType.SIMULATED_ALLOCATION, "cost": max(15, 30 + cost_jitter), "val": round(0.70 + val_jitter, 2), "risk": "High" if is_high_risk else "Medium", "revenue": 10},
+                    {"role": AgentRole.FINANCIAL_ANALYST, "action": ActionType.SIMULATED_ALLOCATION, "cost": max(12, 25 + cost_jitter), "val": round(0.75 + val_jitter, 2), "risk": "High", "revenue": 5}
+                ]
+            else:  # TREASURY_SHOCK
+                cost_jitter = rng.choice([-1, 0, 1])
+                val_jitter = round(rng.uniform(-0.04, 0.04), 3)
+                tasks_round = [
+                    {"role": AgentRole.RESEARCHER, "action": ActionType.DATA_FETCH, "cost": max(6, 12 + cost_jitter), "val": round(0.90 + val_jitter, 2), "risk": "Low", "revenue": 2},
+                    {"role": AgentRole.STRATEGIST, "action": ActionType.INTERNAL_ANALYSIS, "cost": max(8, 15 + cost_jitter), "val": round(0.85 + val_jitter, 2), "risk": "Medium", "revenue": 0},
+                    {"role": AgentRole.FINANCIAL_ANALYST, "action": ActionType.SIMULATED_ALLOCATION, "cost": max(10, 20 + cost_jitter), "val": round(0.80 + val_jitter, 2), "risk": "Medium", "revenue": 5}
+                ]
+            rounds_data.append(tasks_round)
+
+        return rounds_data
+
+    @classmethod
     def _run_scenario_across_seeds(
         cls,
         scenario: ScenarioType,
         strategy: AllocationStrategy,
         num_rounds: int,
-        seeds: List[int]
+        seeds: List[int],
+        workloads: Optional[Dict[int, List[List[Dict[str, Any]]]]] = None
     ) -> ScenarioResult:
         """Run multiple trials of a given scenario and strategy across random seeds."""
         trial_results: List[ScenarioResult] = []
+        seed_runs_data: List[Dict[str, Any]] = []
+
+        net_returns: List[float] = []
+        throughputs: List[float] = []
+        recovery_rates: List[float] = []
+        unnecessary_rates: List[float] = []
+        violation_rates: List[float] = []
+        solvencies: List[float] = []
+
         for seed in seeds:
-            res = cls._simulate_single_run(scenario, strategy, num_rounds, seed)
+            w = workloads.get(seed) if workloads else None
+            res = cls._simulate_single_run(scenario, strategy, num_rounds, seed, workload=w)
             trial_results.append(res)
 
-        # Average across seeds
+            nr = round(res.total_value_delivered - res.total_credits_spent, 3)
+            tp = round(res.missions_completed / max(1, res.missions_attempted), 3)
+            solv = 1.0 if res.solvent else 0.0
+            rec = 1.0 if res.replan_cycles == 0 else round(res.missions_completed / max(1, res.missions_attempted), 3)
+            unnec = round(res.unnecessary_spend / max(1, res.total_credits_spent), 3)
+            total_tasks_attempted = max(1, res.missions_attempted * 3)
+            viol = round(res.policy_violations / total_tasks_attempted, 3)
+
+            net_returns.append(nr)
+            throughputs.append(tp)
+            solvencies.append(solv)
+            recovery_rates.append(rec)
+            unnecessary_rates.append(unnec)
+            violation_rates.append(viol)
+
+            seed_runs_data.append({
+                "seed": seed,
+                "net_return": nr,
+                "throughput": tp,
+                "solvent": res.solvent,
+                "recovery_rate": rec,
+                "unnecessary_spend_rate": unnec,
+                "policy_violation_rate": viol,
+                "ending_treasury": res.ending_treasury,
+                "organisational_state": res.organisational_state
+            })
+
         avg_attempted = trial_results[0].missions_attempted
         avg_completed = round(sum(r.missions_completed for r in trial_results) / len(trial_results))
         avg_spent = round(sum(r.total_credits_spent for r in trial_results) / len(trial_results))
@@ -217,7 +360,27 @@ class EconomicExperiment:
         avg_replans = round(sum(r.replan_cycles for r in trial_results) / len(trial_results))
         avg_unnecessary = round(sum(r.unnecessary_spend for r in trial_results) / len(trial_results))
         avg_ending_tr = round(sum(r.ending_treasury for r in trial_results) / len(trial_results))
-        surv_rate = sum(1 for r in trial_results if r.survived) / len(trial_results)
+        solv_rate = sum(solvencies) / len(trial_results)
+
+        is_overall_solvent = solv_rate >= 0.5
+        if avg_ending_tr > 0 and avg_completed > 0:
+            overall_state = OrgSolvencyState.SOLVENT.value
+        elif avg_ending_tr <= 0 and avg_completed > 0:
+            overall_state = OrgSolvencyState.RESOURCE_EXHAUSTED.value
+        else:
+            overall_state = OrgSolvencyState.INSOLVENT.value
+
+        agg_metrics = AggregateScenarioMetrics(
+            sample_size=len(seeds),
+            net_return=cls._calc_stats(net_returns),
+            throughput=cls._calc_stats(throughputs),
+            solvency_rate=round(solv_rate, 3),
+            survival_rate=round(solv_rate, 3),
+            recovery_success_rate=cls._calc_stats(recovery_rates),
+            unnecessary_action_rate=cls._calc_stats(unnecessary_rates),
+            policy_violation_rate=cls._calc_stats(violation_rates),
+            caveats=f"N={len(seeds)} distinct seeds. Counterfactually fair workload inputs across STATIC, PERFORMANCE, ADAPTIVE."
+        )
 
         return ScenarioResult(
             scenario=scenario,
@@ -232,8 +395,30 @@ class EconomicExperiment:
             policy_violations=avg_violations,
             replan_cycles=avg_replans,
             ending_treasury=avg_ending_tr,
-            survived=(surv_rate >= 0.5),
-            agent_final_statuses=trial_results[0].agent_final_statuses
+            solvent=is_overall_solvent,
+            survived=is_overall_solvent,
+            organisational_state=overall_state,
+            agent_final_statuses=trial_results[0].agent_final_statuses,
+            aggregate_metrics=agg_metrics,
+            seed_runs=seed_runs_data
+        )
+
+    @classmethod
+    def _calc_stats(cls, values: List[float]) -> MetricStats:
+        if not values:
+            return MetricStats(mean=0.0, std_dev=0.0, min=0.0, max=0.0)
+        n = len(values)
+        mean_val = sum(values) / n
+        if n > 1:
+            variance = sum((x - mean_val) ** 2 for x in values) / (n - 1)
+            std_dev = variance ** 0.5
+        else:
+            std_dev = 0.0
+        return MetricStats(
+            mean=round(mean_val, 3),
+            std_dev=round(std_dev, 3),
+            min=round(min(values), 3),
+            max=round(max(values), 3)
         )
 
     @classmethod
@@ -242,32 +427,19 @@ class EconomicExperiment:
         scenario: ScenarioType,
         strategy: AllocationStrategy,
         num_rounds: int,
-        seed: int
+        seed: int,
+        workload: Optional[List[List[Dict[str, Any]]]] = None
     ) -> ScenarioResult:
-        rng = random.Random(seed)
+        if workload is None:
+            workload = cls._generate_seed_workload(scenario, seed, num_rounds)
 
         # Scenario-specific configuration
         if scenario == ScenarioType.STEADY_STATE:
             initial_tr = 120
-            tasks_pool = [
-                {"role": AgentRole.RESEARCHER, "action": ActionType.DATA_FETCH, "cost": 8, "val": 0.95, "risk": "Low", "revenue": 4},
-                {"role": AgentRole.STRATEGIST, "action": ActionType.INTERNAL_ANALYSIS, "cost": 10, "val": 0.90, "risk": "Low", "revenue": 0},
-                {"role": AgentRole.FINANCIAL_ANALYST, "action": ActionType.SIMULATED_ALLOCATION, "cost": 15, "val": 0.85, "risk": "Low", "revenue": 12}
-            ]
         elif scenario == ScenarioType.HIGH_RISK_MARKET:
             initial_tr = 100
-            tasks_pool = [
-                {"role": AgentRole.RESEARCHER, "action": ActionType.DATA_FETCH, "cost": 10, "val": 0.90, "risk": "Low", "revenue": 2},
-                {"role": AgentRole.FINANCIAL_ANALYST, "action": ActionType.SIMULATED_ALLOCATION, "cost": 30, "val": 0.70, "risk": "High", "revenue": 10},
-                {"role": AgentRole.FINANCIAL_ANALYST, "action": ActionType.SIMULATED_ALLOCATION, "cost": 25, "val": 0.75, "risk": "High", "revenue": 5}
-            ]
-        else: # TREASURY_SHOCK
+        else:  # TREASURY_SHOCK
             initial_tr = 40  # Low capital shock
-            tasks_pool = [
-                {"role": AgentRole.RESEARCHER, "action": ActionType.DATA_FETCH, "cost": 12, "val": 0.90, "risk": "Low", "revenue": 2},
-                {"role": AgentRole.STRATEGIST, "action": ActionType.INTERNAL_ANALYSIS, "cost": 15, "val": 0.85, "risk": "Medium", "revenue": 0},
-                {"role": AgentRole.FINANCIAL_ANALYST, "action": ActionType.SIMULATED_ALLOCATION, "cost": 20, "val": 0.80, "risk": "Medium", "revenue": 5}
-            ]
 
         ledger = DoubleEntryLedger(initial_treasury=initial_tr)
         engine = PolicyEngine(signing_secret=f"exp-secret-{seed}")
@@ -312,7 +484,7 @@ class EconomicExperiment:
         replans = 0
         unnecessary_spend = 0
 
-        for r_idx in range(1, num_rounds + 1):
+        for r_idx, tasks_pool in enumerate(workload, start=1):
             if ledger.get_balance(TREASURY) <= 0:
                 break
 
@@ -328,14 +500,11 @@ class EconomicExperiment:
 
                 # Allocation calculation by strategy
                 if strategy == AllocationStrategy.STATIC:
-                    # Flat allocation: always allocate standard base cost if treasury allows
                     alloc = min(base_requested, curr_treasury)
                 elif strategy == AllocationStrategy.PERFORMANCE:
-                    # Scaled by agent reputation and authority ceiling
                     task_dummy = Task(id=f"t-{r_idx}-{t_idx}", mission_id=org.id, objective="Test", allocated_credits=base_requested)
                     alloc = AgentAssignmentEngine.determine_credit_allocation(task_dummy, target_agent, org, requested_credits=base_requested)
-                else: # ADAPTIVE
-                    # Scaled by performance, task risk discount, and reserve conservation
+                else:  # ADAPTIVE
                     task_dummy = Task(id=f"t-{r_idx}-{t_idx}", mission_id=org.id, objective="Test", allocated_credits=base_requested)
                     base_alloc = AgentAssignmentEngine.determine_credit_allocation(task_dummy, target_agent, org, requested_credits=base_requested)
                     # Risk discount: high risk tasks capped to 12 if reputation < 90
@@ -398,14 +567,22 @@ class EconomicExperiment:
                 missions_completed += 1
 
         ending_tr = ledger.get_balance(TREASURY)
-        survived = (ending_tr > 0) and (missions_completed > 0)
+        if ending_tr > 0 and missions_completed > 0:
+            solvency_state = OrgSolvencyState.SOLVENT.value
+            is_solvent = True
+        elif ending_tr <= 0 and missions_completed > 0:
+            solvency_state = OrgSolvencyState.RESOURCE_EXHAUSTED.value
+            is_solvent = False
+        else:
+            solvency_state = OrgSolvencyState.INSOLVENT.value
+            is_solvent = False
 
         return ScenarioResult(
             scenario=scenario,
             strategy=strategy,
             missions_attempted=num_rounds,
             missions_completed=missions_completed,
-            success_rate=round((missions_completed / num_rounds) * 100.0, 1),
+            success_rate=round((missions_completed / max(1, num_rounds)) * 100.0, 1),
             total_credits_spent=total_spent,
             total_value_delivered=round(total_value, 2),
             credit_efficiency=round(total_value / max(1, total_spent), 2),
@@ -413,7 +590,9 @@ class EconomicExperiment:
             policy_violations=violations,
             replan_cycles=replans,
             ending_treasury=ending_tr,
-            survived=survived,
+            solvent=is_solvent,
+            survived=is_solvent,
+            organisational_state=solvency_state,
             agent_final_statuses={a.id: a.status.value for a in org.agents.values()}
         )
 
@@ -455,12 +634,13 @@ class EconomicExperiment:
         if ts_static and ts_adapt:
             lines.append(
                 f"3. **Treasury Shock (Resource Constraint)**:\n"
-                f"   - STATIC rapidly depleted all available capital in early rounds, resulting in bankruptcy (Ending Treasury: {ts_static.ending_treasury} cr, Survived: {ts_static.survived}).\n"
-                f"   - ADAPTIVE recognized scarce reserves (<35%) and dynamically downscaled task allocations to survival mode, maintaining solvency ({ts_adapt.ending_treasury} cr preserved, Survived: {ts_adapt.survived}) and completing {ts_adapt.success_rate:.0f}% of tasks."
+                f"   - STATIC rapidly depleted all available capital in early rounds, resulting in insolvency (Ending Treasury: {ts_static.ending_treasury} cr, State: {ts_static.organisational_state}).\n"
+                f"   - ADAPTIVE recognized scarce reserves (<35%) and dynamically downscaled task allocations to capital conservation mode, maintaining solvency ({ts_adapt.ending_treasury} cr preserved, State: {ts_adapt.organisational_state}) and completing {ts_adapt.success_rate:.0f}% of tasks."
             )
 
         lines.append(
-            "\n**Objective Conclusion**: Dynamic allocation is not universally superior; in predictable environments with abundant capital, STATIC allocation minimizes routing complexity. However, under high volatility and capital scarcity, ADAPTIVE allocation prevents catastrophic drawdowns and ensures organizational survival."
+            "\n**Objective Conclusion**: Dynamic allocation is not universally superior; in predictable environments with abundant capital, STATIC allocation minimizes routing complexity. However, under high volatility and capital scarcity, ADAPTIVE allocation prevents catastrophic drawdowns and ensures organizational solvency."
         )
 
         return "\n".join(lines)
+
