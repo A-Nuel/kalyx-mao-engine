@@ -46,6 +46,8 @@ class ActionType(str, Enum):
     # Phase 14A — external economic resources (Orbio)
     ORBIO_KEY_LIFECYCLE = "ORBIO_KEY_LIFECYCLE"
     EXTERNAL_INFERENCE = "EXTERNAL_INFERENCE"
+    # Phase 14B — governed on-chain purchase + activation of Orbio CREDIT
+    ORBIO_CREDIT_PURCHASE = "ORBIO_CREDIT_PURCHASE"
 
 class OperationState(str, Enum):
     CREATED = "created"
