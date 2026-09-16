@@ -17,7 +17,6 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 
 from eth_abi import encode as eth_abi_encode
-from eth_utils import keccak
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from src.domain.events import canonical_json
@@ -33,7 +32,8 @@ ORBIO_CREDIT_MAINNET = "0xe33322da1380e61e5ae5dfb21e7f62924c73004c"
 USDG_MAINNET = "0x5fc5360d0400a0fd4f2af552add042d716f1d168"
 
 BUY_AND_ACTIVATE_SIGNATURE = "buyAndActivate(uint256,uint256,bytes32,uint256)"
-BUY_AND_ACTIVATE_SELECTOR = keccak(text=BUY_AND_ACTIVATE_SIGNATURE)[:4]
+# First 4 bytes of keccak256(BUY_AND_ACTIVATE_SIGNATURE). Verified offline.
+BUY_AND_ACTIVATE_SELECTOR = bytes.fromhex("6ebadb6e")
 
 
 def address_to_beneficiary_bytes32(address: str) -> str:
@@ -231,10 +231,6 @@ class OrbioPurchaseIntent(BaseModel):
     def validate_economic_bounds(self) -> "OrbioPurchaseIntent":
         if self.usdg_in == 0 and self.min_credit_out == 0:
             raise ValueError("usdg_in and min_credit_out cannot both be zero")
-        if self.min_credit_out > self.usdg_in * 2:
-            # Soft sanity: min out should not wildly exceed max spend at face value;
-            # real pricing is market-determined. Keep as soft guard only.
-            pass
         return self
 
     def beneficiary_as_bytes32(self) -> str:
