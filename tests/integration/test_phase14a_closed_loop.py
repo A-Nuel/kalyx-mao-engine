@@ -81,13 +81,15 @@ def test_closed_loop_orbio_usage_independent_outcome_changes_next_allocation():
             treasury_balance=100,
             state=OrgState.EXECUTING,
         )
+        # Reputation/performance >= 75/70 so lifecycle keeps ACTIVE (ceiling stays 40).
+        # Starting at 70 forces PROBATION (ceiling 12) and freezes share divergence.
         researcher = AgentRecord(
             id="agent-research",
             role=AgentRole.RESEARCHER,
             authority_ceiling=40,
             credit_balance=0,
-            reputation_score=70.0,
-            performance_score=70.0,
+            reputation_score=90.0,
+            performance_score=90.0,
             allowed_action_types=[ActionType.EXTERNAL_INFERENCE, ActionType.INTERNAL_ANALYSIS],
             status=AgentStatus.ACTIVE,
         )
@@ -96,8 +98,8 @@ def test_closed_loop_orbio_usage_independent_outcome_changes_next_allocation():
             role=AgentRole.STRATEGIST,
             authority_ceiling=40,
             credit_balance=0,
-            reputation_score=70.0,
-            performance_score=70.0,
+            reputation_score=90.0,
+            performance_score=90.0,
             allowed_action_types=[ActionType.INTERNAL_ANALYSIS],
             status=AgentStatus.ACTIVE,
         )
@@ -132,6 +134,7 @@ def test_closed_loop_orbio_usage_independent_outcome_changes_next_allocation():
         research_alloc_a = alloc_a.allocations[researcher.id]
         strategy_alloc_a = alloc_a.allocations[strategist.id]
         assert research_alloc_a == strategy_alloc_a
+        assert research_alloc_a > 0
 
         provider = SimulatedOrbioProvider(initial_available="25.00")
         cfg = OrbioConfig(
@@ -174,9 +177,8 @@ def test_closed_loop_orbio_usage_independent_outcome_changes_next_allocation():
         assert inf_receipt.outcome == ExternalProviderOutcome.SUCCESS
 
         # Independent Kalyx outcome (provider telemetry is NOT the performance input).
-        # Divergence must be large enough to change Mission B shares, but must NOT
-        # drive either agent into SUSPENDED/RETIRED (composite < 30 / < 15), because
-        # ResourceAllocator excludes those statuses from PERFORMANCE allocations.
+        # Large enough score gap to change Mission B shares; not enough to
+        # SUSPEND/RETIRE either agent (allocator would drop them).
         ReputationEngine.evaluate_agent_performance(
             agent=researcher,
             repo=repo,
