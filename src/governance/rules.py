@@ -56,8 +56,12 @@ class TargetAllowlistRule(PolicyRule):
     def evaluate(self, proposal: ActionProposal, agent: AgentRecord, org: Organisation, **kwargs: Any) -> Optional[str]:
         if proposal.action_type == ActionType.BLOCKCHAIN_TRANSACTION or proposal.target.startswith(("blockchain://", "evm://", "sepolia://")):
             return None
-        # Phase 14A: Orbio targets are validated by RULE-ORBIO-01 / lifecycle rules
-        if proposal.action_type in {ActionType.EXTERNAL_INFERENCE, ActionType.ORBIO_KEY_LIFECYCLE}:
+        # Phase 14A/14B: Orbio targets are validated by dedicated Orbio rules / purchase policy
+        if proposal.action_type in {
+            ActionType.EXTERNAL_INFERENCE,
+            ActionType.ORBIO_KEY_LIFECYCLE,
+            ActionType.ORBIO_CREDIT_PURCHASE,
+        }:
             return None
         if proposal.target.startswith("orbio://"):
             return None
