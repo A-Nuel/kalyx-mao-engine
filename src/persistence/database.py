@@ -62,7 +62,8 @@ CREATE TABLE IF NOT EXISTS ledger_entries (
 CREATE TABLE IF NOT EXISTS audit_events (
     sequence_id INTEGER PRIMARY KEY, timestamp TEXT NOT NULL, actor_id TEXT NOT NULL, event_type TEXT NOT NULL,
     entity_id TEXT NOT NULL, payload TEXT NOT NULL, payload_hash TEXT NOT NULL,
-    previous_event_hash TEXT NOT NULL, event_hash TEXT NOT NULL
+    previous_event_hash TEXT NOT NULL, event_hash TEXT NOT NULL,
+    tenant_id TEXT NOT NULL DEFAULT 'tenant-demo', organisation_id TEXT
 );
 CREATE TABLE IF NOT EXISTS verification_receipts (
     id TEXT PRIMARY KEY, execution_id TEXT NOT NULL, verified INTEGER NOT NULL, checks TEXT NOT NULL,
@@ -80,6 +81,88 @@ CREATE TABLE IF NOT EXISTS consequential_operations (
 CREATE INDEX IF NOT EXISTS idx_consequential_ops_tenant ON consequential_operations(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_consequential_ops_org ON consequential_operations(organisation_id);
 CREATE INDEX IF NOT EXISTS idx_consequential_ops_state ON consequential_operations(state);
+
+CREATE TABLE IF NOT EXISTS agent_performance_records (
+    agent_id TEXT NOT NULL,
+    organisation_id TEXT NOT NULL,
+    tenant_id TEXT NOT NULL DEFAULT 'tenant-demo',
+    tasks_completed INTEGER NOT NULL DEFAULT 0,
+    tasks_failed INTEGER NOT NULL DEFAULT 0,
+    missions_contributed INTEGER NOT NULL DEFAULT 0,
+    successful_proposals INTEGER NOT NULL DEFAULT 0,
+    rejected_proposals INTEGER NOT NULL DEFAULT 0,
+    policy_violations INTEGER NOT NULL DEFAULT 0,
+    resources_allocated INTEGER NOT NULL DEFAULT 0,
+    resources_consumed INTEGER NOT NULL DEFAULT 0,
+    value_produced REAL NOT NULL DEFAULT 0.0,
+    unnecessary_actions INTEGER NOT NULL DEFAULT 0,
+    execution_successes INTEGER NOT NULL DEFAULT 0,
+    execution_failures INTEGER NOT NULL DEFAULT 0,
+    recovery_successes INTEGER NOT NULL DEFAULT 0,
+    recovery_failures INTEGER NOT NULL DEFAULT 0,
+    performance_score REAL NOT NULL DEFAULT 100.0,
+    reliability_score REAL NOT NULL DEFAULT 100.0,
+    resource_efficiency_score REAL NOT NULL DEFAULT 1.0,
+    policy_compliance_score REAL NOT NULL DEFAULT 100.0,
+    composite_score REAL NOT NULL DEFAULT 100.0,
+    reputation_score REAL NOT NULL DEFAULT 100.0,
+    authority_level INTEGER NOT NULL DEFAULT 1,
+    evaluation_count INTEGER NOT NULL DEFAULT 0,
+    last_evaluated_at TEXT,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (tenant_id, organisation_id, agent_id),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+    FOREIGN KEY (organisation_id) REFERENCES organisations(id)
+);
+CREATE INDEX IF NOT EXISTS idx_agent_perf_tenant_org ON agent_performance_records(tenant_id, organisation_id);
+
+CREATE TABLE IF NOT EXISTS resource_allocations (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL DEFAULT 'tenant-demo',
+    organisation_id TEXT NOT NULL,
+    mission_id TEXT,
+    strategy TEXT NOT NULL,
+    treasury_available INTEGER NOT NULL,
+    total_allocated INTEGER NOT NULL,
+    allocations TEXT NOT NULL,
+    authority_limits TEXT NOT NULL,
+    rationale TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+    FOREIGN KEY (organisation_id) REFERENCES organisations(id)
+);
+CREATE INDEX IF NOT EXISTS idx_allocations_tenant_org ON resource_allocations(tenant_id, organisation_id);
+
+CREATE TABLE IF NOT EXISTS reputation_history (
+    id TEXT PRIMARY KEY,
+    agent_id TEXT NOT NULL,
+    organisation_id TEXT NOT NULL,
+    tenant_id TEXT NOT NULL DEFAULT 'tenant-demo',
+    previous_score REAL NOT NULL,
+    new_score REAL NOT NULL,
+    score_delta REAL NOT NULL,
+    trigger_event TEXT NOT NULL,
+    evidence_hash TEXT,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+    FOREIGN KEY (organisation_id) REFERENCES organisations(id)
+);
+CREATE INDEX IF NOT EXISTS idx_rep_hist_agent ON reputation_history(tenant_id, organisation_id, agent_id);
+
+CREATE TABLE IF NOT EXISTS experiment_runs (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL DEFAULT 'tenant-demo',
+    organisation_id TEXT NOT NULL,
+    scenario TEXT NOT NULL,
+    strategy TEXT NOT NULL,
+    random_seed INTEGER NOT NULL,
+    results_json TEXT NOT NULL,
+    summary_analysis TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+    FOREIGN KEY (organisation_id) REFERENCES organisations(id)
+);
+CREATE INDEX IF NOT EXISTS idx_experiments_tenant_org ON experiment_runs(tenant_id, organisation_id);
 """
 
 class Database:
@@ -107,8 +190,14 @@ class Database:
             columns = [row["name"] for row in cur.fetchall()]
             for col_name, col_type in [("performance_score", "REAL NOT NULL DEFAULT 100.0"), ("risk_score", "REAL NOT NULL DEFAULT 0.0"), ("resource_efficiency", "REAL NOT NULL DEFAULT 1.0"), ("reliability_score", "REAL NOT NULL DEFAULT 100.0"), ("task_history", "TEXT NOT NULL DEFAULT '[]'")]:
                 if col_name not in columns: self.conn.execute(f"ALTER TABLE agents ADD COLUMN {col_name} {col_type}")
+            cur.execute("PRAGMA table_info(audit_events)")
+            audit_columns = [row["name"] for row in cur.fetchall()]
+            if "tenant_id" not in audit_columns: self.conn.execute("ALTER TABLE audit_events ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'tenant-demo'")
+            if "organisation_id" not in audit_columns: self.conn.execute("ALTER TABLE audit_events ADD COLUMN organisation_id TEXT")
+            self.conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_tenant_org ON audit_events(tenant_id, organisation_id)")
             self.conn.execute("UPDATE organisations SET tenant_id = 'tenant-demo' WHERE tenant_id IS NULL OR tenant_id = ''")
             self.conn.execute("UPDATE ledger_entries SET tenant_id = 'tenant-demo' WHERE tenant_id IS NULL OR tenant_id = ''")
+            self.conn.execute("UPDATE audit_events SET tenant_id = 'tenant-demo' WHERE tenant_id IS NULL OR tenant_id = ''")
 
     def close(self) -> None:
         if self.conn: self.conn.close()

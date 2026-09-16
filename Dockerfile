@@ -16,7 +16,13 @@ COPY migrations ./migrations
 # Install runtime + optional postgres driver so production images can use
 # KALYX_DATABASE_URL without a separate build stage. Credentials come only
 # from environment at runtime — never baked into the image.
-RUN pip install --no-cache-dir ".[postgres]" && mkdir -p /app/data
+RUN groupadd -g 10001 kalyx && \
+    useradd -u 10001 -g kalyx -s /bin/sh -m kalyx && \
+    pip install --no-cache-dir ".[postgres]" && \
+    mkdir -p /app/data && \
+    chown -R kalyx:kalyx /app
+
+USER kalyx:kalyx
 
 EXPOSE 8000
 

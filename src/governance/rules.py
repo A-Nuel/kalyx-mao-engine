@@ -54,6 +54,8 @@ class TargetAllowlistRule(PolicyRule):
         }
 
     def evaluate(self, proposal: ActionProposal, agent: AgentRecord, org: Organisation, **kwargs: Any) -> Optional[str]:
+        if proposal.action_type == ActionType.BLOCKCHAIN_TRANSACTION or proposal.target.startswith(("blockchain://", "evm://", "sepolia://")):
+            return None
         if proposal.target not in self.approved_targets:
             return f"Target '{proposal.target}' is not on the approved destination allowlist"
         return None

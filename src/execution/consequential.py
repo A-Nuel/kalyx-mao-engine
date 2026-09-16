@@ -459,7 +459,8 @@ class ConsequentialExecutionManager:
         # Escrow remains locked! Zero silent loss, zero double spend.
         operation.transition_to(
             OperationState.UNKNOWN,
-            error_message=result.error_message or "Provider returned timeout/unknown outcome"
+            error_message=result.error_message or "Provider returned timeout/unknown outcome",
+            provider_reference=result.provider_reference,
         )
         if self.repo is not None:
             self.repo.save(operation)

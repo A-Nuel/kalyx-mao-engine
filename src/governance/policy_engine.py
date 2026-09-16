@@ -15,6 +15,13 @@ from src.governance.rules import (
     OrgPauseRule,
     AgentStatusRule,
 )
+from src.governance.blockchain_rules import (
+    AllowedChainRule,
+    RecipientAllowlistRule,
+    TransactionAmountCeilingRule,
+    GasExposureRule,
+    IntentMatchRule,
+)
 from src.governance.crypto import (
     ITokenSigner,
     ITokenVerifier,
@@ -50,7 +57,12 @@ class PolicyEngine:
             TreasuryBalanceRule(),
             SpendLimitRule(),
             RolePermissionRule(),
-            TargetAllowlistRule()
+            TargetAllowlistRule(),
+            AllowedChainRule(),
+            RecipientAllowlistRule(allow_any_valid_testnet=True),
+            TransactionAmountCeilingRule(),
+            GasExposureRule(),
+            IntentMatchRule(),
         ]
         self.human_approval_threshold = human_approval_threshold
         self.token_ttl_seconds = token_ttl_seconds

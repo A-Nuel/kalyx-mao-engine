@@ -35,3 +35,31 @@ def create_database(config: PersistenceConfig | None = None) -> Any:
 def create_sqlite(path: str = ":memory:") -> SqliteDatabase:
     """Explicit SQLite constructor for tests and deterministic demos."""
     return SqliteDatabase(path)
+
+
+def create_scoped_ledger(
+    db: Any,
+    tenant_id: str,
+    organisation_id: str,
+    initial_treasury: int = 0,
+) -> Any:
+    """Create an organisation-scoped, tenant-isolated ledger for the active backend."""
+    try:
+        from src.persistence.postgres_db import PostgresDatabase
+        is_pg = isinstance(db, PostgresDatabase)
+    except Exception:
+        is_pg = False
+
+    from src.tenancy.ledger import TenantScopedLedger
+    from src.tenancy.organisation_ledger import OrganisationScopedLedger
+
+    if is_pg:
+        from src.persistence.postgres_ledger import PostgresLedger
+        raw_ledger = PostgresLedger(db, initial_treasury=0, tenant_id=tenant_id)
+    else:
+        from src.security.atomic_ledger import AtomicSqliteLedger
+        raw_ledger = AtomicSqliteLedger(db, initial_treasury=0)
+
+    tenant_ledger = TenantScopedLedger(raw_ledger, tenant_id=tenant_id, initial_treasury=0)
+    return OrganisationScopedLedger(tenant_ledger, organisation_id=organisation_id, initial_treasury=initial_treasury)
+

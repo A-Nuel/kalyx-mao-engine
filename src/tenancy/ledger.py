@@ -21,7 +21,7 @@ class TenantScopedLedger:
     def _ensure_tenant(self) -> None:
         with self.ledger.db.conn:
             self.ledger.db.conn.execute(
-                "INSERT OR IGNORE INTO tenants (id, name, status, created_at) VALUES (?, ?, ?, ?)",
+                "INSERT INTO tenants (id, name, status, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (id) DO NOTHING",
                 (self.tenant_id, self.tenant_id, "active", datetime.utcnow().isoformat()),
             )
 

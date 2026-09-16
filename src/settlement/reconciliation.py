@@ -83,7 +83,12 @@ class ReconciliationService:
                     )
 
             # 4. Query provider for status
-            status: ProviderStatusResult = self.provider.status(op.id, op.idempotency_key)
+            try:
+                status: ProviderStatusResult = self.provider.status(
+                    op.id, op.idempotency_key, provider_reference=op.provider_reference
+                )
+            except TypeError:
+                status: ProviderStatusResult = self.provider.status(op.id, op.idempotency_key)
 
             # 5. Handle provider outcomes
             if status.outcome == ProviderOutcome.SUCCESS.value:

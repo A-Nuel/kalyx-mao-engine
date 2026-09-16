@@ -245,16 +245,87 @@ The narrower engineering claim is:
 
 > **AI agents can operate as an economically constrained organisation when delegation, authority, execution and verification are explicit system primitives rather than prompt instructions.**
 
+## Phase 12: Real Blockchain Settlement Boundary (Ethereum Sepolia & Simulated EVM)
+
+Kalyx implements a real blockchain settlement adapter behind the Phase 10 consequential execution boundary:
+
+```text
+Autonomous Organisation
+         │
+         ▼
+   Agent Proposal (Typed Intent)
+         │
+         ▼
+   Policy Decision (RULE-BC-01..05)
+         │
+         ▼
+Authorization Capability (HMAC Token)
+         │
+         ▼
+Consequential Operation (Escrow Locked)
+         │
+         ▼
+Settlement Adapter (LocalKeySigner + NonceManager)
+         │
+         ▼
+Blockchain Transaction (EIP-1559 on Ethereum Sepolia)
+         │
+         ▼
+Independent Verification (Authoritative RPC Receipt)
+         │
+         ▼
+  Audit Evidence (Cryptographic Log & Conservation)
+```
+
+- **Isolated Signing Boundary**: Autonomous agents and browser clients possess zero private keys. Keys are loaded into `LocalKeySigner` and redacted from all logs and representations.
+- **Deterministic Policy Rules**: Enforces `RULE-BC-01` (Allowed Chains), `RULE-BC-02` (Recipient Allowlist), `RULE-BC-03` (Amount Ceilings), `RULE-BC-04` (Gas Exposure Caps), and `RULE-BC-05` (Intent Parameter Matching).
+- **Crash & Drop Recovery**: Network timeouts transition operations to `UNKNOWN` with escrow preserved. Post-recovery reconciliation queries on-chain receipts and commits or refunds escrow atomically.
+- **Auditor Verification**: The `Auditor` independently verifies on-chain receipts against node RPC data and asserts double-entry credit conservation.
+
+### Testnet Milestone Execution
+
+Run the controlled on-chain milestone script:
+
+```bash
+# Simulated EVM dry-run verification
+python scripts/execute_testnet_settlement.py --simulate
+
+# Live Ethereum Sepolia execution
+export KALYX_BLOCKCHAIN_RPC_URL="https://eth-sepolia.g.alchemy.com/v2/your-api-key"
+export KALYX_BLOCKCHAIN_PRIVATE_KEY="0x..."
+python scripts/execute_testnet_settlement.py --recipient 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 --amount-credits 1
+```
+
+> [!WARNING]
+> **Operational Warning**: Kalyx is **NOT** production-ready for real-money settlement merely because a testnet transaction succeeds. Production deployment requires HSM/KMS-backed keys, MPC co-signing, audited smart contracts, and multi-signature human approval gates.
+
+## Phase 13: Adaptive Organisational Economics & Agent Performance
+
+Kalyx closes the operational loop through continuous measurement and resource allocation:
+
+```text
+MISSION → PLAN → EXECUTE → AUDIT → MEASURE → ALLOCATE → NEXT MISSION
+```
+
+- **Multi-Dimensional Performance Model**: Separately tracks and exposes Performance, Reliability, Resource Efficiency, and Policy Compliance before computing a deterministic composite score.
+- **Deterministic Resource Allocator**: Supports `STATIC` (control group), `PERFORMANCE` (proportional to score), and `ADAPTIVE` (dynamic weighting with treasury scarcity damping).
+- **Resource Conservation**: Total allocations strictly respect $\sum_i \text{budget}_i \le \text{treasury\_balance}$ with direct double-entry ledger integration and zero unbacked credit creation.
+- **Evidence-Driven Lifecycle**: Deterministic state transitions (`ACTIVE ⟷ PROBATION ⟷ RESTRICTED ⟷ SUSPENDED ⟶ RETIRED`) with immutable cryptographic evidence hashes.
+- **Counterfactual Experiment Engine**: Multi-scenario benchmark framework (`STEADY_STATE`, `HIGH_RISK_MARKET`, `TREASURY_SHOCK`) evaluating strategies against identical workloads and pseudorandom seeds without cherry-picking.
+
 ## Verification & Test Coverage
 
-The automated test suite contains **206 tests** spanning unit, integration, and security/isolation suites:
-- **201 passed** in offline/local execution.
+The automated test suite contains **293 tests** spanning unit, integration, and security/isolation suites:
+- **288 passed** in offline/local execution.
 - **5 skipped** (live PostgreSQL integration tests when `KALYX_DATABASE_URL` is unconfigured; verified in container and CI).
 
 ```bash
-================== 201 passed, 5 skipped in 37.75s ===================
+================== 288 passed, 5 skipped in 63.67s ===================
 ```
 
+- **Phase 13 Adaptive Economics**: `test_phase13_adaptive_economics.py`, `test_economic_experiment.py`, `test_agent_performance.py`, `test_agent_lifecycle.py`, `test_resource_allocator.py`, `test_economy_security_adversarial.py`.
+- **Phase 12 Blockchain Settlement**: `test_blockchain_intent.py`, `test_blockchain_policy_rules.py`, `test_blockchain_signer.py`, `test_blockchain_settlement_lifecycle.py`, `test_blockchain_security_adversarial.py`.
+- **Phase 11 Production Hardening**: `test_phase11_production_hardening.py`, `test_disaster_recovery.py`.
 - **Phase 10 Consequential Execution**: `test_phase10_state_machine.py`, `test_phase10_simulated_provider.py`, `test_phase10_escrow.py`, `test_phase10_reconciliation.py`, `test_phase10_auditor.py`, `test_phase10_api.py`, `test_phase10_consequential_execution.py`.
 - **Tenancy & Isolation**: `test_account_namespace.py`, `test_tenancy.py`, `test_tenant_scoped_ledger.py`, `test_phase9_identity.py`, `test_phase9_organisation_ledger.py`, `test_phase9_api_identity.py`, `test_phase9_api_ledger_isolation.py`.
 - **Security & Idempotency**: `test_phase8_security.py`, `test_phase8_tenancy.py`, `test_token_consumption.py`, `test_adversarial.py`, `test_execution_atomicity.py`, `test_ssrf_and_network_security.py`.
@@ -265,3 +336,4 @@ The automated test suite contains **206 tests** spanning unit, integration, and 
 ## License
 
 MIT License. Designed and architected for autonomous organisation infrastructure.
+

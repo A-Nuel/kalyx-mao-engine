@@ -993,11 +993,31 @@ const App = (() => {
             </div>
             <div class="flex items-center justify-between py-1.5 border-b border-white/[0.04]">
               <span class="text-slate-500">Settlement Provider</span>
-              <span class="text-white">${esc(op.provider_name)}</span>
+              <span class="text-white font-semibold">${esc(op.provider_name)}</span>
             </div>
+            ${(op.provider_name === 'blockchain' || (op.parameters && op.parameters.chain_id)) ? `
+              <div class="flex items-center justify-between py-1.5 border-b border-white/[0.04]">
+                <span class="text-slate-500">Network / Chain ID</span>
+                <span class="text-emerald-400 font-mono">${esc(op.parameters.network || 'sepolia')} (${esc(op.parameters.chain_id || 11155111)})</span>
+              </div>
+              <div class="flex items-center justify-between py-1.5 border-b border-white/[0.04]">
+                <span class="text-slate-500">On-Chain Recipient</span>
+                <code class="text-blue-300 truncate max-w-[200px]" title="${esc(op.parameters.recipient || '')}">${esc(op.parameters.recipient || '—')}</code>
+              </div>
+              <div class="flex items-center justify-between py-1.5 border-b border-white/[0.04]">
+                <span class="text-slate-500">Asset &amp; Value</span>
+                <span class="text-white font-mono">${fmtNum(op.parameters.amount_wei || 0)} wei (${esc(op.parameters.asset || 'ETH')})</span>
+              </div>
+            ` : ''}
             <div class="flex items-center justify-between py-1.5 border-b border-white/[0.04]">
               <span class="text-slate-500">Provider Reference</span>
-              <span class="text-slate-300">${esc(op.provider_reference || 'Pending settlement')}</span>
+              ${op.provider_reference && op.provider_reference.startsWith('0x') && op.provider_reference.length === 66 ? `
+                <a href="https://sepolia.etherscan.io/tx/${esc(op.provider_reference)}" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:text-blue-300 underline font-mono truncate max-w-[200px]" title="View on Etherscan">
+                  ${esc(op.provider_reference.slice(0, 14))}…${esc(op.provider_reference.slice(-8))}
+                </a>
+              ` : `
+                <span class="text-slate-300 font-mono truncate max-w-[200px]">${esc(op.provider_reference || 'Pending settlement')}</span>
+              `}
             </div>
             <div class="flex items-center justify-between py-1.5 border-b border-white/[0.04]">
               <span class="text-slate-500">Created Timestamp</span>

@@ -42,6 +42,7 @@ class ActionType(str, Enum):
     EXTERNAL_API_CALL = "EXTERNAL_API_CALL"
     SIMULATED_ALLOCATION = "SIMULATED_ALLOCATION"
     REPLAN = "REPLAN"
+    BLOCKCHAIN_TRANSACTION = "BLOCKCHAIN_TRANSACTION"
 
 class OperationState(str, Enum):
     CREATED = "created"

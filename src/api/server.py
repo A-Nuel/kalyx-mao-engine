@@ -1,19 +1,24 @@
+import json
 import os
 import secrets
+from datetime import datetime
 from typing import Any, Dict
 from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from fastapi.exceptions import RequestValidationError
 from starlette.middleware.base import BaseHTTPMiddleware
 from src.api.bootstrap import ensure_started, is_production, policy_secret
 from src.api.config import cors_origins, operator_key, require_operator_auth
-from src.api.identity_auth import require_identity_for_org, require_identity_for_tenant
+from src.api.identity_auth import require_identity_for_org, require_identity_for_tenant, require_write_permission
 from src.api.mission_service import run_mission
-from src.persistence.factory import create_database
+from src.api.security_middleware import CorrelationIdMiddleware, RateLimitMiddleware, RequestBodyLimitMiddleware
+from src.persistence.factory import create_database, create_scoped_ledger
 from src.domain.entities import Organisation
 from src.domain.enums import OrgState
+from src.domain.events import AuditEvent
 from src.domain.exceptions import ReconciliationError, UnauthorizedActionError
 from src.execution.consequential import ConsequentialOperationRepository
 from src.persistence.repositories import SqliteEventStore, SqliteLedger
@@ -23,6 +28,14 @@ from src.tenancy.ledger import TenantScopedLedger
 from src.tenancy.organisation_ledger import OrganisationScopedLedger
 from src.economy.experiment import EconomicExperiment
 from src.governance.policy_engine import PolicyEngine
+from src.domain.economy import (
+    AgentPerformanceRecord,
+    AllocationStrategy,
+    ReputationHistoryEntry,
+    ResourceAllocationDecision,
+)
+from src.persistence.economy_repo import EconomyRepository
+from src.economy.allocator import ResourceAllocator
 
 # Fail closed at import time when KALYX_ENV=production.
 ensure_started()
@@ -30,17 +43,86 @@ ensure_started()
 app = FastAPI(title="Kalyx Command Centre API", version="0.9.5")
 app.add_middleware(CORSMiddleware, allow_origins=cors_origins(), allow_credentials=False, allow_methods=["GET", "POST"], allow_headers=["*"])
 
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request, exc: HTTPException):
+    req_id = getattr(getattr(request, "state", None), "request_id", None)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": "http_error",
+            "message": exc.detail,
+            "detail": exc.detail,
+            **({"request_id": req_id} if req_id else {}),
+        },
+        headers=getattr(exc, "headers", None),
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc: RequestValidationError):
+    req_id = getattr(getattr(request, "state", None), "request_id", None)
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": "validation_error",
+            "message": "Invalid request payload or parameters",
+            "detail": exc.errors(),
+            **({"request_id": req_id} if req_id else {}),
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request, exc: Exception):
+    req_id = getattr(getattr(request, "state", None), "request_id", "unknown")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "internal_error",
+            "message": "An unexpected internal server error occurred",
+            "detail": "An unexpected internal server error occurred",
+            "request_id": req_id,
+        },
+    )
+
 _default_settlement_provider = SimulatedConsequentialProvider()
+_latest_experiment_report = None
 
 
-def get_settlement_provider() -> SimulatedConsequentialProvider:
-    return getattr(app.state, "settlement_provider", _default_settlement_provider)
+def get_settlement_provider():
+    if hasattr(app.state, "settlement_provider") and app.state.settlement_provider is not None:
+        return app.state.settlement_provider
+    from src.api.config import (
+        blockchain_chain_id,
+        blockchain_enabled,
+        blockchain_network_name,
+        blockchain_private_key,
+        blockchain_rpc_url,
+        validate_blockchain_config,
+    )
+    if blockchain_enabled():
+        validate_blockchain_config()
+        from src.settlement.blockchain.provider import BlockchainSettlementProvider
+        from src.settlement.blockchain.rpc_client import HttpEvmRpcClient
+        from src.settlement.blockchain.signer import LocalKeySigner
+        rpc = HttpEvmRpcClient(blockchain_rpc_url())
+        signer = LocalKeySigner(blockchain_private_key())
+        provider = BlockchainSettlementProvider(
+            rpc_client=rpc,
+            signer=signer,
+            default_chain_id=blockchain_chain_id(),
+            network_name=blockchain_network_name(),
+        )
+        app.state.settlement_provider = provider
+        return provider
+    return _default_settlement_provider
 
 
 def _identity_enabled() -> bool:
-    if is_production():
+    if is_production() or os.getenv("KALYX_IDENTITY_AUTH", "").strip().lower() == "production":
         return True
-    return os.getenv("KALYX_IDENTITY_AUTH", "false").strip().lower() in {"1", "true", "yes", "on"}
+    return os.getenv("KALYX_IDENTITY_AUTH", "false").strip().lower() in {"1", "true", "yes", "on", "production"}
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -53,7 +135,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 class IdentityAuthorizationMiddleware(BaseHTTPMiddleware):
-    """Authenticate resource scope before an organisation handler can read it."""
+    """Authenticate resource scope before an organisation handler can read or modify it."""
     async def dispatch(self, request, call_next):
         if not _identity_enabled() or not request.url.path.startswith("/api/organisations"):
             return await call_next(request)
@@ -62,22 +144,37 @@ class IdentityAuthorizationMiddleware(BaseHTTPMiddleware):
             parts = [p for p in request.url.path.split("/") if p]
             principal = request.headers.get("X-Principal-ID")
             tenant = request.headers.get("X-Tenant-ID")
+            api_key = request.headers.get("X-API-Key")
+            auth_header = request.headers.get("Authorization")
             try:
+                context = None
                 if len(parts) == 2 and parts[1] == "organisations":
                     if not tenant:
-                        return JSONResponse({"detail": "Tenant scope required"}, status_code=400)
-                    require_identity_for_tenant(db, tenant, principal, tenant)
+                        return JSONResponse({"error": "bad_request", "message": "Tenant scope required", "detail": "Tenant scope required"}, status_code=400)
+                    context = require_identity_for_tenant(db, tenant, principal, tenant, authorization=auth_header, x_api_key=api_key)
                 elif len(parts) >= 3:
-                    require_identity_for_org(db, parts[2], principal, tenant)
+                    context = require_identity_for_org(db, parts[2], principal, tenant, authorization=auth_header, x_api_key=api_key)
+
+                # Check write permissions on mutation actions (pause, resume, reconcile)
+                if request.method in {"POST", "PUT", "DELETE", "PATCH"}:
+                    require_write_permission(context)
             except HTTPException as exc:
-                return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+                return JSONResponse(
+                    {"error": "authorization_error", "message": exc.detail, "detail": exc.detail},
+                    status_code=exc.status_code,
+                )
             return await call_next(request)
         finally:
             db.close()
 
 
-app.add_middleware(IdentityAuthorizationMiddleware)
+# Middlewares execute in reverse order of mounting:
+# CorrelationIdMiddleware -> RequestBodyLimitMiddleware -> RateLimitMiddleware -> IdentityAuthorizationMiddleware -> SecurityHeadersMiddleware
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(IdentityAuthorizationMiddleware)
+app.add_middleware(RateLimitMiddleware)
+app.add_middleware(RequestBodyLimitMiddleware)
+app.add_middleware(CorrelationIdMiddleware)
 
 
 def _db():
@@ -93,8 +190,7 @@ def _org_id_or_404(db, org_id: str) -> Dict[str, Any]:
 
 def _org_scoped_ledger(db, org: Dict[str, Any]):
     tenant_id = org.get("tenant_id") or "tenant-demo"
-    tenant_ledger = TenantScopedLedger(SqliteLedger(db, initial_treasury=0), tenant_id)
-    return OrganisationScopedLedger(tenant_ledger, org["id"], initial_treasury=0)
+    return create_scoped_ledger(db, tenant_id=tenant_id, organisation_id=org["id"], initial_treasury=0)
 
 
 def _require_operator(x_api_key: str | None) -> None:
@@ -120,12 +216,22 @@ class MissionRequest(BaseModel):
 
 @app.get("/api/health")
 def health() -> Dict[str, Any]:
-    db = _db()
+    db = None
     try:
+        db = _db()
         db.conn.execute("SELECT 1")
-        return {"status": "ok", "service": "kalyx-command-centre", "version": app.version}
+        return {
+            "status": "healthy",
+            "service": "kalyx-command-centre",
+            "version": app.version,
+            "database": "connected",
+            "environment": "production" if is_production() else "demo",
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Database unavailable: {type(exc).__name__}")
     finally:
-        db.close()
+        if db is not None:
+            db.close()
 
 
 @app.post("/api/missions")
@@ -134,6 +240,7 @@ def create_and_run_mission(
     x_api_key: str | None = Header(default=None, alias="X-API-Key"),
     x_principal_id: str | None = Header(default=None, alias="X-Principal-ID"),
     x_tenant_id: str | None = Header(default=None, alias="X-Tenant-ID"),
+    authorization: str | None = Header(default=None, alias="Authorization"),
 ) -> Dict[str, Any]:
     _require_operator(x_api_key)
     db = _db()
@@ -141,7 +248,10 @@ def create_and_run_mission(
         if _identity_enabled():
             if not x_tenant_id:
                 raise HTTPException(status_code=400, detail="Tenant scope required")
-            require_identity_for_tenant(db, x_tenant_id, x_principal_id, x_tenant_id)
+            context = require_identity_for_tenant(
+                db, x_tenant_id, x_principal_id, x_tenant_id, authorization=authorization, x_api_key=x_api_key
+            )
+            require_write_permission(context)
         try:
             return run_mission(request.mission, request.budget, live=request.live, tenant_id=x_tenant_id or "tenant-demo")
         except ValueError as exc:
@@ -250,9 +360,8 @@ def ledger(org_id: str, limit: int = Query(default=200, ge=1, le=1000)) -> Dict[
 def events(org_id: str, limit: int = Query(default=200, ge=1, le=1000)) -> list[Dict[str, Any]]:
     db = _db()
     try:
-        _org_id_or_404(db, org_id)
-        store = SqliteEventStore(db, verify_on_startup=True)
-        all_events = store.get_events()
+        org_row = _org_id_or_404(db, org_id)
+        tenant_id = org_row.get("tenant_id") or "tenant-demo"
         related_ids = {org_id}
         task_ids = {r["id"] for r in db.conn.execute("SELECT id FROM tasks WHERE org_id = ?", (org_id,)).fetchall()}
         related_ids.update(task_ids)
@@ -267,7 +376,29 @@ def events(org_id: str, limit: int = Query(default=200, ge=1, le=1000)) -> list[
                         f"SELECT id FROM execution_receipts WHERE proposal_id IN ({ph})", tuple(proposal_ids)
                     ).fetchall()
                 )
-        return [e.model_dump(mode="json") for e in all_events if e.entity_id in related_ids or e.payload.get("org_id") == org_id][-limit:]
+        cur = db.conn.cursor()
+        ph_ids = ",".join("?" for _ in related_ids)
+        query = (
+            f"SELECT * FROM audit_events "
+            f"WHERE tenant_id = ? AND (organisation_id = ? OR entity_id IN ({ph_ids})) "
+            f"ORDER BY sequence_id ASC"
+        )
+        cur.execute(query, (tenant_id, org_id, *related_ids))
+        scoped = [
+            AuditEvent(
+                sequence_id=r["sequence_id"],
+                timestamp=datetime.fromisoformat(r["timestamp"]),
+                actor_id=r["actor_id"],
+                event_type=r["event_type"],
+                entity_id=r["entity_id"],
+                payload=json.loads(r["payload"]),
+                payload_hash=r["payload_hash"],
+                previous_event_hash=r["previous_event_hash"],
+                event_hash=r["event_hash"],
+            )
+            for r in cur.fetchall()
+        ]
+        return [e.model_dump(mode="json") for e in scoped][-limit:]
     finally:
         db.close()
 
@@ -582,6 +713,170 @@ def agent_profile(org_id: str, agent_id: str) -> Dict[str, Any]:
             "tasks": [dict(t) for t in tasks],
             "proposals": [dict(p) for p in proposals],
             "decisions": decisions,
+        }
+    finally:
+        db.close()
+
+
+@app.get("/api/organisations/{org_id}/economy")
+def get_organisation_economy(
+    org_id: str,
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+) -> Dict[str, Any]:
+    """Retrieve organisation workforce economic overview, lifecycle distribution, and allocation totals."""
+    _require_operator(x_api_key)
+    db = _db()
+    try:
+        org = _org_id_or_404(db, org_id)
+        repo = EconomyRepository(db.conn)
+        records = repo.list_performance_records(org["tenant_id"], org_id)
+        allocations = repo.list_allocations(org["tenant_id"], org_id, limit=10)
+
+        status_counts = {"ACTIVE": 0, "PROBATION": 0, "RESTRICTED": 0, "SUSPENDED": 0, "RETIRED": 0}
+        total_allocated = sum(r.resources_allocated for r in records)
+        total_consumed = sum(r.resources_consumed for r in records)
+        total_value = sum(r.value_produced for r in records)
+        avg_efficiency = (total_value / total_consumed) if total_consumed > 0 else 1.0
+
+        agent_rows = db.conn.execute("SELECT status FROM agents WHERE org_id = ?", (org_id,)).fetchall()
+        for ar in agent_rows:
+            st = (ar["status"] or "ACTIVE").upper()
+            if st in status_counts:
+                status_counts[st] += 1
+            else:
+                status_counts["ACTIVE"] += 1
+
+        return {
+            "organisation_id": org_id,
+            "tenant_id": org["tenant_id"],
+            "treasury_balance": org["treasury_balance"],
+            "total_allocated": total_allocated,
+            "total_consumed": total_consumed,
+            "total_value_produced": total_value,
+            "average_efficiency": round(avg_efficiency, 2),
+            "workforce_status_distribution": status_counts,
+            "performance_records": [r.model_dump(mode="json") for r in records],
+            "recent_allocations": [a.model_dump(mode="json") for a in allocations],
+        }
+    finally:
+        db.close()
+
+
+@app.get("/api/organisations/{org_id}/agents/{agent_id}/performance")
+def get_agent_performance(
+    org_id: str,
+    agent_id: str,
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+) -> Dict[str, Any]:
+    """Retrieve detailed multi-dimensional performance record for an agent."""
+    _require_operator(x_api_key)
+    db = _db()
+    try:
+        org = _org_id_or_404(db, org_id)
+        agent_row = db.conn.execute("SELECT id FROM agents WHERE org_id = ? AND id = ?", (org_id, agent_id)).fetchone()
+        if not agent_row:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        repo = EconomyRepository(db.conn)
+        record = repo.get_performance_record(org["tenant_id"], org_id, agent_id)
+        if not record:
+            return {
+                "agent_id": agent_id,
+                "organisation_id": org_id,
+                "tenant_id": org["tenant_id"],
+                "composite_score": 100.0,
+                "reputation_score": 100.0,
+                "performance_score": 100.0,
+                "reliability_score": 100.0,
+                "resource_efficiency_score": 100.0,
+                "policy_compliance_score": 100.0,
+                "tasks_completed": 0,
+                "tasks_failed": 0,
+                "resources_allocated": 0,
+                "resources_consumed": 0,
+                "value_produced": 0,
+                "evaluation_count": 0,
+            }
+        return record.model_dump(mode="json")
+    finally:
+        db.close()
+
+
+@app.get("/api/organisations/{org_id}/agents/{agent_id}/reputation")
+def get_agent_reputation_history(
+    org_id: str,
+    agent_id: str,
+    limit: int = Query(default=50, ge=1, le=200),
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+) -> Dict[str, Any]:
+    """Retrieve historical reputation delta events and audit evidence hashes for an agent."""
+    _require_operator(x_api_key)
+    db = _db()
+    try:
+        org = _org_id_or_404(db, org_id)
+        agent_row = db.conn.execute("SELECT id FROM agents WHERE org_id = ? AND id = ?", (org_id, agent_id)).fetchone()
+        if not agent_row:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        repo = EconomyRepository(db.conn)
+        entries = repo.list_reputation_history(org["tenant_id"], org_id, agent_id, limit=limit)
+        return {
+            "agent_id": agent_id,
+            "organisation_id": org_id,
+            "tenant_id": org["tenant_id"],
+            "reputation_history": [e.model_dump(mode="json") for e in entries],
+        }
+    finally:
+        db.close()
+
+
+@app.get("/api/organisations/{org_id}/allocations")
+def get_organisation_allocations(
+    org_id: str,
+    limit: int = Query(default=50, ge=1, le=200),
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+) -> Dict[str, Any]:
+    """Retrieve historical resource allocation decisions for the organisation."""
+    _require_operator(x_api_key)
+    db = _db()
+    try:
+        org = _org_id_or_404(db, org_id)
+        repo = EconomyRepository(db.conn)
+        decisions = repo.list_allocations(org["tenant_id"], org_id, limit=limit)
+        return {
+            "organisation_id": org_id,
+            "tenant_id": org["tenant_id"],
+            "allocations": [d.model_dump(mode="json") for d in decisions],
+        }
+    finally:
+        db.close()
+
+
+@app.get("/api/organisations/{org_id}/economy/events")
+def get_organisation_economy_events(
+    org_id: str,
+    limit: int = Query(default=50, ge=1, le=200),
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+) -> Dict[str, Any]:
+    """Retrieve audit events related to economic operations."""
+    _require_operator(x_api_key)
+    db = _db()
+    try:
+        org = _org_id_or_404(db, org_id)
+        rows = db.conn.execute(
+            """SELECT * FROM audit_events
+               WHERE tenant_id = ? AND organisation_id = ?
+                 AND event_type IN (
+                     'RESOURCE_ALLOCATED', 'AGENT_PERFORMANCE_UPDATED',
+                     'AGENT_PROMOTED', 'AGENT_DEMOTED', 'AGENT_PROBATION',
+                     'AGENT_RESTRICTED', 'AGENT_SUSPENDED', 'AGENT_RETIRED',
+                     'REPUTATION_UPDATED', 'EXPERIMENT_COMPLETED', 'SETTLEMENT_EXECUTED'
+                 )
+               ORDER BY sequence_id DESC LIMIT ?""",
+            (org["tenant_id"], org_id, limit),
+        ).fetchall()
+        return {
+            "organisation_id": org_id,
+            "tenant_id": org["tenant_id"],
+            "events": [dict(r) for r in rows],
         }
     finally:
         db.close()

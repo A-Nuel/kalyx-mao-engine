@@ -75,3 +75,5 @@ def validate_production_config() -> None:
 def ensure_started() -> None:
     """Call once at application import/startup."""
     validate_production_config()
+    from src.api.config import validate_blockchain_config
+    validate_blockchain_config()

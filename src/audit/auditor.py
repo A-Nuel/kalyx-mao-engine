@@ -1,7 +1,8 @@
-import uuid
-import hmac
 import hashlib
+import hmac
+import re
 import time
+import uuid
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Tuple
 from pydantic import BaseModel, Field
@@ -15,7 +16,7 @@ from src.domain.entities import (
     PolicyDecision,
     Task,
 )
-from src.domain.enums import OperationState, OrgState, PolicyResult, TaskStatus
+from src.domain.enums import ActionType, OperationState, OrgState, PolicyResult, TaskStatus
 from src.domain.exceptions import DomainError
 from src.domain.events import canonical_json
 from src.governance.crypto import ITokenVerifier, HmacSha256TokenVerifier
@@ -263,6 +264,9 @@ class Auditor:
         policy_version_hash: Optional[str] = None,
         current_time: Optional[float] = None,
         verifier: Optional[ITokenVerifier] = None,
+        rpc_client: Optional[Any] = None,
+        blockchain_receipt: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
     ) -> VerificationReceipt:
         """Independently verifies a ConsequentialOperation.
         
@@ -379,6 +383,29 @@ class Auditor:
         checks.append("STATE_CONSISTENCY")
         if org.state == OrgState.PAUSED:
             failures.append("Organisation is in PAUSED state")
+
+        # 9. Blockchain Evidence Integrity
+        if operation.provider_name in ("blockchain", "evm") or operation.action_type == ActionType.BLOCKCHAIN_TRANSACTION:
+            checks.append("BLOCKCHAIN_EVIDENCE_INTEGRITY")
+            tx_ref = operation.provider_reference
+            if operation.state in (OperationState.SUCCEEDED, OperationState.RECONCILED):
+                if not tx_ref or not re.match(r"^0x[0-9a-fA-F]{64}$", tx_ref):
+                    failures.append(f"Invalid or missing blockchain transaction hash reference: '{tx_ref}'")
+            bc_receipt = blockchain_receipt if blockchain_receipt is not None else kwargs.get("blockchain_receipt")
+            client = rpc_client if rpc_client is not None else kwargs.get("rpc_client")
+            if not bc_receipt and client is not None and tx_ref:
+                try:
+                    bc_receipt = client.get_transaction_receipt(tx_ref)
+                except Exception as exc:
+                    failures.append(f"RPC error during independent audit verification: {exc}")
+
+            if bc_receipt is not None:
+                r_status = bc_receipt.get("status")
+                is_on_chain_confirmed = r_status in (1, "0x1", "1")
+                if operation.state == OperationState.SUCCEEDED and not is_on_chain_confirmed:
+                    failures.append("Audit mismatch: Operation marked SUCCEEDED but on-chain receipt reverted (status: 0)")
+                elif operation.state == OperationState.FAILED and is_on_chain_confirmed:
+                    failures.append("Audit mismatch: Operation marked FAILED but on-chain receipt confirmed (status: 1)")
 
         is_verified = len(failures) == 0
         evidence_payload = {

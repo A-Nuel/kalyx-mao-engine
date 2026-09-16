@@ -148,7 +148,9 @@ class SqliteEventStore:
             raise TamperedAuditLogError(f"Audit log corruption detected on startup: {err}")
 
     def append_event(self, actor_id: str, event_type: str, entity_id: str,
-                     payload: Dict[str, Any]) -> AuditEvent:
+                     payload: Dict[str, Any],
+                     tenant_id: Optional[str] = None,
+                     organisation_id: Optional[str] = None) -> AuditEvent:
         cursor = self.db.conn.cursor()
         cursor.execute("SELECT sequence_id, event_hash FROM audit_events ORDER BY sequence_id DESC LIMIT 1")
         last_row = cursor.fetchone()
@@ -164,23 +166,52 @@ class SqliteEventStore:
         event_hash = compute_event_hash(sequence_id=sequence_id, timestamp_iso=timestamp_iso,
                                         actor_id=actor_id, event_type=event_type, entity_id=entity_id,
                                         payload_hash=payload_hash, previous_event_hash=previous_event_hash)
+
+        # Derive tenant_id and organisation_id if not explicitly passed
+        effective_tenant = tenant_id or payload.get("tenant_id") or "tenant-demo"
+        effective_org = organisation_id or payload.get("org_id") or payload.get("organisation_id")
+        if not effective_org and str(entity_id).startswith("mao-"):
+            effective_org = entity_id
+
         with self.db.conn:
             self.db.conn.execute(
                 """
                 INSERT INTO audit_events
-                (sequence_id, timestamp, actor_id, event_type, entity_id, payload, payload_hash, previous_event_hash, event_hash)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (sequence_id, timestamp, actor_id, event_type, entity_id, payload, payload_hash, previous_event_hash, event_hash, tenant_id, organisation_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (sequence_id, timestamp_iso, actor_id, event_type, entity_id,
-                       canonical_json(payload), payload_hash, previous_event_hash, event_hash)
+                       canonical_json(payload), payload_hash, previous_event_hash, event_hash,
+                       effective_tenant, effective_org)
             )
         return AuditEvent(sequence_id=sequence_id, timestamp=timestamp, actor_id=actor_id,
                           event_type=event_type, entity_id=entity_id, payload=payload,
                           payload_hash=payload_hash, previous_event_hash=previous_event_hash,
                           event_hash=event_hash)
 
-    def get_events(self) -> List[AuditEvent]:
+    def get_events(
+        self,
+        tenant_id: Optional[str] = None,
+        organisation_id: Optional[str] = None,
+        limit: Optional[int] = None,
+    ) -> List[AuditEvent]:
         cursor = self.db.conn.cursor()
-        cursor.execute("SELECT * FROM audit_events ORDER BY sequence_id ASC")
+        clauses = []
+        params = []
+        if tenant_id is not None:
+            clauses.append("tenant_id = ?")
+            params.append(tenant_id)
+        if organisation_id is not None:
+            clauses.append("(organisation_id = ? OR entity_id = ?)")
+            params.extend([organisation_id, organisation_id])
+
+        sql = "SELECT * FROM audit_events"
+        if clauses:
+            sql += " WHERE " + " AND ".join(clauses)
+        sql += " ORDER BY sequence_id ASC"
+        if limit is not None and limit > 0:
+            sql += f" LIMIT {int(limit)}"
+
+        cursor.execute(sql, tuple(params))
         return [AuditEvent(sequence_id=r["sequence_id"], timestamp=datetime.fromisoformat(r["timestamp"]),
                            actor_id=r["actor_id"], event_type=r["event_type"], entity_id=r["entity_id"],
                            payload=json.loads(r["payload"]), payload_hash=r["payload_hash"],

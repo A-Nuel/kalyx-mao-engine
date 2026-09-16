@@ -1,5 +1,7 @@
 import time
 import random
+import uuid
+from datetime import datetime
 from enum import Enum
 from typing import Dict, List, Any, Optional, Tuple
 from pydantic import BaseModel, Field
@@ -54,11 +56,13 @@ class OrgSimulationResult(BaseModel):
     agent_final_statuses: Dict[str, str]
 
 class ComparativeExperimentReport(BaseModel):
+    experiment_id: str = Field(default_factory=lambda: f"exp-{uuid.uuid4().hex[:10]}")
     num_rounds: int
     initial_treasury: int
     results: Dict[AllocationStrategy, OrgSimulationResult] = Field(default_factory=dict)
     scenario_results: Dict[str, ScenarioResult] = Field(default_factory=dict)
     summary_analysis: str
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
     def format_table(self) -> str:
         """Format multi-scenario simulation results into clean markdown tables."""
@@ -118,7 +122,10 @@ class EconomicExperiment:
         cls,
         num_rounds: int = 3,
         initial_treasury: int = 100,
-        seeds: Optional[List[int]] = None
+        seeds: Optional[List[int]] = None,
+        repo: Optional[Any] = None,
+        org_id: Optional[str] = None,
+        tenant_id: str = "tenant-demo",
     ) -> ComparativeExperimentReport:
         run_seeds = seeds or [42, 101, 777]
         scenario_results: Dict[str, ScenarioResult] = {}
@@ -164,13 +171,28 @@ class EconomicExperiment:
         # 3. Construct factual, objective analysis based on empirical findings
         summary = cls._generate_objective_synthesis(scenario_results)
 
-        return ComparativeExperimentReport(
+        report = ComparativeExperimentReport(
             num_rounds=num_rounds,
             initial_treasury=initial_treasury,
             results=agg_results,
             scenario_results=scenario_results,
             summary_analysis=summary
         )
+
+        if repo is not None and org_id is not None and hasattr(repo, "save_experiment_run"):
+            for key, sr in scenario_results.items():
+                repo.save_experiment_run(
+                    experiment_id=f"{report.experiment_id}-{key}",
+                    tenant_id=tenant_id,
+                    org_id=org_id,
+                    scenario=sr.scenario.value,
+                    strategy=sr.strategy.value,
+                    random_seed=run_seeds[0],
+                    results=sr.model_dump(),
+                    summary=summary[:200],
+                )
+
+        return report
 
     @classmethod
     def _run_scenario_across_seeds(
