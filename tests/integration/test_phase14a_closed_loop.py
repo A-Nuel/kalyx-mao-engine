@@ -84,7 +84,7 @@ def test_closed_loop_orbio_usage_independent_outcome_changes_next_allocation():
         researcher = AgentRecord(
             id="agent-research",
             role=AgentRole.RESEARCHER,
-            authority_ceiling=30,
+            authority_ceiling=40,
             credit_balance=0,
             reputation_score=70.0,
             performance_score=70.0,
@@ -94,7 +94,7 @@ def test_closed_loop_orbio_usage_independent_outcome_changes_next_allocation():
         strategist = AgentRecord(
             id="agent-strategy",
             role=AgentRole.STRATEGIST,
-            authority_ceiling=30,
+            authority_ceiling=40,
             credit_balance=0,
             reputation_score=70.0,
             performance_score=70.0,
@@ -104,6 +104,7 @@ def test_closed_loop_orbio_usage_independent_outcome_changes_next_allocation():
         org.agents[researcher.id] = researcher
         org.agents[strategist.id] = strategist
 
+        # Identical baseline so Mission A starts fair
         for agent in org.agents.values():
             ReputationEngine.evaluate_agent_performance(
                 agent=agent,
@@ -119,6 +120,8 @@ def test_closed_loop_orbio_usage_independent_outcome_changes_next_allocation():
             )
 
         records_a = {r.agent_id: r for r in repo.list_performance_records("tenant-14a", "org-14a")}
+        assert records_a[researcher.id].composite_score == records_a[strategist.id].composite_score
+
         alloc_a = ResourceAllocator.allocate(
             org,
             strategy=AllocationStrategy.PERFORMANCE,
@@ -127,6 +130,8 @@ def test_closed_loop_orbio_usage_independent_outcome_changes_next_allocation():
         )
         assert alloc_a.total_allocated <= 100
         research_alloc_a = alloc_a.allocations[researcher.id]
+        strategy_alloc_a = alloc_a.allocations[strategist.id]
+        assert research_alloc_a == strategy_alloc_a
 
         provider = SimulatedOrbioProvider(initial_available="25.00")
         cfg = OrbioConfig(
@@ -168,16 +173,18 @@ def test_closed_loop_orbio_usage_independent_outcome_changes_next_allocation():
         )
         assert inf_receipt.outcome == ExternalProviderOutcome.SUCCESS
 
+        # Independent Kalyx outcome: extreme success for researcher, extreme failure for strategist.
+        # Provider telemetry is NOT used as the performance input.
         ReputationEngine.evaluate_agent_performance(
             agent=researcher,
             repo=repo,
             tenant_id="tenant-14a",
             organisation_id="org-14a",
-            tasks_delta_completed=3,
+            tasks_delta_completed=20,
             tasks_delta_failed=0,
             resources_allocated=research_alloc_a,
-            resources_consumed=proposal.requested_credits,
-            value_produced=25.0,
+            resources_consumed=max(1, proposal.requested_credits),
+            value_produced=200.0,
             trigger_event="MISSION_A_INDEPENDENT_OUTCOME",
         )
         ReputationEngine.evaluate_agent_performance(
@@ -186,15 +193,15 @@ def test_closed_loop_orbio_usage_independent_outcome_changes_next_allocation():
             tenant_id="tenant-14a",
             organisation_id="org-14a",
             tasks_delta_completed=0,
-            tasks_delta_failed=1,
-            resources_allocated=alloc_a.allocations[strategist.id],
-            resources_consumed=0,
+            tasks_delta_failed=20,
+            resources_allocated=strategy_alloc_a,
+            resources_consumed=strategy_alloc_a,
             value_produced=0.0,
             trigger_event="MISSION_A_STRATEGIST_STAGNANT",
         )
 
         records_b = {r.agent_id: r for r in repo.list_performance_records("tenant-14a", "org-14a")}
-        assert records_b[researcher.id].composite_score >= records_a[researcher.id].composite_score
+        assert records_b[researcher.id].composite_score > records_b[strategist.id].composite_score
 
         alloc_b = ResourceAllocator.allocate(
             org,
@@ -205,8 +212,10 @@ def test_closed_loop_orbio_usage_independent_outcome_changes_next_allocation():
         research_alloc_b = alloc_b.allocations[researcher.id]
         strategy_alloc_b = alloc_b.allocations[strategist.id]
 
-        assert research_alloc_b >= strategy_alloc_b
-        assert research_alloc_b != strategy_alloc_b or research_alloc_b != research_alloc_a
+        # Causal proof: updated performance changes Mission B allocation
+        assert research_alloc_b > strategy_alloc_b
+        assert research_alloc_b > research_alloc_a
+        assert strategy_alloc_b < strategy_alloc_a
         assert not hasattr(provider, "repo")
     finally:
         db.close()
