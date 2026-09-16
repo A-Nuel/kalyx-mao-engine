@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{"colors":{"on-surface-variant":"#c2c6d6","inverse-primary":"#005ac2","error-container":"#93000a","tertiary-container":"#618bff","on-surface":"#e2e2e8","on-error-container":"#ffdad6","inverse-on-surface":"#2f3035","on-background":"#e2e2e8","inverse-surface":"#e2e2e8","on-secondary-fixed":"#0b1c30","on-tertiary-container":"#002469","tertiary":"#b4c5ff","outline":"#8c909f","on-primary-fixed-variant":"#004395","surface-container":"#1e2024","secondary-container":"#3a4a5f","primary-fixed-dim":"#adc6ff","primary-fixed":"#d8e2ff","error":"#ffb4ab","surface-container-lowest":"#0c0e12","tertiary-fixed":"#dbe1ff","secondary-fixed":"#d3e4fe","tertiary-fixed-dim":"#b4c5ff","on-secondary-fixed-variant":"#38485d","on-error":"#690005","surface-tint":"#adc6ff","on-tertiary":"#002a78","secondary":"#b7c8e1","background":"#111318","primary":"#adc6ff","secondary-fixed-dim":"#b7c8e1","primary-container":"#4d8eff","on-secondary-container":"#a9bad3","on-primary":"#002e6a","on-secondary":"#213145","surface":"#111318","surface-variant":"#333539","on-tertiary-fixed":"#00174b","on-tertiary-fixed-variant":"#003ea8","outline-variant":"#424754","on-primary-fixed":"#001a42","surface-bright":"#37393e","surface-container-low":"#1a1c20","on-primary-container":"#00285d","surface-container-highest":"#333539","surface-container-high":"#282a2e","surface-dim":"#111318"},"borderRadius":{"DEFAULT":"0.25rem","lg":"0.5rem","xl":"0.75rem","full":"9999px"},"spacing":{"gutter-lg":"1.75rem","margin":"2rem","space-lg":"1.5rem","space-xl":"2.5rem","space-md":"1rem","space-xs":"0.25rem","margin-mobile":"1rem","space-sm":"0.5rem","gutter-sm":"0.75rem","gutter":"1.25rem"},"fontFamily":{"label-lg":["JetBrains Mono"],"label-sm":["JetBrains Mono"],"headline-lg-mobile":["Geist"],"body-sm":["Geist"],"headline-sm":["Geist"],"body-lg":["Geist"],"headline-lg":["Geist"],"label-md":["JetBrains Mono"],"display-xl-mobile":["Geist"],"body-md":["Geist"],"headline-md":["Geist"],"display-xl":["Geist"]},"fontSize":{"label-lg":["13px",{"lineHeight":"18px","letterSpacing":"0.02em","fontWeight":"500"}],"label-sm":["10px",{"lineHeight":"14px","letterSpacing":"0.06em","fontWeight":"500"}],"headline-lg-mobile":["24px",{"lineHeight":"32px","letterSpacing":"-0.015em","fontWeight":"600"}],"body-sm":["13px",{"lineHeight":"18px","letterSpacing":"0.005em","fontWeight":"400"}],"headline-sm":["18px",{"lineHeight":"24px","letterSpacing":"-0.01em","fontWeight":"500"}],"body-lg":["16px",{"lineHeight":"24px","letterSpacing":"-0.005em","fontWeight":"400"}],"headline-lg":["32px",{"lineHeight":"40px","letterSpacing":"-0.02em","fontWeight":"600"}],"label-md":["12px",{"lineHeight":"16px","letterSpacing":"0.03em","fontWeight":"400"}],"display-xl-mobile":["32px",{"lineHeight":"40px","letterSpacing":"-0.02em","fontWeight":"600"}],"body-md":["14px",{"lineHeight":"20px","letterSpacing":"0em","fontWeight":"400"}],"headline-md":["22px",{"lineHeight":"28px","letterSpacing":"-0.015em","fontWeight":"500"}],"display-xl":["48px",{"lineHeight":"56px","letterSpacing":"-0.03em","fontWeight":"600"}]}}}};</script></head><body class="bg-surface-container-lowest font-body-md text-body-md text-on-surface antialiased"><header class="fixed top-0 left-0 right-0 z-50 bg-surface-container-lowest/80 backdrop-blur-md shadow-[0_1px_8px_rgba(0,0,0,0.25)]"><div class="h-16 w-full px-margin flex items-center justify-between gap-gutter"><div class="flex items-center gap-space-md"><div class="flex items-center gap-space-sm"><img alt="Brand logo. - Primary color: #3b82f6
+- Font: inter
+- Mode: dark
+- Roundness: rounded-sm
+" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1V-ZgCCEmWbL0Z9N2UrRBZ88GbfO_YwWYwb48W9al-Pw7BPaj0GMGzjr_A-rbYdJ_Xtt_fi85lgD0C8TC19DJ_ot-t3aJ5PpVeHAkw4YaC3daTUBGjiZkprNVAGYsKyIcDjwQKtppt49urN04N2fYMEFcmVIbzfc445BTyP3Gl-Lg0v3slWNYScHi1DgvS8ilE9WFLv31tTkkDQ0BzdaaSm5KrsjbM68kyyr__yV_rnDNQwwBLLRmACZAI"/><span class="font-headline-sm text-headline-sm text-on-surface tracking-tight font-semibold">Kalyx</span><span class="font-label-sm text-label-sm uppercase px-space-xs py-0.5 rounded bg-surface-container text-on-surface-variant">Autonomous Org</span></div><nav class="hidden xl:flex items-center gap-space-xs ml-space-md" data-active-classes="bg-surface-container-high text-on-surface font-medium"><a class="px-space-sm py-1.5 rounded text-on-surface-variant font-body-sm text-body-sm hover:bg-surface-container hover:text-on-surface transition-colors" data-path="overview" href="#">Overview</a><a class="px-space-sm py-1.5 rounded text-on-surface-variant font-body-sm text-body-sm hover:bg-surface-container hover:text-on-surface transition-colors" data-path="missions" href="#">Missions</a><a class="px-space-sm py-1.5 rounded text-on-surface-variant font-body-sm text-body-sm hover:bg-surface-container hover:text-on-surface transition-colors" data-path="organisation" href="#">Organisation</a><a class="px-space-sm py-1.5 rounded text-on-surface-variant font-body-sm text-body-sm hover:bg-surface-container hover:text-on-surface transition-colors" data-path="treasury" href="#">Treasury</a><a aria-current="page" class="px-space-sm py-1.5 rounded transition-colors bg-surface-container-high text-on-surface font-medium" data-path="policies" href="#">Policies</a><a class="px-space-sm py-1.5 rounded text-on-surface-variant font-body-sm text-body-sm hover:bg-surface-container hover:text-on-surface transition-colors" data-path="operations" href="#">Operations</a><a class="px-space-sm py-1.5 rounded text-on-surface-variant font-body-sm text-body-sm hover:bg-surface-container hover:text-on-surface transition-colors" data-path="audit" href="#">Audit</a><a class="px-space-sm py-1.5 rounded text-on-surface-variant font-body-sm text-body-sm hover:bg-surface-container hover:text-on-surface transition-colors" data-path="settings" href="#">Settings</a></nav></div><div class="flex items-center gap-gutter-sm"><div class="hidden md:flex items-center gap-space-xs px-space-sm py-1 rounded-full bg-surface-container-low"><span class="w-2 h-2 rounded-full bg-primary animate-pulse"></span><span class="font-label-sm text-label-sm uppercase text-primary">Operational</span></div><div class="hidden lg:flex items-center gap-space-xs text-on-surface-variant font-label-md text-label-md px-space-sm py-1"><span class="material-symbols-outlined text-sm">schedule</span><span>14:32:08 UTC</span></div><button class="flex items-center gap-space-sm px-space-sm py-1.5 rounded-lg bg-surface-container hover:bg-surface-container-high hover:text-on-surface text-on-surface-variant transition-colors"><span class="material-symbols-outlined text-base">search</span><span class="font-body-sm text-body-sm hidden sm:inline">Command</span><kbd class="font-label-sm text-label-sm bg-surface-container-highest px-space-xs py-0.5 rounded text-on-surface-variant">⌘K</kbd></button><div class="flex items-center gap-space-sm pl-space-xs"><div class="hidden text-right sm:block"><div class="font-body-sm text-body-sm font-medium text-on-surface leading-tight">Elena Vance</div><div class="font-label-sm text-label-sm text-on-surface-variant uppercase leading-tight">Director</div></div><img alt="Profile" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida/AEtjO1URu4FeKft3v8sPA_HUN1HaNFL9fwcxeuik1VF76G_zEsLGRrDd-cfUOMbUN9jSb53Ybf9ZE1IOxa8WuIaYPgSWaGB_jEsoDfYmJcgaullJQHcdp9W5Eu6ZxJO4WkVLkyVNkNz0Clb1q8QD4wXq9V0508t1aaRULJ8_qCfPwm9J8PHSC3WpAAiqcm4xsXpg9qxg995VG5yZ4ykUQU5vymi4fzTmzJpcwMtGonRWrnIUMN9RwlA4M71VbJum"/></div></div></div></header><main class="w-full pt-16 bg-surface-container-lowest"><div class="flex flex-col w-full">
+<!-- Dynamic Atmospheric Glow Background -->
+<div class="relative w-full overflow-hidden px-margin py-space-xl">
+<div class="absolute -top-32 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl pointer-events-none -z-10"></div>
+<div class="absolute top-48 right-10 w-[30rem] h-[30rem] bg-secondary-container/15 rounded-full blur-3xl pointer-events-none -z-10"></div>
+<!-- Header Section -->
+<div class="flex flex-col xl:flex-row xl:items-end justify-between gap-gutter-lg pb-space-lg">
+<div class="space-y-space-xs max-w-3xl">
+<div class="flex items-center gap-space-xs text-on-surface-variant font-label-md text-label-md uppercase tracking-wider">
+<span>Autonomous Org</span>
+<span class="opacity-40">/</span>
+<span class="text-primary font-medium">Safety &amp; Governance</span>
+</div>
+<h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight font-semibold">
+          Policy Centre &amp; Safety Guardrails
+        </h1>
+<p class="font-body-lg text-body-lg text-on-surface-variant leading-relaxed">
+          Deterministic boundaries, human-in-the-loop triggers, and emergency circuit breakers governing autonomous network execution.
+        </p>
+</div>
+<!-- Emergency Circuit Breaker Trigger Button -->
+<div class="flex items-center gap-space-md self-start xl:self-end">
+<div class="relative group">
+<button class="flex items-center gap-space-sm px-space-lg py-3 rounded-xl bg-error-container/20 text-error hover:bg-error-container/40 transition-all duration-200 shadow-md backdrop-blur-md active:scale-95 cursor-pointer" id="circuit-breaker-btn">
+<span class="material-symbols-outlined text-lg" style="font-variation-settings: 'FILL' 1;">power_settings_new</span>
+<span class="font-headline-sm text-headline-sm font-medium">Circuit Breaker</span>
+<span class="font-label-sm text-label-sm px-2 py-0.5 rounded bg-error-container text-on-error-container tracking-wider">ARMED</span>
+</button>
+<!-- Arm confirmation prompt overlay (hidden by default) -->
+<div class="hidden absolute right-0 top-full mt-2 w-80 p-space-md rounded-xl bg-surface-container-high text-on-surface shadow-2xl backdrop-blur-2xl z-30" id="breaker-confirm-popover">
+<div class="flex items-start gap-space-sm mb-space-sm">
+<span class="material-symbols-outlined text-error text-xl">warning</span>
+<div>
+<p class="font-body-md text-body-md font-medium text-on-surface">Trip Emergency Halt?</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">This revokes all ephemeral execution keys and freezes ongoing liquidity operations instantly.</p>
+</div>
+</div>
+<div class="flex justify-end gap-space-xs mt-space-sm">
+<button class="px-space-sm py-1.5 rounded bg-surface-container text-on-surface-variant font-label-md text-label-md hover:bg-surface-container-highest transition-colors" id="breaker-cancel-btn">Abort</button>
+<button class="px-space-sm py-1.5 rounded bg-error text-on-error font-label-md text-label-md hover:opacity-90 transition-opacity" id="breaker-confirm-btn">Confirm Halt</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Status Banner: Merkle Verified Guardrail State -->
+<div class="w-full rounded-2xl bg-surface-container/60 backdrop-blur-xl p-space-md shadow-xl mb-space-xl">
+<div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-gutter">
+<div class="flex flex-wrap items-center gap-space-md">
+<div class="flex items-center gap-space-xs px-3 py-1.5 rounded-full bg-surface-container-high/80 text-primary">
+<span class="w-2 h-2 rounded-full bg-primary animate-ping"></span>
+<span class="font-label-sm text-label-sm uppercase font-semibold tracking-wider">14 Active Guardrails</span>
+</div>
+<div class="flex items-center gap-space-xs text-on-surface font-body-sm text-body-sm">
+<span class="material-symbols-outlined text-base text-primary">verified_user</span>
+<span class="font-medium">0 Breaches Detected</span>
+<span class="text-on-surface-variant">in past 30 days</span>
+</div>
+<div class="hidden sm:flex items-center gap-space-xs text-on-surface-variant font-label-sm text-label-sm">
+<span class="opacity-30">•</span>
+<span>Invariant Check Cadence: Every Block (12.04s)</span>
+</div>
+</div>
+<div class="flex items-center gap-space-sm px-space-md py-1.5 rounded-lg bg-surface-container-lowest/80 text-on-surface-variant font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-sm text-primary">fingerprint</span>
+<span class="text-on-surface-variant">Merkle Root:</span>
+<span class="text-on-surface font-mono tracking-tight font-semibold">0x9f1a...c82d</span>
+<span class="px-1.5 py-0.5 rounded bg-surface-container-high text-primary text-label-sm uppercase">Synchronized</span>
+</div>
+</div>
+</div>
+<!-- Main Layout: Grid Breakdown -->
+<div class="grid grid-cols-1 xl:grid-cols-12 gap-gutter-lg items-start">
+<!-- Left Column: Primary Guardrail Policies (8 cols) -->
+<div class="xl:col-span-8 flex flex-col gap-space-md">
+<div class="flex items-center justify-between px-space-xs">
+<div class="flex items-center gap-space-sm">
+<span class="font-headline-md text-headline-md font-medium text-on-surface">Core Guardrails</span>
+<span class="font-label-sm text-label-sm uppercase bg-surface-container-high px-2 py-0.5 rounded text-on-surface-variant">Deterministic Layer</span>
+</div>
+<div class="text-on-surface-variant font-label-md text-label-md">
+            All changes require 3/5 Multi-Sig
+          </div>
+</div>
+<!-- Rule 1: Spend Cap Ceiling -->
+<div class="group relative rounded-2xl bg-surface-container/70 hover:bg-surface-container-high/60 transition-all duration-300 p-space-lg shadow-lg backdrop-blur-md">
+<div class="flex flex-col sm:flex-row sm:items-start justify-between gap-space-md">
+<div class="space-y-space-xs flex-1">
+<div class="flex items-center gap-space-sm">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+<span class="font-label-sm text-label-sm uppercase text-on-surface-variant tracking-wider font-semibold">Policy G-01 • Financial Limit</span>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-medium">
+                Spend Cap Ceiling
+              </h2>
+<p class="font-body-md text-body-md text-on-surface-variant leading-relaxed">
+                Single transaction ceiling without explicit human authorization is locked at <span class="text-on-surface font-semibold">$50,000 USD</span> equivalent.
+              </p>
+<!-- Metric pill bar -->
+<div class="pt-space-xs flex flex-wrap items-center gap-space-sm">
+<div class="px-2.5 py-1 rounded-lg bg-surface-container-low text-on-surface font-label-md text-label-md flex items-center gap-1.5">
+<span class="text-on-surface-variant">Ceiling:</span>
+<span class="font-semibold text-primary">$50,000.00</span>
+</div>
+<div class="px-2.5 py-1 rounded-lg bg-surface-container-low text-on-surface-variant font-label-md text-label-md">
+                  Scope: All Sub-Agents
+                </div>
+<div class="px-2.5 py-1 rounded-lg bg-surface-container-low text-on-surface-variant font-label-md text-label-md">
+                  Fallback: Autonomous Queue Hold
+                </div>
+</div>
+</div>
+<!-- Controls & Status -->
+<div class="flex sm:flex-col items-end justify-between sm:justify-start gap-space-sm pt-2 sm:pt-0">
+<span class="px-2.5 py-1 rounded-full bg-primary-container/20 text-primary font-label-sm text-label-sm uppercase tracking-wider font-semibold">
+                Strict Enforced
+              </span>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" data-policy="spend-cap" type="checkbox"/>
+<div class="w-11 h-6 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-surface-container-lowest after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-on-surface after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-container"></div>
+</label>
+</div>
+</div>
+</div>
+<!-- Rule 2: Daily Compute Quota -->
+<div class="group relative rounded-2xl bg-surface-container/70 hover:bg-surface-container-high/60 transition-all duration-300 p-space-lg shadow-lg backdrop-blur-md">
+<div class="flex flex-col sm:flex-row sm:items-start justify-between gap-space-md">
+<div class="space-y-space-xs flex-1">
+<div class="flex items-center gap-space-sm">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+<span class="font-label-sm text-label-sm uppercase text-on-surface-variant tracking-wider font-semibold">Policy G-02 • Infrastructure Cost</span>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-medium">
+                Daily Compute Quota
+              </h2>
+<p class="font-body-md text-body-md text-on-surface-variant leading-relaxed">
+                Maximum compute expenditure per execution agent is bounded to <span class="text-on-surface font-semibold">5,000 CR/day</span> to suppress unmonitored recursive loops.
+              </p>
+<!-- Progress visualization -->
+<div class="pt-space-xs space-y-1.5 max-w-md">
+<div class="flex justify-between text-label-sm font-label-sm text-on-surface-variant">
+<span>Current 24h Utilization (Avg)</span>
+<span class="text-on-surface font-mono font-medium">2,140 / 5,000 CR (42.8%)</span>
+</div>
+<div class="w-full h-2 rounded-full bg-surface-container-lowest overflow-hidden">
+<div class="h-full rounded-full bg-primary transition-all duration-500" style="width: 42.8%"></div>
+</div>
+</div>
+</div>
+<!-- Controls & Status -->
+<div class="flex sm:flex-col items-end justify-between sm:justify-start gap-space-sm pt-2 sm:pt-0">
+<span class="px-2.5 py-1 rounded-full bg-secondary-container/30 text-secondary-fixed font-label-sm text-label-sm uppercase tracking-wider font-semibold">
+                Auto-Throttle Enabled
+              </span>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" data-policy="compute-quota" type="checkbox"/>
+<div class="w-11 h-6 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-surface-container-lowest after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-on-surface after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-container"></div>
+</label>
+</div>
+</div>
+</div>
+<!-- Rule 3: Allowed Contract Whitelist -->
+<div class="group relative rounded-2xl bg-surface-container/70 hover:bg-surface-container-high/60 transition-all duration-300 p-space-lg shadow-lg backdrop-blur-md">
+<div class="flex flex-col sm:flex-row sm:items-start justify-between gap-space-md">
+<div class="space-y-space-xs flex-1">
+<div class="flex items-center gap-space-sm">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+<span class="font-label-sm text-label-sm uppercase text-on-surface-variant tracking-wider font-semibold">Policy G-03 • Target Authentication</span>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-medium">
+                Allowed Contract Whitelist
+              </h2>
+<p class="font-body-md text-body-md text-on-surface-variant leading-relaxed">
+                Autonomous workers can solely invoke and route messages through formally audited and cryptographic verified contracts across Ethereum and Arbitrum One.
+              </p>
+<div class="pt-space-xs flex flex-wrap gap-space-sm items-center">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-surface-container-lowest font-label-sm text-label-sm text-on-surface">
+<span class="material-symbols-outlined text-sm text-primary">lock</span> 12 Verified Protocols
+                </span>
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-surface-container-lowest font-label-sm text-label-sm text-on-surface-variant">
+                  Chain IDs: 1, 42161
+                </span>
+<button class="text-primary hover:underline font-label-sm text-label-sm flex items-center gap-0.5">
+                  View Whitelist Registry <span class="material-symbols-outlined text-xs">arrow_outward</span>
+</button>
+</div>
+</div>
+<!-- Controls & Status -->
+<div class="flex sm:flex-col items-end justify-between sm:justify-start gap-space-sm pt-2 sm:pt-0">
+<span class="px-2.5 py-1 rounded-full bg-primary-container/20 text-primary font-label-sm text-label-sm uppercase tracking-wider font-semibold">
+                12 Whitelisted
+              </span>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" data-policy="whitelist" type="checkbox"/>
+<div class="w-11 h-6 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-surface-container-lowest after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-on-surface after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-container"></div>
+</label>
+</div>
+</div>
+</div>
+<!-- Rule 4: Human-in-the-loop Mandate -->
+<div class="group relative rounded-2xl bg-surface-container/70 hover:bg-surface-container-high/60 transition-all duration-300 p-space-lg shadow-lg backdrop-blur-md">
+<div class="flex flex-col sm:flex-row sm:items-start justify-between gap-space-md">
+<div class="space-y-space-xs flex-1">
+<div class="flex items-center gap-space-sm">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+<span class="font-label-sm text-label-sm uppercase text-on-surface-variant tracking-wider font-semibold">Policy G-04 • Governance Invariant</span>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-medium">
+                Human-in-the-loop Mandate
+              </h2>
+<p class="font-body-md text-body-md text-on-surface-variant leading-relaxed">
+                Any discrete intent involving liquidity relocation &gt; $25,000 USD or any unknown protocol interaction automatically halts for Director sign-off.
+              </p>
+<div class="pt-space-xs flex items-center gap-space-sm">
+<div class="flex items-center gap-space-xs px-2.5 py-1 rounded-full bg-surface-container-lowest">
+<div class="w-4 h-4 rounded-full bg-primary/20 flex items-center justify-center text-primary font-label-sm text-label-sm font-bold">E</div>
+<span class="font-label-sm text-label-sm text-on-surface">Primary: Elena Vance (Director)</span>
+</div>
+<span class="text-on-surface-variant font-label-sm text-label-sm">Timeout: 30 mins auto-reject</span>
+</div>
+</div>
+<!-- Controls & Status -->
+<div class="flex sm:flex-col items-end justify-between sm:justify-start gap-space-sm pt-2 sm:pt-0">
+<span class="px-2.5 py-1 rounded-full bg-secondary-container/40 text-on-surface font-label-sm text-label-sm uppercase tracking-wider font-semibold">
+                Director Sign-Off
+              </span>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" data-policy="hitl" type="checkbox"/>
+<div class="w-11 h-6 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-surface-container-lowest after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-on-surface after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-container"></div>
+</label>
+</div>
+</div>
+</div>
+<!-- Rule 5: Anomaly Volatility Stop -->
+<div class="group relative rounded-2xl bg-surface-container/70 hover:bg-surface-container-high/60 transition-all duration-300 p-space-lg shadow-lg backdrop-blur-md">
+<div class="flex flex-col sm:flex-row sm:items-start justify-between gap-space-md">
+<div class="space-y-space-xs flex-1">
+<div class="flex items-center gap-space-sm">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+<span class="font-label-sm text-label-sm uppercase text-on-surface-variant tracking-wider font-semibold">Policy G-05 • Market Risk</span>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-medium">
+                Anomaly Volatility Stop
+              </h2>
+<p class="font-body-md text-body-md text-on-surface-variant leading-relaxed">
+                If 1-hour rolling market slippage or DEX pair divergence exceeds <span class="text-on-surface font-semibold">2.50%</span>, pause downstream agent execution and alert operators immediately.
+              </p>
+<div class="pt-space-xs flex items-center gap-space-sm">
+<div class="flex items-center gap-1.5 px-2.5 py-1 rounded bg-surface-container-lowest text-on-surface-variant font-label-sm text-label-sm">
+<span>Current 1h Variance:</span>
+<span class="text-primary font-medium font-mono">0.42% (Normal)</span>
+</div>
+<div class="flex items-center gap-1 text-on-surface-variant font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-xs text-primary">sync</span> Chainlink + Pyth feeds
+                </div>
+</div>
+</div>
+<!-- Controls & Status -->
+<div class="flex sm:flex-col items-end justify-between sm:justify-start gap-space-sm pt-2 sm:pt-0">
+<span class="px-2.5 py-1 rounded-full bg-surface-container-highest text-on-surface font-label-sm text-label-sm uppercase tracking-wider font-semibold">
+                Monitoring
+              </span>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" data-policy="volatility-stop" type="checkbox"/>
+<div class="w-11 h-6 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-surface-container-lowest after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-on-surface after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-container"></div>
+</label>
+</div>
+</div>
+</div>
+</div>
+<!-- Right Column: Verification Nodes & Breach Interception Logs (4 cols) -->
+<div class="xl:col-span-4 flex flex-col gap-space-md">
+<!-- Live Audit & Safety Consensus Card -->
+<div class="rounded-2xl bg-surface-container/70 p-space-lg shadow-lg backdrop-blur-md space-y-space-md">
+<div class="flex items-center justify-between">
+<span class="font-headline-sm text-headline-sm font-medium text-on-surface">Invariant Health</span>
+<span class="material-symbols-outlined text-primary text-xl">shield_locked</span>
+</div>
+<div class="space-y-space-sm">
+<div class="flex justify-between items-center py-1">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Active Guardrail Proofs</span>
+<span class="font-label-md text-label-md font-mono text-on-surface">14 / 14 Valid</span>
+</div>
+<div class="w-full h-1.5 rounded-full bg-surface-container-lowest overflow-hidden">
+<div class="h-full rounded-full bg-primary" style="width: 100%"></div>
+</div>
+<div class="flex justify-between items-center py-1">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Zero-Knowledge Verification</span>
+<span class="font-label-md text-label-md text-primary">Succinct (42ms)</span>
+</div>
+<div class="w-full h-1.5 rounded-full bg-surface-container-lowest overflow-hidden">
+<div class="h-full rounded-full bg-primary" style="width: 98%"></div>
+</div>
+<div class="flex justify-between items-center py-1">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Attestation Node Quorum</span>
+<span class="font-label-md text-label-md font-mono text-on-surface">5 of 5 Signers</span>
+</div>
+</div>
+<div class="p-space-sm rounded-xl bg-surface-container-low/70 flex items-center gap-space-sm">
+<img class="w-10 h-10 rounded-lg object-cover" data-alt="Dark abstract holographic sphere rendering representing cryptographic integrity and zero knowledge privacy guards with dark slate and cool blue ambient reflections." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBvkCVSCa-ZTBXZQxrsYmiiitt_byXs4aOLbUc6Q6rSr67wvSrxnSszG_7Nro5jaPM6sXjXcKXAgvifFOVYyOYiYZHc16a7AZCiMO--BsS9AqcJEbAG9FDQLFUJPj_gB9QJixsQ6N2N7YgKFiE4_AWF-gkDCZgV1g8FJQ1LUjIgxO8lRRjmM5iRcGXBZRcyc6_gq6KJgCF5w-6SD4GZQGpRC0kxPqa9MnMdZS5eNJxaL9pUSMg_S9Vn8w"/>
+<div class="flex-1 min-w-0">
+<div class="font-body-sm text-body-sm font-medium text-on-surface truncate">State Verification Agent</div>
+<div class="font-label-sm text-label-sm text-on-surface-variant truncate">Hash: 81ba...10cf</div>
+</div>
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+</div>
+</div>
+<!-- Policy Breach & Interception Log -->
+<div class="rounded-2xl bg-surface-container/70 p-space-lg shadow-lg backdrop-blur-md flex flex-col gap-space-md">
+<div class="flex items-center justify-between">
+<div>
+<h3 class="font-headline-sm text-headline-sm font-medium text-on-surface">Interception Log</h3>
+<p class="font-label-sm text-label-sm text-on-surface-variant mt-0.5 uppercase tracking-wider">Automated Enforcement History</p>
+</div>
+<span class="px-2 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm">Past 7 Days</span>
+</div>
+<!-- Incident Timeline Items -->
+<div class="space-y-space-md">
+<!-- Log Item 1 -->
+<div class="relative pl-space-md before:content-[''] before:absolute before:left-0 before:top-1.5 before:w-2 before:h-2 before:rounded-full before:bg-error">
+<div class="flex items-center justify-between gap-space-xs">
+<span class="font-label-sm text-label-sm uppercase font-semibold text-error">Intercepted Block</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">2 days ago</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface font-medium mt-1 leading-snug">
+                Exec-Trader-01 tried to call unverified contract <span class="font-mono text-on-surface-variant">0x4a7e...91c</span>
+</p>
+<div class="mt-2 p-2 rounded bg-surface-container-lowest/80 text-on-surface-variant font-label-sm text-label-sm flex items-start gap-1.5">
+<span class="material-symbols-outlined text-xs text-error mt-0.5">block</span>
+<span>Blocked automatically by Policy Engine (Rule G-03). Zero state degradation.</span>
+</div>
+</div>
+<!-- Log Item 2 -->
+<div class="relative pl-space-md before:content-[''] before:absolute before:left-0 before:top-1.5 before:w-2 before:h-2 before:rounded-full before:bg-secondary">
+<div class="flex items-center justify-between gap-space-xs">
+<span class="font-label-sm text-label-sm uppercase font-semibold text-secondary">Warning &amp; Throttle</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">4 days ago</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface font-medium mt-1 leading-snug">
+                Strat-Analyst-02 compute burn approached 85% of daily quota.
+              </p>
+<div class="mt-2 p-2 rounded bg-surface-container-lowest/80 text-on-surface-variant font-label-sm text-label-sm flex items-start gap-1.5">
+<span class="material-symbols-outlined text-xs text-secondary mt-0.5">speed</span>
+<span>Throttled execution frequency smoothly. Quota reset safely at midnight UTC.</span>
+</div>
+</div>
+<!-- Log Item 3 -->
+<div class="relative pl-space-md before:content-[''] before:absolute before:left-0 before:top-1.5 before:w-2 before:h-2 before:rounded-full before:bg-primary">
+<div class="flex items-center justify-between gap-space-xs">
+<span class="font-label-sm text-label-sm uppercase font-semibold text-primary">Trigger Delegated</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">6 days ago</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface font-medium mt-1 leading-snug">
+                Treasury rebalance order ($32,400) held for Human sign-off.
+              </p>
+<div class="mt-2 p-2 rounded bg-surface-container-lowest/80 text-on-surface-variant font-label-sm text-label-sm flex items-start gap-1.5">
+<span class="material-symbols-outlined text-xs text-primary mt-0.5">check_circle</span>
+<span>Signed by Elena Vance within 14 minutes. Intent completed.</span>
+</div>
+</div>
+</div>
+<div class="pt-space-xs">
+<button class="w-full py-2.5 rounded-xl bg-surface-container-high hover:bg-surface-container-highest text-on-surface font-label-md text-label-md transition-colors flex items-center justify-center gap-space-xs">
+<span>View Full Immutable Audit Trail</span>
+<span class="material-symbols-outlined text-sm">open_in_new</span>
+</button>
+</div>
+</div>
+<!-- Security Contact / Multisig Card -->
+<div class="rounded-2xl bg-surface-container/70 p-space-md shadow-lg backdrop-blur-md flex items-center justify-between">
+<div class="flex items-center gap-space-sm">
+<div class="w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center text-on-surface">
+<span class="material-symbols-outlined">key</span>
+</div>
+<div>
+<div class="font-body-sm text-body-sm font-medium text-on-surface">Policy Authority</div>
+<div class="font-label-sm text-label-sm text-on-surface-variant">Safe Multi-Sig 3-of-5 Active</div>
+</div>
+</div>
+<span class="px-2 py-1 rounded bg-surface-container-lowest font-label-sm text-label-sm text-primary uppercase font-mono">Secured</span>
+</div>
+</div>
+</div>
+</div>
+<script>
+    // Simple micro-interactions for toggles and circuit breaker prompt
+    (function() {
+      const breakerBtn = document.getElementById('circuit-breaker-btn');
+      const confirmPopover = document.getElementById('breaker-confirm-popover');
+      const cancelBtn = document.getElementById('breaker-cancel-btn');
+      const confirmBtn = document.getElementById('breaker-confirm-btn');
+
+      if (breakerBtn && confirmPopover) {
+        breakerBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          confirmPopover.classList.toggle('hidden');
+        });
+
+        cancelBtn?.addEventListener('click', (e) => {
+          e.stopPropagation();
+          confirmPopover.classList.add('hidden');
+        });
+
+        confirmBtn?.addEventListener('click', (e) => {
+          e.stopPropagation();
+          alert('Emergency Circuit Breaker Triggered: All autonomous keys locked.');
+          confirmPopover.classList.add('hidden');
+        });
+
+        document.addEventListener('click', (e) => {
+          if (!confirmPopover.contains(e.target) && e.target !== breakerBtn) {
+            confirmPopover.classList.add('hidden');
+          }
+        });
+      }
+
+      // Track toggle switches
+      const toggles = document.querySelectorAll('input[data-policy]');
+      toggles.forEach(toggle => {
+        toggle.addEventListener('change', (e) => {
+          const policyId = e.target.getAttribute('data-policy');
+          console.log(`Policy ${policyId} toggled to:`, e.target.checked);
+        });
+      });
+    })();
+  </script>
+</div></main><footer class="w-full bg-surface-container-lowest shadow-[0_-1px_8px_rgba(0,0,0,0.2)] py-space-md"><div class="w-full px-margin flex flex-col sm:flex-row items-center justify-between gap-space-sm"><div class="flex items-center gap-space-sm text-on-surface-variant font-label-sm text-label-sm"><span class="w-1.5 h-1.5 rounded-full bg-primary"></span><span>Kalyx Autonomy Engine v4.12.0</span><span class="opacity-40">/</span><span class="text-on-surface-variant">Consensus Finality 99.98%</span></div><div class="text-on-surface-variant font-label-sm text-label-sm">© 2025 Kalyx Autonomous Systems. All autonomous directives preserved.</div></div></footer></body></html>

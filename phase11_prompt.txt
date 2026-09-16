@@ -1,0 +1,1186 @@
+<USER_REQUEST>
+PHASE 11 — KALYX PRODUCTION HARDENING & OPERATIONAL READINESS
+
+You are now responsible for the next engineering phase of Kalyx.
+
+Phase 10 is CLOSED.
+
+The consequential execution and settlement boundary has already passed its adversarial gate.
+
+The Kalyx Command Centre frontend has also been implemented and integrated against the real backend.
+
+The current objective is NOT to add flashy features.
+
+The objective is to harden the entire system so that Kalyx can be deployed and operated as a serious multi-tenant autonomous organisation control plane.
+
+==================================================
+1. CURRENT SYSTEM STATUS
+==================================================
+
+Kalyx currently implements:
+
+AGENTS PROPOSE
+→ POLICIES AUTHORIZE
+→ EXECUTORS EXECUTE
+→ AUDITORS VERIFY
+
+The system already includes:
+
+- autonomous organisation model
+- tenant/workspace model
+- organisation-scoped resources
+- mission lifecycle
+- task delegation
+- agent economics
+- deterministic policy engine
+- authorization tokens
+- capability checks
+- authority ceilings
+- treasury/ledger
+- escrow
+- consequential execution state machine
+- simulated settlement provider
+- reconciliation
+- append-only audit chain
+- identity/membership model
+- SQLite local/test/demo persistence
+- PostgreSQL production persistence
+- API server
+- Command Centre frontend
+- operations UI
+- audit UI
+- experiments UI
+- Docker
+- CI
+- extensive security/adversarial testing
+
+Phase 10 adversarial verification:
+
+217 passed
+5 skipped
+1 warning
+0 failures
+
+The complete Phase 10 adversarial gate passed.
+
+The frontend integration has also passed the full repository regression suite:
+
+222 passed
+5 skipped
+0 failures
+
+DO NOT BREAK THIS.
+
+==================================================
+2. PHASE 11 OBJECTIVE
+==================================================
+
+Harden the system around:
+
+IDENTITY
+TENANCY
+PERSISTENCE
+CONCURRENCY
+API SECURITY
+OBSERVABILITY
+RECOVERY
+DEPLOYMENT
+OPERATIONS
+
+The system should be capable of surviving:
+
+- process restart
+- worker restart
+- database restart
+- concurrent requests
+- concurrent reconciliation
+- stale clients
+- malformed requests
+- unauthorized requests
+- provider ambiguity
+- partial failures
+- configuration mistakes
+- deployment mistakes
+- database connection failures
+
+without silently violating Kalyx's core invariants.
+
+==================================================
+3. NON-NEGOTIABLE ARCHITECTURAL INVARIANTS
+==================================================
+
+Never weaken these:
+
+1. Agents propose.
+2. Policies authorize.
+3. Executors execute.
+4. Auditors verify.
+
+5. The browser is NOT an execution authority.
+
+6. The client cannot grant itself tenant access.
+
+7. The client cannot grant itself organisation access.
+
+8. The client cannot manufacture authorization.
+
+9. The ledger is authoritative for resource balances.
+
+10. Escrow must remain economically correct across crashes.
+
+11. UNKNOWN consequential operations must never be blindly retried.
+
+12. Audit integrity failures must never be hidden.
+
+13. Production must fail closed when mandatory security configuration is absent.
+
+14. PostgreSQL is the production persistence backend.
+
+15. SQLite remains valid for local/demo/test use.
+
+==================================================
+4. FIRST TASK — RECONNAISSANCE
+==================================================
+
+Before changing code, inspect the entire current implementation.
+
+Review:
+
+src/api/
+src/persistence/
+src/identity/
+src/tenancy/
+src/security/
+src/execution/
+src/settlement/
+src/audit/
+src/economy/
+src/orchestration/
+apps/web/
+tests/
+migrations/
+Dockerfile
+docker configuration
+CI configuration
+README
+.env.example
+
+Pay particular attention to the deferred issues identified during previous security reviews.
+
+Produce an internal checklist of:
+
+ALREADY FIXED
+REMAINING
+PARTIALLY IMPLEMENTED
+NOT IMPLEMENTED
+
+Do not assume an issue is still present without verifying the current code.
+
+==================================================
+5. PRODUCTION DATABASE BOUNDARY
+==================================================
+
+The production persistence rule is:
+
+SQLite
+→ local/demo/test
+
+PostgreSQL
+→ production
+
+Verify that every production code path uses the configured database factory.
+
+There must not be hidden paths such as:
+
+mission service
+→ directly opens SQLite
+
+or:
+
+API
+→ bypasses database factory
+
+or:
+
+background operation
+→ creates its own database connection incorrectly
+
+All application services should obtain persistence through the established database/repository boundary.
+
+Verify:
+
+- organisations
+- tenants
+- missions
+- agents
+- tasks
+- proposals
+- decisions
+- ledger
+- events
+- audit
+- authorization token consumption
+- consequential operations
+- idempotency journals
+- reconciliation state
+
+use the appropriate configured backend.
+
+==================================================
+6. POSTGRESQL COMPLETENESS
+==================================================
+
+Inspect the PostgreSQL migrations.
+
+Verify that every production-critical table has:
+
+- primary key
+- appropriate indexes
+- tenant/org scoping
+- timestamps
+- required constraints
+- uniqueness constraints
+- foreign keys where appropriate
+
+Pay special attention to:
+
+- authorization token consumption
+- consequential operations
+- idempotency
+- ledger transactions
+- missions
+- audit events
+- event chronology
+
+If any important state currently has a SQLite-only implementation, identify it.
+
+Where safe, implement the PostgreSQL equivalent.
+
+Do not blindly rewrite repositories.
+
+Prefer repository contracts with backend-specific implementations.
+
+Architecture should remain:
+
+DOMAIN / APPLICATION
+        ↓
+REPOSITORY CONTRACT
+        ↓
+SQLite / PostgreSQL
+
+==================================================
+7. DURABLE IDEMPOTENCY
+==================================================
+
+Review every idempotency mechanism.
+
+The following must remain durable across process restart:
+
+- authorization token consumption
+- consequential operation idempotency
+- provider idempotency
+- reconciliation idempotency
+
+There must not be an important security guarantee that depends only on:
+
+in-memory dictionaries
+thread-local state
+process-local caches
+
+Caches may exist for performance.
+
+They must never be the source of truth for security or financial correctness.
+
+Add adversarial restart tests where appropriate.
+
+==================================================
+8. IDENTITY HARDENING
+==================================================
+
+Production authentication must fail closed.
+
+Verify:
+
+- unauthenticated production requests cannot access protected resources
+- missing principal is rejected
+- invalid principal is rejected
+- expired credentials are rejected where applicable
+- membership is checked
+- tenant membership is authoritative
+- organisation scope is checked
+- viewer/operator/admin/owner permissions are enforced correctly
+
+Do NOT invent an authentication provider.
+
+Inspect the current identity architecture first.
+
+If the repository currently supports an internal/demo identity mechanism but not a production-grade identity provider, clearly separate:
+
+DEMO IDENTITY
+from
+PRODUCTION AUTHENTICATION
+
+Do not pretend that a development header is equivalent to real authentication.
+
+If an external OIDC provider is not part of the current scope, build the clean authentication boundary/interfaces required for it without fabricating an identity provider.
+
+Production must not rely on:
+
+X-Tenant-ID
+X-Principal-ID
+or similar client-controlled headers
+
+as proof of identity.
+
+Headers may be selectors only after authenticated identity has established authority.
+
+==================================================
+9. ORGANISATION-LEVEL AUTHORIZATION
+==================================================
+
+Review the current same-tenant authorization model.
+
+A user belonging to tenant A must not automatically gain unrestricted access to every organisation inside tenant A unless the product's permission model explicitly says so.
+
+Establish a clear organization authorization boundary.
+
+At minimum determine whether:
+
+OWNER
+ADMIN
+OPERATOR
+VIEWER
+
+permissions are sufficient.
+
+If organization-specific membership is needed, implement it cleanly.
+
+Do not create an unnecessarily complex ACL system.
+
+The objective is:
+
+TENANT ISOLATION
++
+ORGANISATION AUTHORIZATION
+
+==================================================
+10. API SECURITY HARDENING
+==================================================
+
+Review every API endpoint.
+
+Particularly:
+
+GET /api/...
+POST /api/missions
+POST /api/demo/run
+POST /api/experiments/run
+POST /api/organisations/{id}/pause
+POST /api/organisations/{id}/resume
+POST /api/organisations/{id}/operations/{id}/reconcile
+
+Verify:
+
+- authentication
+- authorization
+- tenant scope
+- organisation scope
+- input validation
+- bounded request body
+- safe error responses
+- no sensitive information leakage
+
+Add reasonable API-wide protections against:
+
+- oversized payloads
+- request abuse
+- accidental request storms
+- excessive polling
+- malformed JSON
+- expensive repeated experiment execution
+
+Do not introduce arbitrary restrictive limits that break normal operation.
+
+Document limits.
+
+==================================================
+11. ERROR RESPONSE HARDENING
+==================================================
+
+Review all API exceptions.
+
+Production responses must NOT leak:
+
+- Python tracebacks
+- filesystem paths
+- database connection strings
+- SQL statements
+- internal secrets
+- provider credentials
+- internal stack information
+
+Clients should receive structured errors such as:
+
+{
+  "error": "forbidden",
+  "message": "You do not have access to this organisation."
+}
+
+Use appropriate status codes:
+
+401
+403
+404
+409
+422
+429
+500
+503
+
+Be careful with 404/403 semantics where revealing resource existence would create a tenant isolation leak.
+
+==================================================
+12. RATE LIMITING
+==================================================
+
+Implement sensible rate limiting where appropriate.
+
+Prioritise:
+
+- mission creation
+- experiment execution
+- demo execution if it is computationally expensive
+- reconciliation
+- pause/resume
+- authentication-sensitive endpoints
+
+Read endpoints should have less aggressive limits.
+
+Do not implement rate limiting as a fake frontend timer.
+
+The backend must enforce it.
+
+Document the behaviour.
+
+==================================================
+13. REQUEST BODY LIMITS
+==================================================
+
+Enforce bounded request sizes.
+
+Particularly:
+
+- mission objective
+- constraints
+- experiment requests
+- JSON payloads
+- provider payloads
+
+The goal is resilience against:
+
+- accidental huge requests
+- memory exhaustion
+- abuse
+
+Maintain useful limits for legitimate operation.
+
+==================================================
+14. OPERATIONAL RECONCILIATION
+==================================================
+
+The Phase 10 execution state machine already handles:
+
+CREATED
+→ AUTHORIZED
+→ ESCROWED
+→ SUBMITTED
+→ SUCCEEDED / FAILED / UNKNOWN
+→ RECONCILING
+→ RECONCILED
+
+Now make unresolved operations operationally visible.
+
+The Command Centre already exposes reconciliation.
+
+Verify that:
+
+- UNKNOWN operations survive restart
+- operators can discover them
+- operators can reconcile them
+- reconciliation is idempotent
+- successful reconciliation settles exactly once
+- failed reconciliation does not lose escrow
+- repeated reconciliation is safe
+- ambiguous state never triggers blind execution
+
+If there are no UNKNOWN operations, the UI should simply show a healthy empty state.
+
+==================================================
+15. RECONCILIATION WORKFLOW
+==================================================
+
+Design the operational workflow around:
+
+UNKNOWN
+↓
+RECONCILIATION REQUIRED
+↓
+CHECK PROVIDER
+↓
+SUCCESS / FAILURE / STILL UNKNOWN
+↓
+RECONCILED OR REMAINS UNKNOWN
+
+Do not create:
+
+UNKNOWN
+→ RETRY EXECUTION
+
+That would violate the safety model.
+
+If provider status remains ambiguous, preserve the unresolved state.
+
+==================================================
+16. OBSERVABILITY
+==================================================
+
+Kalyx needs structured operational observability.
+
+Implement or verify:
+
+- structured logs
+- request IDs
+- correlation IDs
+- mission IDs
+- operation IDs
+- organisation IDs
+- tenant IDs where safe
+- error categories
+- execution latency
+- provider latency
+- reconciliation events
+
+Logs must NOT contain:
+
+- API keys
+- HMAC secrets
+- private keys
+- authorization token contents
+- credentials
+- sensitive payloads unnecessarily
+
+Make logs useful for answering:
+
+"What happened to mission X?"
+
+"What happened to operation Y?"
+
+"Why did proposal Z fail?"
+
+"Where did execution stop?"
+
+"Why is operation X UNKNOWN?"
+
+==================================================
+17. HEALTH ENDPOINTS
+==================================================
+
+Review:
+
+GET /api/health
+
+Health should distinguish between:
+
+APPLICATION RUNNING
+
+and
+
+SYSTEM READY
+
+where appropriate.
+
+Consider separate checks for:
+
+- API process
+- database connectivity
+- migration state
+- required configuration
+- provider configuration
+
+Do not make health checks perform expensive operations.
+
+==================================================
+18. STARTUP VALIDATION
+==================================================
+
+Production startup must fail closed if required configuration is absent.
+
+Verify:
+
+- PostgreSQL URL
+- production authentication configuration
+- operator/auth configuration
+- policy secret
+- required provider configuration
+- required environment values
+
+No insecure defaults.
+
+No:
+
+"if missing, use demo secret"
+
+No:
+
+"if database unavailable, silently use SQLite"
+
+No:
+
+"if auth unavailable, permit demo identity"
+
+Demo mode must be explicitly selected.
+
+==================================================
+19. CONFIGURATION SEPARATION
+==================================================
+
+Clearly distinguish:
+
+DEMO
+LOCAL
+TEST
+PRODUCTION
+
+Production should have:
+
+- explicit database
+- explicit identity
+- explicit secrets
+- explicit provider
+- explicit CORS
+- explicit logging configuration
+
+Demo should remain frictionless.
+
+Never let demo defaults accidentally become production defaults.
+
+==================================================
+20. DOCKER HARDENING
+==================================================
+
+Review the production Dockerfile.
+
+Harden where practical:
+
+- non-root runtime user
+- minimal packages
+- no unnecessary build tools
+- predictable environment
+- healthcheck
+- correct file permissions
+- no secrets baked into image
+- no development server configuration
+
+Do not over-engineer the container.
+
+The goal is a secure production baseline.
+
+==================================================
+21. CORS
+==================================================
+
+Review CORS configuration.
+
+Production should default to same-origin/no arbitrary cross-origin access unless explicitly configured.
+
+Never use:
+
+allow_origins=["*"]
+
+with credentials or sensitive control APIs.
+
+Configuration should be explicit.
+
+Add tests for:
+
+- allowed origin
+- disallowed origin
+- production defaults
+
+==================================================
+22. AUDIT / EVENT SCOPING
+==================================================
+
+Review audit/event read paths.
+
+Verify that tenant and organisation filters are applied correctly.
+
+A request for:
+
+organisation A
+
+must never return:
+
+organisation B
+
+events.
+
+Likewise:
+
+tenant A
+
+must never return:
+
+tenant B
+
+audit events.
+
+Do not rely solely on frontend filtering.
+
+The backend query itself must be scoped.
+
+Audit integrity verification must still work.
+
+Do not weaken the append-only hash chain.
+
+==================================================
+23. AUDIT CRASH BOUNDARIES
+==================================================
+
+Review crash consistency between:
+
+business state
+ledger state
+operation state
+audit state
+
+Identify any boundary where:
+
+ledger committed
+but audit event missing
+
+or:
+
+operation state committed
+but event missing
+
+or:
+
+audit recorded
+but business transaction failed
+
+Where true atomicity is impossible across subsystems, document the reconciliation strategy.
+
+Do not pretend distributed atomicity exists if it does not.
+
+The correct solution may be:
+
+durable event/outbox
+reconciliation
+explicit incomplete state
+
+rather than fake two-phase commit.
+
+==================================================
+24. EVENT / OUTBOX REVIEW
+==================================================
+
+Determine whether important domain events can be lost between:
+
+database transaction
+and
+event publication.
+
+If the current system is vulnerable, design a minimal durable outbox/event publication mechanism.
+
+Do not build a giant event bus.
+
+The goal is reliable operational chronology.
+
+==================================================
+25. CONCURRENCY REVIEW
+==================================================
+
+Run adversarial tests for:
+
+- simultaneous mission creation
+- simultaneous ledger writes
+- simultaneous reconciliation
+- simultaneous operation reads/writes
+- concurrent token consumption
+- concurrent pause/resume
+- concurrent organisation operations
+
+Verify that database constraints and transaction semantics remain authoritative.
+
+No race should allow:
+
+- double spend
+- double settlement
+- double refund
+- double token consumption
+- unauthorized execution
+
+==================================================
+26. MULTI-WORKER SAFETY
+==================================================
+
+Assume Kalyx eventually runs with multiple API workers/processes.
+
+Look for state stored in process memory:
+
+- agent state
+- token state
+- idempotency
+- operation state
+- caches
+- locks
+
+Determine whether each is:
+
+SAFE
+or
+PROCESS-LOCAL ONLY
+
+Process-local state must not be relied upon for financial/security correctness.
+
+Where appropriate, move authoritative state into the database.
+
+==================================================
+27. AGENT STATE CONSISTENCY
+==================================================
+
+Review orchestration.
+
+The execution-time state of an agent must not depend on stale in-memory objects when authoritative database state exists.
+
+Before consequential operations, verify relevant authoritative state such as:
+
+- agent status
+- authority
+- capabilities
+- organisation
+- budget/resource constraints
+
+Do not allow a stale in-memory ACTIVE agent to execute after it has been suspended.
+
+==================================================
+28. TREASURY AUTHORITY
+==================================================
+
+Verify that mutable convenience fields such as:
+
+treasury_balance
+
+are not treated as the source of truth if the ledger is authoritative.
+
+The ledger must determine economic truth.
+
+If a cached balance exists, it must be:
+
+- derived
+- validated
+- safely updated
+- never authoritative over the ledger
+
+Add consistency tests where appropriate.
+
+==================================================
+29. BACKUP / RECOVERY
+==================================================
+
+Document the production recovery model.
+
+At minimum define:
+
+- PostgreSQL backup strategy
+- restore procedure
+- migration recovery
+- audit chain preservation
+- ledger preservation
+- operation state preservation
+- reconciliation after database restore
+
+If actual automated backup infrastructure is outside the repository, document the required operational procedure rather than pretending it exists.
+
+==================================================
+30. DISASTER RECOVERY TEST
+==================================================
+
+Create a repeatable test/drill that demonstrates:
+
+1. mission exists
+2. treasury has resources
+3. consequential operation exists
+4. application restarts
+5. database remains authoritative
+6. operation state is recovered
+7. UNKNOWN state remains UNKNOWN where appropriate
+8. reconciliation remains possible
+9. audit remains verifiable
+
+Do not rely only on unit tests.
+
+==================================================
+31. FRONTEND OPERATIONAL INTEGRATION
+==================================================
+
+The Command Centre frontend is already implemented.
+
+Do not redesign it.
+
+Only make changes where Phase 11 backend operational capabilities require them.
+
+Verify:
+
+Overview
+Missions
+Organisation
+Treasury
+Policies
+Operations
+Audit
+Experiments
+Settings
+
+continue to work against the hardened backend.
+
+Especially verify:
+
+- authentication errors
+- forbidden states
+- UNKNOWN operation
+- reconciliation
+- audit integrity errors
+- database unavailable state
+- engine health
+- rate limit responses
+
+The frontend must never bypass backend security.
+
+==================================================
+32. EXPERIMENT SAFETY
+==================================================
+
+The Experiments page executes actual empirical simulations.
+
+Ensure experiment execution cannot:
+
+- spend real treasury funds
+- execute consequential providers
+- alter production organisation state
+- bypass policy
+- mutate agent reputation unexpectedly
+
+Experiments must remain isolated simulation workloads.
+
+If necessary, explicitly enforce simulation boundaries.
+
+==================================================
+33. DEMO SAFETY
+==================================================
+
+The deterministic demo must remain clearly separated from production operations.
+
+Verify that Demo Mode cannot accidentally:
+
+- use real credentials
+- use a real external provider
+- spend real funds
+- modify another tenant
+- bypass production identity
+- bypass policy
+- disable audit
+
+Demo should exercise the same architectural control plane while using safe deterministic infrastructure.
+
+==================================================
+34. TEST REQUIREMENTS
+==================================================
+
+Do not finish Phase 11 with only manual inspection.
+
+Add/extend tests for:
+
+DATABASE
+- PostgreSQL persistence
+- SQLite persistence
+- migrations
+- restart
+- transaction rollback
+
+IDENTITY
+- unauthenticated
+- invalid identity
+- valid identity
+- membership
+- role permissions
+
+TENANCY
+- cross-tenant read
+- cross-tenant write
+- cross-org access
+- audit isolation
+- event isolation
+
+SECURITY
+- request limits
+- CORS
+- secret leakage
+- error leakage
+- rate limiting
+
+CONCURRENCY
+- simultaneous writes
+- simultaneous reconciliation
+- token consumption
+- ledger operations
+
+OPERATIONS
+- UNKNOWN recovery
+- restart
+- reconciliation
+- no blind retry
+- exact settlement
+
+AUDIT
+- chain integrity
+- crash boundaries
+- scoped reads
+
+CONFIGURATION
+- production fails without required config
+- production cannot fall back to SQLite
+- demo remains functional
+
+==================================================
+35. FULL REGRESSION REQUIREMENT
+==================================================
+
+At the end run:
+
+python -m pytest -q
+
+Also run:
+
+SQLite suite
+PostgreSQL suite
+integration suite
+security/adversarial suite
+
+Build the production Docker image.
+
+Run the production container.
+
+Verify health.
+
+Do not disable tests to achieve green.
+
+==================================================
+36. DEFINITION OF DONE
+==================================================
+
+Phase 11 is COMPLETE only when:
+
+[ ] Production uses PostgreSQL.
+[ ] No production path silently falls back to SQLite.
+[ ] Production authentication fails closed.
+[ ] Tenant isolation is enforced server-side.
+[ ] Organisation authorization is enforced server-side.
+[ ] Durable token/idempotency state survives restart.
+[ ] Consequential operations remain safe across restart.
+[ ] UNKNOWN operations remain reconcilable.
+[ ] Blind retry remains impossible.
+[ ] Ledger remains authoritative.
+[ ] Audit integrity remains authoritative.
+[ ] Audit/event reads are correctly scoped.
+[ ] API request limits exist.
+[ ] Rate limiting exists where appropriate.
+[ ] Production CORS is safe.
+[ ] Error responses do not leak internals.
+[ ] Secrets are not exposed.
+[ ] Production startup rejects insecure configuration.
+[ ] Docker runtime is hardened.
+[ ] Multi-worker correctness is reviewed.
+[ ] Agent execution uses authoritative state.
+[ ] Observability is sufficient to trace missions/operations.
+[ ] Recovery procedure is documented.
+[ ] Recovery drill passes.
+[ ] Frontend remains fully functional.
+[ ] SQLite tests pass.
+[ ] PostgreSQL tests pass.
+[ ] Security/adversarial tests pass.
+[ ] Full regression suite passes.
+[ ] CI remains green.
+
+==================================================
+37. IMPORTANT SCOPE CONTROL
+==================================================
+
+DO NOT implement:
+
+- real-money custody
+- production trading
+- arbitrary wallet control
+- uncontrolled external APIs
+- autonomous financial speculation
+- new AI agents
+- new economic mechanisms
+- tokenomics
+- social features
+- unnecessary blockchain features
+
+Those belong to later phases.
+
+This phase is about making the existing architecture operationally trustworthy.
+
+==================================================
+38. FINAL VERIFICATION REPORT
+==================================================
+
+At the end provide:
+
+PHASE 11 STATUS:
+PASS / PASS WITH DEFERRED HARDENING / FAIL
+
+Then report:
+
+1. Files changed.
+2. Database changes.
+3. Authentication changes.
+4. Authorization changes.
+5. Security changes.
+6. Observability changes.
+7. Recovery changes.
+8. Docker/deployment changes.
+9. Tests added.
+10. Tests executed.
+11. SQLite result.
+12. PostgreSQL result.
+13. Full regression result.
+14. CI result.
+15. Remaining deferred risks.
+16. Any known production limitations.
+
+Do not claim production readiness if significant security or correctness gaps remain.
+
+If a requirement cannot safely be completed, report:
+
+BLOCKER
+ROOT CAUSE
+IMPACT
+SAFE NEXT STEP
+
+Do not hide the limitation.
+
+START PHASE 11 NOW.
+
+First inspect the current repository and compare the actual implementation against this Phase 11 definition of done.
+
+Then implement the hardening incrementally.
+
+Preserve all existing Phase 1–10 behaviour and security guarantees.
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-09-15T12:22:16+01:00.
+</ADDITIONAL_METADATA>
