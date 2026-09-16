@@ -173,18 +173,20 @@ def test_closed_loop_orbio_usage_independent_outcome_changes_next_allocation():
         )
         assert inf_receipt.outcome == ExternalProviderOutcome.SUCCESS
 
-        # Independent Kalyx outcome: extreme success for researcher, extreme failure for strategist.
-        # Provider telemetry is NOT used as the performance input.
+        # Independent Kalyx outcome (provider telemetry is NOT the performance input).
+        # Divergence must be large enough to change Mission B shares, but must NOT
+        # drive either agent into SUSPENDED/RETIRED (composite < 30 / < 15), because
+        # ResourceAllocator excludes those statuses from PERFORMANCE allocations.
         ReputationEngine.evaluate_agent_performance(
             agent=researcher,
             repo=repo,
             tenant_id="tenant-14a",
             organisation_id="org-14a",
-            tasks_delta_completed=20,
+            tasks_delta_completed=8,
             tasks_delta_failed=0,
             resources_allocated=research_alloc_a,
             resources_consumed=max(1, proposal.requested_credits),
-            value_produced=200.0,
+            value_produced=80.0,
             trigger_event="MISSION_A_INDEPENDENT_OUTCOME",
         )
         ReputationEngine.evaluate_agent_performance(
@@ -193,12 +195,16 @@ def test_closed_loop_orbio_usage_independent_outcome_changes_next_allocation():
             tenant_id="tenant-14a",
             organisation_id="org-14a",
             tasks_delta_completed=0,
-            tasks_delta_failed=20,
+            tasks_delta_failed=2,
             resources_allocated=strategy_alloc_a,
             resources_consumed=strategy_alloc_a,
             value_produced=0.0,
             trigger_event="MISSION_A_STRATEGIST_STAGNANT",
         )
+
+        # Both agents must remain allocation-eligible after independent outcomes.
+        assert strategist.status not in (AgentStatus.SUSPENDED, AgentStatus.RETIRED)
+        assert researcher.status not in (AgentStatus.SUSPENDED, AgentStatus.RETIRED)
 
         records_b = {r.agent_id: r for r in repo.list_performance_records("tenant-14a", "org-14a")}
         assert records_b[researcher.id].composite_score > records_b[strategist.id].composite_score
@@ -209,6 +215,8 @@ def test_closed_loop_orbio_usage_independent_outcome_changes_next_allocation():
             mission_id="mission-b",
             performance_records=records_b,
         )
+        assert researcher.id in alloc_b.allocations
+        assert strategist.id in alloc_b.allocations
         research_alloc_b = alloc_b.allocations[researcher.id]
         strategy_alloc_b = alloc_b.allocations[strategist.id]
 
