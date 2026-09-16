@@ -15,6 +15,9 @@ dependencies = [
     "fastapi>=0.115,<1",
     "uvicorn[standard]>=0.30,<1",
     "cryptography>=43,<47",
+    # Phase 12 blockchain settlement boundary (imported by src/settlement/blockchain/*)
+    "eth-account>=0.13,<0.14",
+    "web3>=7,<8",
 ]
 
 [project.optional-dependencies]

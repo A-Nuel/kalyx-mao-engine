@@ -1,4 +1,4 @@
-﻿-- Migration 004: Audit events tenant and organisation scoping
+-- Migration 004: Audit events tenant and organisation scoping
 BEGIN;
 
 ALTER TABLE audit_events ADD COLUMN IF NOT EXISTS tenant_id TEXT NOT NULL DEFAULT 'tenant-demo';
