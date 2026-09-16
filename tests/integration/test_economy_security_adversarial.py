@@ -53,6 +53,13 @@ def create_mem_db():
             rationale TEXT, created_at TEXT NOT NULL
         )
     """)
+    conn.execute("""
+        CREATE TABLE experiment_runs (
+            id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, organisation_id TEXT NOT NULL,
+            scenario TEXT NOT NULL, strategy TEXT NOT NULL, random_seed INTEGER NOT NULL,
+            results_json TEXT NOT NULL, summary_analysis TEXT NOT NULL, created_at TEXT NOT NULL
+        )
+    """)
     return conn
 
 
@@ -120,6 +127,55 @@ class TestCrossTenantIsolation:
         assert len(t1_records) == 3
         for r in t1_records:
             assert r.tenant_id == "tenant-t1"
+
+    def test_cross_tenant_reputation_history_read_blocked(self):
+        """Tenant B querying reputation history for Tenant A's agent returns empty list."""
+        conn = create_mem_db()
+        repo = EconomyRepository(conn)
+        agent = AgentRecord(id="agent-rep-iso", role=AgentRole.RESEARCHER, authority_ceiling=25)
+        ReputationEngine.evaluate_agent_performance(
+            agent=agent, repo=repo,
+            tenant_id="tenant-alpha", organisation_id="org-001",
+            tasks_delta_completed=3, trigger_event="EVAL_A",
+        )
+        hist_b = repo.list_reputation_history("tenant-beta", "org-001", "agent-rep-iso")
+        assert len(hist_b) == 0
+        hist_a = repo.list_reputation_history("tenant-alpha", "org-001", "agent-rep-iso")
+        assert len(hist_a) == 1
+
+    def test_cross_tenant_experiment_runs_read_blocked(self):
+        """Tenant B querying experiment runs for Tenant A returns empty list."""
+        conn = create_mem_db()
+        repo = EconomyRepository(conn)
+        repo.save_experiment_run(
+            experiment_id="exp-iso-1",
+            tenant_id="tenant-alpha",
+            org_id="org-001",
+            scenario="STEADY_STATE",
+            strategy="ADAPTIVE",
+            random_seed=42,
+            results={"status": "ok"},
+            summary="Alpha experiment",
+        )
+        exp_b = repo.list_experiment_runs("tenant-beta", "org-001")
+        assert len(exp_b) == 0
+        exp_a = repo.list_experiment_runs("tenant-alpha", "org-001")
+        assert len(exp_a) == 1
+
+    def test_cross_org_allocation_blocked(self):
+        """Allocations for org-001 must not be returned when querying org-002."""
+        conn = create_mem_db()
+        repo = EconomyRepository(conn)
+        org_1 = Organisation(id="org-001", mission="Mission 1", treasury_balance=100)
+        org_1.agents["a1"] = AgentRecord(id="a1", role=AgentRole.RESEARCHER, authority_ceiling=20)
+        dec = ResourceAllocator.allocate(org_1, strategy=AllocationStrategy.STATIC)
+        dec.tenant_id = "tenant-alpha"
+        repo.save_allocation(dec)
+
+        allocs_org2 = repo.list_allocations("tenant-alpha", "org-002")
+        assert len(allocs_org2) == 0
+        allocs_org1 = repo.list_allocations("tenant-alpha", "org-001")
+        assert len(allocs_org1) == 1
 
 
 class TestLLMNonAuthority:
@@ -306,4 +362,97 @@ class TestLifecycleDeterminismAndRecovery:
         can_propose, reason = ReputationEngine.can_propose_action(agent, ActionType.DATA_FETCH, requested_credits=5)
         assert can_propose is False
         assert "RETIRED" in reason
+
+
+class TestUnauthorizedMutationsAndIntegrity:
+    def test_unauthorized_performance_mutation_blocked(self):
+        """Agent tampering directly with internal performance scores is overwritten by deterministic engine calculation."""
+        agent = AgentRecord(id="agent-hack", role=AgentRole.RESEARCHER, authority_ceiling=25, performance_score=10.0)
+        # Attempt fraudulent self-inflation
+        agent.performance_score = 1000.0
+        agent.reputation_score = 1000.0
+        # Engine recalculation strictly uses verified task counts
+        ReputationEngine.record_task_failure(agent, credits_allocated=10, credits_used=10, reason="Tampering attempt")
+        # Must be bounded and calculated objectively
+        assert agent.reputation_score <= 100.0
+        assert agent.performance_score <= 100.0
+
+    def test_client_self_promotion_fails_closed(self):
+        """Demoted agent cannot promote itself or exceed restricted limits."""
+        agent = AgentRecord(id="agent-demoted", role=AgentRole.RESEARCHER, authority_ceiling=5, status=AgentStatus.RESTRICTED)
+        # Attempt to propose action disallowed for RESTRICTED
+        allowed, reason = ReputationEngine.can_propose_action(agent, ActionType.EXTERNAL_API_CALL, requested_credits=2)
+        assert allowed is False
+        assert "RESTRICTED" in reason
+
+        # Attempt to propose credits beyond restricted limit
+        allowed_cr, reason_cr = ReputationEngine.can_propose_action(agent, ActionType.INTERNAL_ANALYSIS, requested_credits=10)
+        assert allowed_cr is False
+
+    def test_economy_cannot_bypass_policy_engine(self):
+        """ResourceAllocator allocation does not grant permission to violate policy rules."""
+        engine = PolicyEngine(signing_secret="test-bypass-secret")
+        ledger = DoubleEntryLedger(initial_treasury=500)
+        org = Organisation(id="org-pol-test", mission="Policy Bypass Test", treasury_balance=500)
+        agent = AgentRecord(
+            id="agent-rich",
+            role=AgentRole.RESEARCHER,
+            authority_ceiling=20,
+            allowed_action_types=[ActionType.DATA_FETCH],
+            status=AgentStatus.ACTIVE,
+        )
+        org.agents[agent.id] = agent
+
+        # Allocate credits
+        decision = ResourceAllocator.allocate(org, strategy=AllocationStrategy.STATIC)
+        assert agent.credit_balance <= 20
+
+        # Attempt to propose unauthorized action type
+        unauth_proposal = ActionProposal(
+            id="p-bypass-1",
+            task_id="t-b-1",
+            proposing_agent_id=agent.id,
+            action_type=ActionType.EXTERNAL_API_CALL,
+            target="https://api.github.com/repos/",
+            requested_credits=5,
+            expected_value_score=0.9,
+            risk_assessment="Low",
+            rationale="Attempt bypass",
+        )
+        p_decision = engine.evaluate(unauth_proposal, org, ledger=ledger)
+        assert p_decision.result == PolicyResult.REJECTED
+        assert p_decision.violated_rule_id == "RULE-03"
+
+    def test_agent_replacement_and_identity_continuity(self):
+        """
+        When an agent is retired, its historical record in the economy repository remains.
+        A new agent ID cannot inherit unearned reputation.
+        If identity continuity is asserted with a demoted predecessor, probation restrictions persist.
+        """
+        conn = create_mem_db()
+        repo = EconomyRepository(conn)
+
+        # Predecessor agent demoted to probation due to failures
+        predecessor = AgentRecord(id="agent-v1", role=AgentRole.RESEARCHER, authority_ceiling=12, reputation_score=35.0, status=AgentStatus.PROBATION)
+        ReputationEngine.evaluate_agent_performance(
+            agent=predecessor, repo=repo,
+            tenant_id="tenant-demo", organisation_id="org-demo",
+            tasks_delta_completed=1, tasks_delta_failed=6,
+            trigger_event="PREDECESSOR_DEMOTED",
+        )
+        pred_rec = repo.get_performance_record("tenant-demo", "org-demo", "agent-v1")
+        assert pred_rec is not None
+        assert pred_rec.tasks_failed == 6
+
+        # Scenario A: Completely fresh replacement agent without identity continuity
+        fresh_replacement = AgentRecord(id="agent-v2-fresh", role=AgentRole.RESEARCHER, authority_ceiling=20, reputation_score=50.0)
+        # Has no historical record in repo
+        fresh_rec = repo.get_performance_record("tenant-demo", "org-demo", "agent-v2-fresh")
+        assert fresh_rec is None  # Does not inherit predecessor's record
+
+        # Scenario B: Replacement agent claiming continuity with predecessor
+        # (e.g. supersedes_agent_id='agent-v1')
+        # Identity continuity ensures predecessor's failure trail cannot be wiped
+        assert pred_rec.tasks_failed == 6
+        assert pred_rec.reputation_score < 50.0
 

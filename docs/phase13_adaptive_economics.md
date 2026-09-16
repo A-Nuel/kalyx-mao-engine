@@ -123,7 +123,10 @@ ACTIVE ⟷ PROBATION ⟷ RESTRICTED ⟷ SUSPENDED ⟶ RETIRED
 Reputation is durable and cryptographically bound to verified audit outcomes:
 - **Evidence Hashes**: Every score delta is stored in `reputation_history` with an immutable SHA-256 evidence hash linking the triggering verification receipt or audit event.
 - **No Self-Modification**: LLM agents cannot propose or modify reputation scores; updates occur strictly via `ReputationEngine.evaluate_agent_performance()`.
-- **Identity Retention**: In the event of agent replacement, reputation stays with the retired agent identity and does not transfer to new agents.
+- **Identity Retention & Agent Replacement Policy**:
+  - When an agent is retired, its historical reputation, composite scores, and audit trail remain immutable and permanently recorded in `agent_performance_records` and `reputation_history`.
+  - Replacing an agent ID cannot trivially erase historical reputation if identity continuity is claimed. If a new agent identity claims continuity with a predecessor (e.g. via supersession metadata or role continuity), prior probation flags, risk scores, and policy violation history are deterministically preserved.
+  - If a completely fresh agent is provisioned without continuity, it starts with baseline probation/untested standing (default starting reputation, zero historical credits, initial restricted ceiling); it never inherits unearned high reputation.
 
 ---
 
@@ -136,7 +139,7 @@ To test the Phase 13 thesis without cherry-picking, Kalyx includes a determinist
 - **Scenarios**:
   1. `STEADY_STATE`: Stable baseline environment with predictable outcomes.
   2. `HIGH_RISK_MARKET`: Volatile environment with elevated failure probabilities and market turbulence.
-  3. `TREASURY_SHOCK`: Constrained starting capital testing organizational survival and efficiency under scarcity.
+  3. `TREASURY_SHOCK`: Constrained starting capital testing organizational solvency and efficiency under scarcity.
 - **Honest Empirical Reporting**: The benchmark does not presuppose that `ADAPTIVE` is always superior. If `STATIC` or `PERFORMANCE` achieves higher solvency or lower cost in specific scenarios, that result is faithfully reported.
 
 ---

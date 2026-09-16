@@ -52,6 +52,12 @@ class TestPhase13ClosedLoop:
         )
         assert result_a["state"] == "COMPLETED"
         org_id = result_a["organisation_id"]
+        assert result_a["receipt"] is not None
+        assert result_a["receipt"]["cost_credits"] == 20
+
+        finance_id = f"{org_id}-agent-finance"
+        alloc_a_finance = result_a["allocations"][finance_id]
+        assert alloc_a_finance == 25
 
         db = create_database()
         try:
@@ -92,6 +98,80 @@ class TestPhase13ClosedLoop:
             # Check allocations table recorded decisions for both missions
             allocations = repo.list_allocations(tenant_id, org_id)
             assert len(allocations) >= 2, "Must record distinct allocation decisions for both missions"
+
+            # Verify that Mission B allocation for finance was recalculated based on Mission A
+            alloc_b_finance = result_b["allocations"][finance_id]
+            assert alloc_b_finance < alloc_a_finance, (
+                f"Mission B allocation ({alloc_b_finance}) must reflect Mission A spend and updated score"
+            )
+            # Verify Mission B execution receipt strictly consumed the recalculated allocation
+            assert result_b["receipt"] is not None
+            assert result_b["receipt"]["cost_credits"] == alloc_b_finance, (
+                f"Mission B consumption ({result_b['receipt']['cost_credits']}) must strictly match recalculated allocation ({alloc_b_finance})"
+            )
+            assert result_b["receipt"]["cost_credits"] < result_a["receipt"]["cost_credits"], (
+                "Mission B must consume strictly less than Mission A, proving allocation directly bounds execution"
+            )
+        finally:
+            db.close()
+
+    def test_closed_loop_performance_degradation_curtails_subsequent_allocation_and_spending(self):
+        """
+        Adversarially proves that poor performance / policy violations in Mission A
+        deterministically depress an agent's allocation and cap its consumption in Mission B.
+        """
+        tenant_id = "tenant-penalty-loop"
+
+        # 1. Run baseline Mission A
+        result_a = run_mission(
+            mission="Baseline Market Inspection",
+            budget=100,
+            live=False,
+            tenant_id=tenant_id,
+        )
+        org_id = result_a["organisation_id"]
+        finance_id = f"{org_id}-agent-finance"
+
+        db = create_database()
+        try:
+            repo = EconomyRepository(db.conn)
+            # Simulate degraded performance on finance agent post-Mission A
+            perf_rec = repo.get_performance_record(tenant_id, org_id, finance_id)
+            assert perf_rec is not None
+            perf_rec.tasks_failed += 5
+            perf_rec.policy_violations += 3
+            perf_rec.compute_scores()
+            repo.save_performance_record(perf_rec)
+
+            # Load organisation and apply probation
+            agent_row = db.conn.execute("SELECT * FROM agents WHERE id = ?", (finance_id,)).fetchone()
+            assert agent_row is not None
+            db.conn.execute(
+                "UPDATE agents SET status = ?, reputation_score = ? WHERE id = ?",
+                ("PROBATION", 45.0, finance_id)
+            )
+            db.conn.commit()
+
+            # 2. Run Mission B with degraded performance record
+            result_b = run_mission(
+                mission="Constrained Operations Post Penalty",
+                budget=100,
+                live=False,
+                tenant_id=tenant_id,
+                organisation_id=org_id,
+            )
+            assert result_b["state"] == "COMPLETED"
+
+            # Verify that degraded finance agent received sharply lower allocation in Mission B
+            alloc_b_finance = result_b["allocations"][finance_id]
+            # Probation cap is min(12, share), so allocation must be <= 12
+            assert alloc_b_finance <= 12, f"Probation agent allocation ({alloc_b_finance}) must be <= 12"
+
+            # Verify execution receipt in Mission B consumed within the depressed allocation
+            assert result_b["receipt"] is not None
+            assert result_b["receipt"]["cost_credits"] <= alloc_b_finance, (
+                f"Execution cost ({result_b['receipt']['cost_credits']}) must not exceed depressed allocation ({alloc_b_finance})"
+            )
         finally:
             db.close()
 
@@ -338,13 +418,28 @@ class TestMultiSeedReproducibilityAndCounterfactualFairness:
             agg = sr.aggregate_metrics
             assert agg.sample_size == 5
 
-            # Verify stats exist and are valid numbers
-            for metric in [agg.net_return, agg.throughput, agg.recovery_success_rate, agg.unnecessary_action_rate, agg.policy_violation_rate]:
+            # Verify all 7 required metrics exist and are valid numbers with 95% confidence intervals
+            required_metrics = [
+                agg.mission_success_rate,
+                agg.average_cost_per_mission,
+                agg.total_resources_consumed,
+                agg.value_per_credit,
+                agg.recovery_success_rate,
+                agg.unnecessary_action_rate,
+                agg.policy_violation_rate,
+                agg.net_return,
+                agg.throughput,
+            ]
+            for metric in required_metrics:
                 assert isinstance(metric.mean, (int, float))
                 assert isinstance(metric.std_dev, (int, float))
                 assert isinstance(metric.min, (int, float))
                 assert isinstance(metric.max, (int, float))
                 assert metric.min <= metric.max
+                assert metric.confidence_interval_95 is not None
+                assert isinstance(metric.confidence_interval_95, tuple)
+                assert len(metric.confidence_interval_95) == 2
+                assert metric.confidence_interval_95[0] <= metric.confidence_interval_95[1]
 
             assert 0.0 <= agg.solvency_rate <= 1.0
             assert sr.organisational_state in [

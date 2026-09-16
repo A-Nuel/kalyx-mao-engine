@@ -115,7 +115,8 @@ class ReputationEngine:
         if credits_used > 0:
             agent.resource_efficiency = round(max(0.1, agent.resource_efficiency * 0.85), 2)
 
-        agent.reputation_score = max(0.0, round(agent.reputation_score - cls.FAILURE_PENALTY, 2))
+        clamped_prev = max(0.0, min(100.0, agent.reputation_score))
+        agent.reputation_score = max(0.0, min(100.0, round(clamped_prev - cls.FAILURE_PENALTY, 2)))
 
         if perf_record is not None:
             perf_record.tasks_failed += 1
@@ -160,7 +161,8 @@ class ReputationEngine:
         agent.task_history.append(entry)
 
         prev_rep = agent.reputation_score
-        agent.reputation_score = max(0.0, round(agent.reputation_score - cls.POLICY_VIOLATION_PENALTY, 2))
+        clamped_prev = max(0.0, min(100.0, agent.reputation_score))
+        agent.reputation_score = max(0.0, min(100.0, round(clamped_prev - cls.POLICY_VIOLATION_PENALTY, 2)))
         agent.risk_score = min(100.0, round(agent.risk_score + 15.0, 2))
 
         if perf_record is not None:
@@ -277,6 +279,8 @@ class ReputationEngine:
 
         agent.reliability_score = reliability_score
         agent.performance_score = composite
+        agent.reputation_score = round(max(0.0, min(100.0, agent.reputation_score)), 2)
+        agent.risk_score = round(max(0.0, min(100.0, agent.risk_score)), 2)
 
         if perf_record is not None:
             perf_record.performance_score = round(perf_score, 2)

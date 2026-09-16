@@ -29,17 +29,27 @@ class MetricStats(BaseModel):
     std_dev: float
     min: float
     max: float
+    confidence_interval_95: Optional[Tuple[float, float]] = None
 
 class AggregateScenarioMetrics(BaseModel):
     sample_size: int
-    net_return: MetricStats
-    throughput: MetricStats
-    solvency_rate: float
-    survival_rate: float  # backward compatibility alias
-    recovery_success_rate: MetricStats
-    unnecessary_action_rate: MetricStats
-    policy_violation_rate: MetricStats
-    caveats: str = "Sample size >= 5 distinct seeds. Inputs deterministically randomized per seed; identical workload evaluated across strategies for counterfactual fairness."
+    mission_success_rate: MetricStats           # percentage [0-100]
+    average_cost_per_mission: MetricStats       # credits per completed mission
+    total_resources_consumed: MetricStats       # total credits spent across rounds
+    value_per_credit: MetricStats               # value delivered per credit spent
+    recovery_success_rate: MetricStats          # recovery after replans [0-1]
+    unnecessary_action_rate: MetricStats        # unnecessary spend ratio [0-1]
+    policy_violation_rate: MetricStats          # violations per task attempt [0-1]
+    net_return: MetricStats                     # value - spend
+    throughput: MetricStats                     # completion ratio [0-1]
+    solvency_rate: float                        # ratio of solvent runs [0-1]
+    survival_rate: float = 1.0                  # deprecated backward compatibility alias
+    caveats: str = (
+        "Sample size N>=5 distinct seeds. For small sample sizes (N=5), standard "
+        "error is relatively large and Student-t 95% confidence intervals (df=4, "
+        "t=2.776) reflect statistical uncertainty. Workload inputs deterministically "
+        "randomized per seed; identical workload evaluated across strategies for counterfactual fairness."
+    )
 
 class ScenarioResult(BaseModel):
     scenario: ScenarioType
@@ -121,8 +131,8 @@ class ComparativeExperimentReport(BaseModel):
                 if sample_strat and sample_strat.aggregate_metrics:
                     output_lines.append("\n#### Aggregate Multi-Seed Metrics (N>=5 Distinct Seeds)")
                     agg_header = (
-                        "| Strategy | Net Return (Mean±Std) | Throughput | Solvency Rate | Recovery Rate | Unnecessary Rate | Violation Rate |\n"
-                        "|:---|:---:|:---:|:---:|:---:|:---:|:---:|"
+                        "| Strategy | Success Rate (Mean±Std) [95% CI] | Cost / Mission | Total Consumed | Value / Credit | Recovery Rate | Unnecessary Rate | Violation Rate |\n"
+                        "|:---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|"
                     )
                     output_lines.append(agg_header)
                     for strat in [AllocationStrategy.STATIC, AllocationStrategy.PERFORMANCE, AllocationStrategy.ADAPTIVE]:
@@ -131,11 +141,12 @@ class ComparativeExperimentReport(BaseModel):
                         if not sr or not sr.aggregate_metrics:
                             continue
                         m = sr.aggregate_metrics
+                        ci_str = f"[{m.mission_success_rate.confidence_interval_95[0]:.1f}%, {m.mission_success_rate.confidence_interval_95[1]:.1f}%]" if m.mission_success_rate.confidence_interval_95 else ""
                         agg_row = (
-                            f"| {strat.value} | {m.net_return.mean:+.2f} ± {m.net_return.std_dev:.2f} | "
-                            f"{m.throughput.mean:.2f} | {m.solvency_rate * 100:.1f}% | "
-                            f"{m.recovery_success_rate.mean * 100:.1f}% | {m.unnecessary_action_rate.mean * 100:.1f}% | "
-                            f"{m.policy_violation_rate.mean * 100:.1f}% |"
+                            f"| {strat.value} | {m.mission_success_rate.mean:.1f}% +/- {m.mission_success_rate.std_dev:.1f}% {ci_str} | "
+                            f"{m.average_cost_per_mission.mean:.1f} cr | {m.total_resources_consumed.mean:.1f} cr | "
+                            f"{m.value_per_credit.mean:.2f} | {m.recovery_success_rate.mean * 100:.1f}% | "
+                            f"{m.unnecessary_action_rate.mean * 100:.1f}% | {m.policy_violation_rate.mean * 100:.1f}% |"
                         )
                         output_lines.append(agg_row)
                     output_lines.append(f"> Note: {sample_strat.aggregate_metrics.caveats}\n")
@@ -315,6 +326,10 @@ class EconomicExperiment:
 
         net_returns: List[float] = []
         throughputs: List[float] = []
+        mission_success_rates: List[float] = []
+        costs_per_mission: List[float] = []
+        resources_consumed_list: List[float] = []
+        values_per_credit: List[float] = []
         recovery_rates: List[float] = []
         unnecessary_rates: List[float] = []
         violation_rates: List[float] = []
@@ -327,6 +342,10 @@ class EconomicExperiment:
 
             nr = round(res.total_value_delivered - res.total_credits_spent, 3)
             tp = round(res.missions_completed / max(1, res.missions_attempted), 3)
+            msr = round((res.missions_completed / max(1, res.missions_attempted)) * 100.0, 2)
+            cpm = round(res.total_credits_spent / max(1, res.missions_completed), 2)
+            rc = float(res.total_credits_spent)
+            vpc = round(res.total_value_delivered / max(1, res.total_credits_spent), 3)
             solv = 1.0 if res.solvent else 0.0
             rec = 1.0 if res.replan_cycles == 0 else round(res.missions_completed / max(1, res.missions_attempted), 3)
             unnec = round(res.unnecessary_spend / max(1, res.total_credits_spent), 3)
@@ -335,6 +354,10 @@ class EconomicExperiment:
 
             net_returns.append(nr)
             throughputs.append(tp)
+            mission_success_rates.append(msr)
+            costs_per_mission.append(cpm)
+            resources_consumed_list.append(rc)
+            values_per_credit.append(vpc)
             solvencies.append(solv)
             recovery_rates.append(rec)
             unnecessary_rates.append(unnec)
@@ -342,6 +365,10 @@ class EconomicExperiment:
 
             seed_runs_data.append({
                 "seed": seed,
+                "mission_success_rate": msr,
+                "cost_per_mission": cpm,
+                "resources_consumed": rc,
+                "value_per_credit": vpc,
                 "net_return": nr,
                 "throughput": tp,
                 "solvent": res.solvent,
@@ -372,14 +399,22 @@ class EconomicExperiment:
 
         agg_metrics = AggregateScenarioMetrics(
             sample_size=len(seeds),
+            mission_success_rate=cls._calc_stats(mission_success_rates),
+            average_cost_per_mission=cls._calc_stats(costs_per_mission),
+            total_resources_consumed=cls._calc_stats(resources_consumed_list),
+            value_per_credit=cls._calc_stats(values_per_credit),
+            recovery_success_rate=cls._calc_stats(recovery_rates),
+            unnecessary_action_rate=cls._calc_stats(unnecessary_rates),
+            policy_violation_rate=cls._calc_stats(violation_rates),
             net_return=cls._calc_stats(net_returns),
             throughput=cls._calc_stats(throughputs),
             solvency_rate=round(solv_rate, 3),
             survival_rate=round(solv_rate, 3),
-            recovery_success_rate=cls._calc_stats(recovery_rates),
-            unnecessary_action_rate=cls._calc_stats(unnecessary_rates),
-            policy_violation_rate=cls._calc_stats(violation_rates),
-            caveats=f"N={len(seeds)} distinct seeds. Counterfactually fair workload inputs across STATIC, PERFORMANCE, ADAPTIVE."
+            caveats=(
+                f"N={len(seeds)} distinct seeds. Sample size is small for standard asymptotic normality; "
+                f"Student-t (df={len(seeds)-1}, t=2.776) 95% confidence intervals reflect increased estimation variance. "
+                "Workload inputs deterministically randomized per seed; identical workload evaluated across strategies for counterfactual fairness."
+            )
         )
 
         return ScenarioResult(
@@ -406,7 +441,7 @@ class EconomicExperiment:
     @classmethod
     def _calc_stats(cls, values: List[float]) -> MetricStats:
         if not values:
-            return MetricStats(mean=0.0, std_dev=0.0, min=0.0, max=0.0)
+            return MetricStats(mean=0.0, std_dev=0.0, min=0.0, max=0.0, confidence_interval_95=(0.0, 0.0))
         n = len(values)
         mean_val = sum(values) / n
         if n > 1:
@@ -414,11 +449,31 @@ class EconomicExperiment:
             std_dev = variance ** 0.5
         else:
             std_dev = 0.0
+
+        t_crit_table = {
+            1: 12.71,
+            2: 4.303,
+            3: 3.182,
+            4: 2.776,
+            5: 2.571,
+            6: 2.447,
+            7: 2.365,
+            8: 2.306,
+            9: 2.262,
+            10: 2.228,
+        }
+        df = max(1, n - 1)
+        t_crit = t_crit_table.get(df, 1.96)
+        se = std_dev / (n ** 0.5) if n > 0 else 0.0
+        ci_low = round(mean_val - t_crit * se, 3)
+        ci_high = round(mean_val + t_crit * se, 3)
+
         return MetricStats(
             mean=round(mean_val, 3),
             std_dev=round(std_dev, 3),
             min=round(min(values), 3),
-            max=round(max(values), 3)
+            max=round(max(values), 3),
+            confidence_interval_95=(ci_low, ci_high)
         )
 
     @classmethod
