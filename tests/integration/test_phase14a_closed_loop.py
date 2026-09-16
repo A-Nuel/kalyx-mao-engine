@@ -11,10 +11,9 @@ from src.domain.economy import AllocationStrategy
 from src.economy.allocator import ResourceAllocator
 from src.economy.ledger import DoubleEntryLedger
 from src.economy.reputation import ReputationEngine
-from src.external.models import ExternalProviderOutcome, InferenceRequest
+from src.external.models import ExternalProviderMode, ExternalProviderOutcome, InferenceRequest
 from src.external.orbio.adapter import OrbioAdapter
 from src.external.orbio.config import OrbioConfig
-from src.external.models import ExternalProviderMode
 from src.external.orbio.service import ExternalEconomyService
 from src.external.orbio.simulated_provider import SimulatedOrbioProvider
 from src.governance.policy_engine import PolicyEngine
@@ -61,7 +60,6 @@ def test_closed_loop_orbio_usage_independent_outcome_changes_next_allocation():
     """
     db = Database(":memory:")
     try:
-        # Ensure FK targets exist
         with db.conn:
             db.conn.execute(
                 "INSERT OR IGNORE INTO tenants (id, name, status, created_at) VALUES (?, ?, ?, datetime('now'))",
@@ -106,7 +104,6 @@ def test_closed_loop_orbio_usage_independent_outcome_changes_next_allocation():
         org.agents[researcher.id] = researcher
         org.agents[strategist.id] = strategist
 
-        # Baseline equal-ish performance scores
         for agent in org.agents.values():
             ReputationEngine.evaluate_agent_performance(
                 agent=agent,
@@ -115,9 +112,9 @@ def test_closed_loop_orbio_usage_independent_outcome_changes_next_allocation():
                 organisation_id="org-14a",
                 tasks_delta_completed=1,
                 tasks_delta_failed=0,
-                resources_allocated_delta=10,
-                resources_consumed_delta=5,
-                value_produced_delta=5.0,
+                resources_allocated=10,
+                resources_consumed=5,
+                value_produced=5.0,
                 trigger_event="BASELINE",
             )
 
@@ -131,9 +128,13 @@ def test_closed_loop_orbio_usage_independent_outcome_changes_next_allocation():
         assert alloc_a.total_allocated <= 100
         research_alloc_a = alloc_a.allocations[researcher.id]
 
-        # Authorize + execute external inference (Orbio simulated)
         provider = SimulatedOrbioProvider(initial_available="25.00")
-        cfg = OrbioConfig(mode=ExternalProviderMode.SIMULATED, mcp_url="https://www.orbio.so/api/mcp", gateway_base="https://www.orbio.so/api/v1", api_key=None)
+        cfg = OrbioConfig(
+            mode=ExternalProviderMode.SIMULATED,
+            mcp_url="https://www.orbio.so/api/mcp",
+            gateway_base="https://www.orbio.so/api/v1",
+            api_key=None,
+        )
         adapter = OrbioAdapter(config=cfg, simulated=provider)
         service = ExternalEconomyService(adapter)
 
@@ -167,8 +168,6 @@ def test_closed_loop_orbio_usage_independent_outcome_changes_next_allocation():
         )
         assert inf_receipt.outcome == ExternalProviderOutcome.SUCCESS
 
-        # Independent Kalyx outcome: task SUCCESS (not derived from Orbio telemetry)
-        # Improve researcher performance via Kalyx evaluation only
         ReputationEngine.evaluate_agent_performance(
             agent=researcher,
             repo=repo,
@@ -176,12 +175,11 @@ def test_closed_loop_orbio_usage_independent_outcome_changes_next_allocation():
             organisation_id="org-14a",
             tasks_delta_completed=3,
             tasks_delta_failed=0,
-            resources_allocated_delta=research_alloc_a,
-            resources_consumed_delta=proposal.requested_credits,
-            value_produced_delta=25.0,
+            resources_allocated=research_alloc_a,
+            resources_consumed=proposal.requested_credits,
+            value_produced=25.0,
             trigger_event="MISSION_A_INDEPENDENT_OUTCOME",
         )
-        # Strategist stagnates
         ReputationEngine.evaluate_agent_performance(
             agent=strategist,
             repo=repo,
@@ -189,16 +187,15 @@ def test_closed_loop_orbio_usage_independent_outcome_changes_next_allocation():
             organisation_id="org-14a",
             tasks_delta_completed=0,
             tasks_delta_failed=1,
-            resources_allocated_delta=alloc_a.allocations[strategist.id],
-            resources_consumed_delta=0,
-            value_produced_delta=0.0,
+            resources_allocated=alloc_a.allocations[strategist.id],
+            resources_consumed=0,
+            value_produced=0.0,
             trigger_event="MISSION_A_STRATEGIST_STAGNANT",
         )
 
         records_b = {r.agent_id: r for r in repo.list_performance_records("tenant-14a", "org-14a")}
         assert records_b[researcher.id].composite_score >= records_a[researcher.id].composite_score
 
-        # Mission B allocation must change based on updated performance
         alloc_b = ResourceAllocator.allocate(
             org,
             strategy=AllocationStrategy.PERFORMANCE,
@@ -208,13 +205,8 @@ def test_closed_loop_orbio_usage_independent_outcome_changes_next_allocation():
         research_alloc_b = alloc_b.allocations[researcher.id]
         strategy_alloc_b = alloc_b.allocations[strategist.id]
 
-        # Researcher should receive at least as much as strategist after improvement
         assert research_alloc_b >= strategy_alloc_b
-        # Allocation changed relative to equal baseline path
         assert research_alloc_b != strategy_alloc_b or research_alloc_b != research_alloc_a
-
-        # Prove Orbio telemetry alone did not write performance: no direct provider mutation path
-        # (provider has no reference to repo; scores only changed via ReputationEngine calls above)
         assert not hasattr(provider, "repo")
     finally:
         db.close()
@@ -242,7 +234,6 @@ def test_inference_success_with_task_failure_does_not_boost_performance():
             reputation_score=80.0,
             allowed_action_types=[ActionType.EXTERNAL_INFERENCE],
         )
-        # Baseline
         ReputationEngine.evaluate_agent_performance(
             agent=agent,
             repo=repo,
@@ -250,9 +241,9 @@ def test_inference_success_with_task_failure_does_not_boost_performance():
             organisation_id="org-14a-f",
             tasks_delta_completed=1,
             tasks_delta_failed=0,
-            resources_allocated_delta=10,
-            resources_consumed_delta=5,
-            value_produced_delta=10.0,
+            resources_allocated=10,
+            resources_consumed=5,
+            value_produced=10.0,
             trigger_event="BASE",
         )
         before = repo.get_performance_record("tenant-14a-f", "org-14a-f", agent.id)
@@ -270,7 +261,6 @@ def test_inference_success_with_task_failure_does_not_boost_performance():
                 simulated=provider,
             )
         )
-        # Provider succeeds
         receipt = service.run_authorized_inference(
             InferenceRequest(
                 tenant_id="tenant-14a-f",
@@ -285,7 +275,6 @@ def test_inference_success_with_task_failure_does_not_boost_performance():
         )
         assert receipt.outcome == ExternalProviderOutcome.SUCCESS
 
-        # Kalyx independently marks task failure with consumption and zero value
         ReputationEngine.evaluate_agent_performance(
             agent=agent,
             repo=repo,
@@ -293,15 +282,14 @@ def test_inference_success_with_task_failure_does_not_boost_performance():
             organisation_id="org-14a-f",
             tasks_delta_completed=0,
             tasks_delta_failed=1,
-            resources_allocated_delta=10,
-            resources_consumed_delta=8,
-            value_produced_delta=0.0,
+            resources_allocated=10,
+            resources_consumed=8,
+            value_produced=0.0,
             trigger_event="TASK_FAILED_AFTER_PROVIDER_SUCCESS",
         )
         after = repo.get_performance_record("tenant-14a-f", "org-14a-f", agent.id)
         assert after is not None
         assert after.tasks_failed >= before.tasks_failed + 1
-        # Efficiency / composite should not improve solely due to provider success
         assert after.composite_score <= before.composite_score + 0.01
     finally:
         db.close()
