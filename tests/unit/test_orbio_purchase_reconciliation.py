@@ -36,8 +36,15 @@ def _org() -> Organisation:
     return Organisation(id="org-a", mission="r", tenant_id="tenant-a", treasury_balance=100)
 
 
+def _to_unknown(op) -> None:
+    """Walk legal state machine to UNKNOWN (simulates timed-out submit)."""
+    op.transition_to(OperationState.AUTHORIZED)
+    op.transition_to(OperationState.ESCROWED)
+    op.transition_to(OperationState.SUBMITTED)
+    op.transition_to(OperationState.UNKNOWN, error_message="timeout")
+
+
 def _escrowed_unknown_op(provider: SimulatedOrbioExchangeProvider, background_success: bool = False):
-    """Create CREATED op, mark UNKNOWN after timed-out submit, with credits in ESCROW."""
     intent = _intent()
     bridge = OrbioPurchaseBridge()
     _, op = bridge.prepare_and_create_operation(intent, _org())
@@ -49,10 +56,7 @@ def _escrowed_unknown_op(provider: SimulatedOrbioExchangeProvider, background_su
 
     result = provider.execute(op)
     assert result.outcome == ProviderOutcome.TIMEOUT.value
-
-    # Simulate Phase 10: SUBMITTED → UNKNOWN, credits already escrowed
-    op.transition_to(OperationState.SUBMITTED)
-    op.transition_to(OperationState.UNKNOWN, error_message="timeout")
+    _to_unknown(op)
     return intent, op
 
 
@@ -101,20 +105,17 @@ def test_reconcile_idempotent_second_call_no_double_settle():
     o2 = svc.reconcile(op, intent, _org())
 
     assert o1.economic_action == "settled"
-    assert o2.economic_action == "none"  # already RECONCILED
+    assert o2.economic_action == "none"
     assert ledger.get_balance(EXTERNAL_SINK) == 5
 
 
 def test_reconcile_does_not_trust_status_success_with_wrong_intent():
-    """Provider SUCCESS for a different economic reality must not settle."""
     ledger = DoubleEntryLedger(initial_treasury=100)
     ledger.transfer(TREASURY, ESCROW, 5, memo="escrow for cop-rec-1", transaction_id="esc-4")
     provider = SimulatedOrbioExchangeProvider()
     intent, op = _escrowed_unknown_op(provider, background_success=True)
 
-    # Different intent hash (higher spend) than what was executed
     other = intent.model_copy(update={"usdg_in": 9_000_000, "min_credit_out": 8_000_000})
-    # Operation still has original purchase_intent_hash → hard error before status
     svc = OrbioPurchaseReconciliation(provider=provider, ledger=ledger)
     try:
         svc.reconcile(op, other, _org())
@@ -126,27 +127,19 @@ def test_reconcile_does_not_trust_status_success_with_wrong_intent():
 
 
 def test_reconcile_rejected_evidence_refunds_escrow():
-    """Force verification reject by clearing provider records after timeout with no settle."""
     ledger = DoubleEntryLedger(initial_treasury=100)
     ledger.transfer(TREASURY, ESCROW, 5, memo="escrow for cop-rec-1", transaction_id="esc-5")
     provider = SimulatedOrbioExchangeProvider()
     intent, op = _escrowed_unknown_op(provider, background_success=False)
 
-    # Inject a FAILURE status record with mismatched economics via failure rule path:
-    # execute a separate success then overwrite is hard; instead set failure on a fresh key.
-    # Here: seed failure record with wrong amounts by calling _settle_failure style via set_failure
-    # and re-using same key after clearing timeout — simplest path: force failure rule before status
     provider._timeout_keys.clear()
     provider.set_failure_rule(op.idempotency_key, "forced reject path")
-    # Execute again to materialize FAILURE record (idempotency may hit empty then fail)
-    # records empty for key if only timeout without background — execute again:
     provider._records.pop(op.idempotency_key, None)
-    provider.execute(op)  # should FAILURE now
+    provider.execute(op)
 
     svc = OrbioPurchaseReconciliation(provider=provider, ledger=ledger)
     outcome = svc.reconcile(op, intent, _org())
 
-    # FAILURE outcome without valid purchase evidence → REJECTED → refund
     assert outcome.economic_action == "refunded"
     assert outcome.operation.state == OperationState.RECONCILED
     assert ledger.get_balance(ESCROW) == 0
