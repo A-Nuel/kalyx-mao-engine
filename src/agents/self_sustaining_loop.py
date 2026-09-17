@@ -38,7 +38,7 @@ class MissionExecutionResult:
 class SelfSustainingLoopRunner:
     """
     Coordinates the complete self-sustaining economic loop:
-    
+
     Mission 1:
       1. Receive/Propose WorkOrder
       2. Resource check: Evaluate Orbio CREDITs
@@ -48,7 +48,7 @@ class SelfSustainingLoopRunner:
       6. Client settles bounty into REVENUE
       7. Reconcile costs and net surplus (SurplusReconciler)
       8. Record surplus allocation to next mission budget and reserve
-      
+
     Mission 2:
       - Funded STRICTLY from Mission 1 surplus budget allocation (zero external capital).
     """
@@ -111,7 +111,10 @@ class SelfSustainingLoopRunner:
 
             # Sizing USDG needed (converting native micro-units to whole USDG for ledger/budget comparison)
             usdg_needed_native = purchase_loop._usdg_for_credit_need(shortfall)
-            usdg_needed_whole = max(1, usdg_needed_native // 1_000_000)
+            # Ceil native 6-decimal USDG into whole USDG budget units. Floor division
+            # would understate a fractional-unit acquisition and could admit an
+            # unaffordable mission at the budget boundary.
+            usdg_needed_whole = max(1, (usdg_needed_native + 1_000_000 - 1) // 1_000_000)
 
             # Enforce self-funded budget limit if specified (e.g. Mission 2)
             if available_budget_limit is not None and usdg_needed_whole > available_budget_limit:
@@ -183,7 +186,7 @@ class SelfSustainingLoopRunner:
 
         # 4. Independent Deliverable Verification
         receipt = self.work_verifier.verify(work_order=work_order, deliverable=deliverable)
-        if not receipt.is_verified():
+        if not receipt.is_verified() or not receipt.verify_hmac(self.work_verifier.secret_key):
             work_order.transition_to(WorkOrderStatus.REJECTED)
             return MissionExecutionResult(
                 mission_id=mission_id,

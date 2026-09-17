@@ -13,7 +13,7 @@ from src.domain.work_order import (
 class WorkDeliverableVerifier:
     """
     Independent verification authority for WorkDeliverables.
-    
+
     Invariants:
     1. Verifies that content_hash precisely matches SHA-256 of canonical JSON payload.
     2. Validates schema and deliverable type match the WorkOrder.
@@ -25,8 +25,10 @@ class WorkDeliverableVerifier:
     def __init__(
         self,
         verifier_identity: str = "DeterministicClientVerifier",
-        secret_key: str = "kalyx-verifier-default-secret-key",
+        secret_key: str = "",
     ):
+        if not isinstance(secret_key, str) or not secret_key:
+            raise ValueError("secret_key is required for WorkDeliverableVerifier")
         self.verifier_identity = verifier_identity
         self.secret_key = secret_key
 
