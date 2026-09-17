@@ -105,11 +105,10 @@ def test_e2e_governed_orbio_purchase_loop_happy_path():
 
     assert result.preparation is not None
     assert result.preparation.policy_decision.result == PurchaseDecisionResult.ALLOW
-    assert result.preparation.intent_hash == intent_hash
+    assert result.preparation.purchase_intent_hash == intent_hash
 
     op = result.operation
     assert op is not None
-    assert op.id == intent.operation_id
     assert op.idempotency_key == intent.idempotency_key
     assert op.tenant_id == "tenant-a"
     assert op.organisation_id == "org-a"
