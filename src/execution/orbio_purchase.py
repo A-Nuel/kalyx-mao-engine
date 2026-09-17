@@ -12,15 +12,13 @@ ConsequentialExecutionManager + BlockchainSettlementProvider path.
 """
 from __future__ import annotations
 
-import hashlib
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Any, Dict, Optional
 
 from src.domain.blockchain import BlockchainTransactionIntent, OrbioPurchaseIntent
-from src.domain.entities import ActionProposal, ConsequentialOperation, Organisation, PolicyDecision
-from src.domain.enums import ActionType, OperationState, PolicyResult
+from src.domain.entities import ActionProposal, ConsequentialOperation, Organisation
+from src.domain.enums import ActionType, OperationState
 from src.domain.exceptions import PolicyViolationError, UnauthorizedActionError
 from src.governance.orbio_purchase_rules import (
     HumanPurchaseApproval,
@@ -118,8 +116,7 @@ class OrbioPurchaseBridge:
             "mission_id": purchase.mission_id,
             "authorization_token": purchase.authorization_token_hash,
             # Purchase semantics (audit / later event verification)
-            "purchase_intent_hash": purchase.compute_purchase_intent_hash()
-            ,
+            "purchase_intent_hash": purchase.compute_purchase_intent_hash(),
             "usdg_in": purchase.usdg_in,
             "min_credit_out": purchase.min_credit_out,
             "beneficiary": purchase.beneficiary,
