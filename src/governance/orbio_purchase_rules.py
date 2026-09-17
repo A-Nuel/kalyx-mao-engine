@@ -14,6 +14,7 @@ purchase intent hash so a modified intent cannot reuse an older approval.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -27,7 +28,10 @@ from src.domain.blockchain import (
     USDG_MAINNET,
     OrbioPurchaseIntent,
 )
+from src.domain.entities import ActionProposal, AgentRecord, Organisation
+from src.domain.enums import ActionType
 from src.domain.events import canonical_json
+from src.governance.rules import PolicyRule
 
 
 class PurchaseDecisionResult(str, Enum):
@@ -51,8 +55,67 @@ class PurchaseDenialCode(str, Enum):
     HUMAN_APPROVAL_INTENT_MISMATCH = "HUMAN_APPROVAL_INTENT_MISMATCH"
     HUMAN_APPROVAL_EXPIRED = "HUMAN_APPROVAL_EXPIRED"
     HUMAN_APPROVAL_TENANT_MISMATCH = "HUMAN_APPROVAL_TENANT_MISMATCH"
+    UNAUTHORIZED_HUMAN_APPROVAL = "UNAUTHORIZED_HUMAN_APPROVAL"
+    HUMAN_APPROVAL_REVOKED = "HUMAN_APPROVAL_REVOKED"
+    UNAUTHORIZED_DEPLOYMENT = "UNAUTHORIZED_DEPLOYMENT"
     POLICY_BINDING_MISMATCH = "POLICY_BINDING_MISMATCH"
     INVALID_INTENT = "INVALID_INTENT"
+
+
+@dataclass(frozen=True)
+class OrbioDeployment:
+    """Atomic binding of chain, network, exchange, payment, and credit token."""
+
+    chain_id: int
+    network: str
+    exchange_contract: str
+    payment_token: str
+    credit_token: str
+
+    def to_tuple(self) -> tuple[int, str, str, str, str]:
+        return (
+            self.chain_id,
+            self.network.lower(),
+            self.exchange_contract.lower(),
+            self.payment_token.lower(),
+            self.credit_token.lower(),
+        )
+
+
+DEPLOYMENT_ROBINHOOD_TESTNET = OrbioDeployment(
+    chain_id=46630,
+    network="robinhood-testnet",
+    exchange_contract=ORBIO_EXCHANGE_MAINNET,
+    payment_token=USDG_MAINNET,
+    credit_token=ORBIO_CREDIT_MAINNET,
+)
+DEPLOYMENT_ROBINHOOD_TESTNET_ALIAS = OrbioDeployment(
+    chain_id=46630,
+    network="robinhood",
+    exchange_contract=ORBIO_EXCHANGE_MAINNET,
+    payment_token=USDG_MAINNET,
+    credit_token=ORBIO_CREDIT_MAINNET,
+)
+DEPLOYMENT_ROBINHOOD_MAINNET = OrbioDeployment(
+    chain_id=4663,
+    network="robinhood-mainnet",
+    exchange_contract=ORBIO_EXCHANGE_MAINNET,
+    payment_token=USDG_MAINNET,
+    credit_token=ORBIO_CREDIT_MAINNET,
+)
+DEPLOYMENT_ROBINHOOD_MAINNET_ALIAS = OrbioDeployment(
+    chain_id=4663,
+    network="robinhood",
+    exchange_contract=ORBIO_EXCHANGE_MAINNET,
+    payment_token=USDG_MAINNET,
+    credit_token=ORBIO_CREDIT_MAINNET,
+)
+DEFAULT_DEPLOYMENTS = [
+    DEPLOYMENT_ROBINHOOD_TESTNET,
+    DEPLOYMENT_ROBINHOOD_TESTNET_ALIAS,
+    DEPLOYMENT_ROBINHOOD_MAINNET,
+    DEPLOYMENT_ROBINHOOD_MAINNET_ALIAS,
+]
 
 
 @dataclass(frozen=True)
@@ -105,6 +168,7 @@ class HumanPurchaseApproval:
     issued_at: float
     expires_at: float
     notes: Optional[str] = None
+    issuance_token: Optional[str] = None
 
     def is_valid_for(
         self,
@@ -143,6 +207,7 @@ class OrbioPurchasePolicy:
     def __init__(
         self,
         *,
+        deployments: Optional[List[OrbioDeployment]] = None,
         allowed_chain_ids: Optional[Set[int]] = None,
         allowed_networks: Optional[Set[str]] = None,
         allowed_exchange_contracts: Optional[Set[str]] = None,
@@ -158,21 +223,34 @@ class OrbioPurchasePolicy:
         max_gas_limit: int = 500_000,
         require_beneficiary_allowlist: bool = False,
         human_approval_ttl_seconds: float = 3600.0,
+        signing_secret: Optional[str] = None,
     ):
-        # Testnet-first defaults; mainnet 4663 may be added explicitly when ready.
-        self.allowed_chain_ids = allowed_chain_ids or {46630, 4663}
-        self.allowed_networks = {
-            n.lower() for n in (allowed_networks or {"robinhood-testnet", "robinhood", "robinhood-mainnet"})
-        }
-        self.allowed_exchange_contracts = {
-            a.lower() for a in (allowed_exchange_contracts or {ORBIO_EXCHANGE_MAINNET})
-        }
-        self.allowed_payment_tokens = {
-            a.lower() for a in (allowed_payment_tokens or {USDG_MAINNET})
-        }
-        self.allowed_credit_tokens = {
-            a.lower() for a in (allowed_credit_tokens or {ORBIO_CREDIT_MAINNET})
-        }
+        if deployments is not None:
+            self.deployments = list(deployments)
+        else:
+            self.deployments = list(DEFAULT_DEPLOYMENTS)
+            if allowed_chain_ids is not None:
+                self.deployments = [d for d in self.deployments if d.chain_id in allowed_chain_ids]
+            if allowed_networks is not None:
+                allowed_net_lower = {n.lower() for n in allowed_networks}
+                self.deployments = [d for d in self.deployments if d.network.lower() in allowed_net_lower]
+            if allowed_exchange_contracts is not None:
+                allowed_ex_lower = {a.lower() for a in allowed_exchange_contracts}
+                self.deployments = [d for d in self.deployments if d.exchange_contract.lower() in allowed_ex_lower]
+            if allowed_payment_tokens is not None:
+                allowed_pay_lower = {a.lower() for a in allowed_payment_tokens}
+                self.deployments = [d for d in self.deployments if d.payment_token.lower() in allowed_pay_lower]
+            if allowed_credit_tokens is not None:
+                allowed_cred_lower = {a.lower() for a in allowed_credit_tokens}
+                self.deployments = [d for d in self.deployments if d.credit_token.lower() in allowed_cred_lower]
+
+        self.allowed_deployment_tuples = {d.to_tuple() for d in self.deployments}
+        self.allowed_chain_ids = {d.chain_id for d in self.deployments} if allowed_chain_ids is None else set(allowed_chain_ids)
+        self.allowed_networks = {d.network.lower() for d in self.deployments} if allowed_networks is None else {n.lower() for n in allowed_networks}
+        self.allowed_exchange_contracts = {d.exchange_contract.lower() for d in self.deployments} if allowed_exchange_contracts is None else {a.lower() for a in allowed_exchange_contracts}
+        self.allowed_payment_tokens = {d.payment_token.lower() for d in self.deployments} if allowed_payment_tokens is None else {a.lower() for a in allowed_payment_tokens}
+        self.allowed_credit_tokens = {d.credit_token.lower() for d in self.deployments} if allowed_credit_tokens is None else {a.lower() for a in allowed_credit_tokens}
+
         self.allowed_beneficiaries = {
             a.lower() for a in allowed_beneficiaries
         } if allowed_beneficiaries else set()
@@ -189,12 +267,16 @@ class OrbioPurchasePolicy:
         self.max_gas_limit = max_gas_limit
         self.human_approval_ttl_seconds = human_approval_ttl_seconds
 
-        # intent_hash -> HumanPurchaseApproval
+        # Authoritative human approval state
+        self._secret = (signing_secret or str(uuid.uuid4())).encode("utf-8")
         self._approvals: Dict[str, HumanPurchaseApproval] = {}
+        self._issued_approvals: Dict[str, HumanPurchaseApproval] = {}
+        self._revoked_approval_ids: Set[str] = set()
 
     def get_policy_version(self) -> str:
         meta = {
             "policy_id": self.policy_id,
+            "deployments": sorted([d.to_tuple() for d in self.deployments]),
             "allowed_chain_ids": sorted(self.allowed_chain_ids),
             "allowed_networks": sorted(self.allowed_networks),
             "allowed_exchange_contracts": sorted(self.allowed_exchange_contracts),
@@ -215,6 +297,19 @@ class OrbioPurchasePolicy:
     # Human confirmation gate
     # ------------------------------------------------------------------
 
+    def _compute_issuance_token(
+        self,
+        approval_id: str,
+        intent_hash: str,
+        tenant_id: str,
+        organisation_id: str,
+        operator_id: str,
+        issued_at: float,
+        expires_at: float,
+    ) -> str:
+        payload = f"{approval_id}:{intent_hash}:{tenant_id}:{organisation_id}:{operator_id}:{issued_at}:{expires_at}"
+        return hmac.new(self._secret, payload.encode("utf-8"), hashlib.sha256).hexdigest()
+
     def issue_human_approval(
         self,
         intent: OrbioPurchaseIntent,
@@ -228,21 +323,49 @@ class OrbioPurchasePolicy:
         now = current_time if current_time is not None else time.time()
         ttl = ttl_seconds if ttl_seconds is not None else self.human_approval_ttl_seconds
         intent_hash = intent.compute_purchase_intent_hash()
-        approval = HumanPurchaseApproval(
-            approval_id=str(uuid.uuid4()),
+        approval_id = str(uuid.uuid4())
+        issued_at = now
+        expires_at = now + ttl
+        token = self._compute_issuance_token(
+            approval_id=approval_id,
             intent_hash=intent_hash,
             tenant_id=intent.tenant_id,
             organisation_id=intent.organisation_id,
             operator_id=operator_id,
-            issued_at=now,
-            expires_at=now + ttl,
+            issued_at=issued_at,
+            expires_at=expires_at,
+        )
+        approval = HumanPurchaseApproval(
+            approval_id=approval_id,
+            intent_hash=intent_hash,
+            tenant_id=intent.tenant_id,
+            organisation_id=intent.organisation_id,
+            operator_id=operator_id,
+            issued_at=issued_at,
+            expires_at=expires_at,
             notes=notes,
+            issuance_token=token,
         )
         self._approvals[intent_hash] = approval
+        self._issued_approvals[approval.approval_id] = approval
         return approval
 
-    def revoke_human_approval(self, intent_hash: str) -> bool:
-        return self._approvals.pop(intent_hash, None) is not None
+    def revoke_human_approval(self, approval_id_or_intent_hash: str) -> bool:
+        revoked = False
+        if approval_id_or_intent_hash in self._approvals:
+            app = self._approvals.pop(approval_id_or_intent_hash)
+            self._revoked_approval_ids.add(app.approval_id)
+            self._issued_approvals.pop(app.approval_id, None)
+            revoked = True
+        if approval_id_or_intent_hash in self._issued_approvals:
+            app = self._issued_approvals.pop(approval_id_or_intent_hash)
+            self._revoked_approval_ids.add(app.approval_id)
+            self._approvals.pop(app.intent_hash, None)
+            revoked = True
+        if not revoked:
+            self._revoked_approval_ids.add(approval_id_or_intent_hash)
+            revoked = True
+        return revoked
 
     def get_human_approval(self, intent_hash: str) -> Optional[HumanPurchaseApproval]:
         return self._approvals.get(intent_hash)
@@ -277,35 +400,55 @@ class OrbioPurchasePolicy:
                 absolute_usdg_ceiling=self.absolute_usdg_ceiling,
             )
 
-        # --- hard bounds ---
-        if intent.chain_id not in self.allowed_chain_ids:
-            return deny(
-                PurchaseDenialCode.UNAUTHORIZED_NETWORK,
-                f"chain_id {intent.chain_id} not in allowed set {sorted(self.allowed_chain_ids)}",
-            )
+        # --- deployment tuple validation (bound atomicity) ---
+        intent_tuple = (
+            intent.chain_id,
+            intent.network.lower(),
+            intent.exchange_contract.lower(),
+            intent.payment_token.lower(),
+            intent.credit_token.lower(),
+        )
+        if intent_tuple not in self.allowed_deployment_tuples:
+            valid_chains = {d[0] for d in self.allowed_deployment_tuples}
+            valid_networks = {d[1] for d in self.allowed_deployment_tuples}
+            valid_exchanges = {d[2] for d in self.allowed_deployment_tuples}
+            valid_payments = {d[3] for d in self.allowed_deployment_tuples}
+            valid_credits = {d[4] for d in self.allowed_deployment_tuples}
 
-        if intent.network.lower() not in self.allowed_networks:
+            if intent.chain_id not in valid_chains:
+                return deny(
+                    PurchaseDenialCode.UNAUTHORIZED_NETWORK,
+                    f"chain_id {intent.chain_id} not in allowed set {sorted(valid_chains)}",
+                )
+            if intent.network.lower() not in valid_networks:
+                return deny(
+                    PurchaseDenialCode.UNAUTHORIZED_NETWORK,
+                    f"network '{intent.network}' not in allowed set {sorted(valid_networks)}",
+                )
+            chain_net_pairs = {(d[0], d[1]) for d in self.allowed_deployment_tuples}
+            if (intent.chain_id, intent.network.lower()) not in chain_net_pairs:
+                return deny(
+                    PurchaseDenialCode.UNAUTHORIZED_NETWORK,
+                    f"Deployment mismatch: network '{intent.network}' is not valid for chain_id {intent.chain_id}",
+                )
+            if intent.exchange_contract.lower() not in valid_exchanges:
+                return deny(
+                    PurchaseDenialCode.UNAUTHORIZED_EXCHANGE,
+                    f"exchange_contract '{intent.exchange_contract}' is not authorized",
+                )
+            if intent.payment_token.lower() not in valid_payments:
+                return deny(
+                    PurchaseDenialCode.UNAUTHORIZED_PAYMENT_TOKEN,
+                    f"payment_token '{intent.payment_token}' is not authorized",
+                )
+            if intent.credit_token.lower() not in valid_credits:
+                return deny(
+                    PurchaseDenialCode.UNAUTHORIZED_CREDIT_TOKEN,
+                    f"credit_token '{intent.credit_token}' is not authorized",
+                )
             return deny(
-                PurchaseDenialCode.UNAUTHORIZED_NETWORK,
-                f"network '{intent.network}' not in allowed set {sorted(self.allowed_networks)}",
-            )
-
-        if intent.exchange_contract.lower() not in self.allowed_exchange_contracts:
-            return deny(
-                PurchaseDenialCode.UNAUTHORIZED_EXCHANGE,
-                f"exchange_contract '{intent.exchange_contract}' is not authorized",
-            )
-
-        if intent.payment_token.lower() not in self.allowed_payment_tokens:
-            return deny(
-                PurchaseDenialCode.UNAUTHORIZED_PAYMENT_TOKEN,
-                f"payment_token '{intent.payment_token}' is not authorized",
-            )
-
-        if intent.credit_token.lower() not in self.allowed_credit_tokens:
-            return deny(
-                PurchaseDenialCode.UNAUTHORIZED_CREDIT_TOKEN,
-                f"credit_token '{intent.credit_token}' is not authorized",
+                PurchaseDenialCode.UNAUTHORIZED_DEPLOYMENT,
+                f"Deployment tuple mismatch: contracts do not match deployment for chain {intent.chain_id} / network '{intent.network}'",
             )
 
         beneficiary_key = intent.beneficiary.lower()
@@ -408,6 +551,41 @@ class OrbioPurchasePolicy:
                     absolute_usdg_ceiling=self.absolute_usdg_ceiling,
                 )
 
+            # Check revocation
+            if approval.approval_id in self._revoked_approval_ids:
+                return deny(
+                    PurchaseDenialCode.HUMAN_APPROVAL_REVOKED,
+                    f"Human approval '{approval.approval_id}' has been revoked",
+                )
+
+            # Check authoritative issuance
+            if not approval.issuance_token:
+                return deny(
+                    PurchaseDenialCode.UNAUTHORIZED_HUMAN_APPROVAL,
+                    "Human approval lacks issuance token; caller-fabricated approvals are rejected",
+                )
+
+            expected_token = self._compute_issuance_token(
+                approval_id=approval.approval_id,
+                intent_hash=approval.intent_hash,
+                tenant_id=approval.tenant_id,
+                organisation_id=approval.organisation_id,
+                operator_id=approval.operator_id,
+                issued_at=approval.issued_at,
+                expires_at=approval.expires_at,
+            )
+            if not hmac.compare_digest(approval.issuance_token, expected_token):
+                return deny(
+                    PurchaseDenialCode.UNAUTHORIZED_HUMAN_APPROVAL,
+                    "Human approval issuance token signature mismatch; caller-fabricated approvals are rejected",
+                )
+
+            if approval.approval_id not in self._issued_approvals:
+                return deny(
+                    PurchaseDenialCode.UNAUTHORIZED_HUMAN_APPROVAL,
+                    f"Human approval '{approval.approval_id}' not found in policy issuance registry",
+                )
+
             ok, code, reason = approval.is_valid_for(intent, current_time=now)
             if not ok:
                 return deny(
@@ -431,3 +609,51 @@ class OrbioPurchasePolicy:
             autonomous_usdg_ceiling=self.autonomous_usdg_ceiling,
             absolute_usdg_ceiling=self.absolute_usdg_ceiling,
         )
+
+
+class OrbioPurchaseGovernanceRule(PolicyRule):
+    """Integrates OrbioPurchasePolicy into the general PolicyEngine machinery."""
+    rule_id = "RULE-ORBIO-PURCHASE-01"
+    description = "Orbio CREDIT purchases must satisfy OrbioPurchasePolicy bounds"
+
+    def __init__(self, purchase_policy: Optional[OrbioPurchasePolicy] = None):
+        self.purchase_policy = purchase_policy or OrbioPurchasePolicy()
+
+    def evaluate(
+        self,
+        proposal: ActionProposal,
+        agent: AgentRecord,
+        org: Organisation,
+        **kwargs: Any,
+    ) -> Optional[str]:
+        if proposal.action_type != ActionType.ORBIO_CREDIT_PURCHASE:
+            return None
+
+        # Build purchase intent from proposal parameters
+        params = proposal.parameters or {}
+        try:
+            intent = OrbioPurchaseIntent(
+                tenant_id=getattr(org, "tenant_id", "tenant-demo"),
+                organisation_id=org.id,
+                mission_id=params.get("mission_id", "m-default"),
+                operation_id=params.get("operation_id", proposal.id),
+                chain_id=int(params.get("chain_id", 46630)),
+                network=str(params.get("network", "robinhood-testnet")),
+                usdg_in=int(params.get("usdg_in", proposal.requested_credits * 1_000_000)),
+                min_credit_out=int(params.get("min_credit_out", 1)),
+                beneficiary=str(params.get("beneficiary", agent.id)),
+                max_fills=int(params.get("max_fills", 5)),
+                amount_credits=proposal.requested_credits,
+                idempotency_key=str(params.get("idempotency_key", f"{org.id}:{proposal.id}")),
+                policy_decision_id=proposal.id,
+                authorization_token_hash="tok-hash",
+            )
+        except Exception as e:
+            return f"Invalid Orbio purchase proposal parameters: {str(e)}"
+
+        decision = self.purchase_policy.evaluate(intent)
+        if decision.result != PurchaseDecisionResult.ALLOW:
+            codes = ",".join(decision.denial_codes)
+            reasons = "; ".join(decision.reasons)
+            return f"Orbio purchase policy violation ({codes}): {reasons}"
+        return None

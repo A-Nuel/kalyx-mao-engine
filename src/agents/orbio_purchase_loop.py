@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Optional
 from src.domain.blockchain import OrbioPurchaseIntent
 from src.domain.entities import ConsequentialOperation, Organisation
 from src.domain.enums import OperationState, ProviderOutcome
-from src.economy.ledger import DoubleEntryLedger, ESCROW, TREASURY
+from src.economy.ledger import DoubleEntryLedger, ESCROW, EXTERNAL_SINK, TREASURY
 from src.execution.orbio_purchase import OrbioPurchaseBridge, PurchasePreparation
 from src.governance.orbio_purchase_rules import (
     HumanPurchaseApproval,
@@ -384,17 +384,41 @@ class OrbioPurchaseAgentLoop:
         proposal: AgentPurchaseProposal,
         prep: PurchasePreparation,
     ) -> LoopStepResult:
-        op = self.bridge.create_operation_from_preparation(prep, self.org)
+        provider_name = (
+            getattr(self.provider, "name", None)
+            or getattr(self.provider, "provider_name", None)
+            or "orbio-exchange-simulated"
+        )
+        op = self.bridge.create_operation_from_preparation(
+            prep,
+            self.org,
+            provider_name=provider_name,
+        )
 
+        # Finding 9: Treasury balance preflight check before execution
         if self.ledger is not None and op.amount > 0:
-            if self.ledger.get_balance(TREASURY) >= op.amount:
-                self.ledger.transfer(
-                    TREASURY,
-                    ESCROW,
-                    op.amount,
-                    memo=f"Escrow for loop operation {op.id}",
-                    transaction_id=f"esc-loop-{op.id}",
+            treasury_balance = self.ledger.get_balance(TREASURY)
+            if treasury_balance < op.amount:
+                op.transition_to(
+                    OperationState.FAILED,
+                    error_message=f"Insufficient treasury balance: required {op.amount}, available {treasury_balance}",
                 )
+                self.state.status = LoopStatus.STOPPED_SPEND_LIMIT
+                self._touch("Insufficient treasury balance for escrow")
+                return self._result(
+                    LoopStatus.STOPPED_SPEND_LIMIT,
+                    proposal=proposal,
+                    preparation=prep,
+                    operation=op,
+                    message="Insufficient treasury balance for escrow",
+                )
+            self.ledger.transfer(
+                TREASURY,
+                ESCROW,
+                op.amount,
+                memo=f"Escrow for loop operation {op.id}",
+                transaction_id=f"esc-loop-{op.id}",
+            )
 
         op.transition_to(OperationState.AUTHORIZED)
         op.transition_to(OperationState.ESCROWED)
@@ -419,6 +443,16 @@ class OrbioPurchaseAgentLoop:
             )
 
         if result.outcome != ProviderOutcome.SUCCESS.value:
+            # Finding 2: Rollback escrow to treasury on execution failure
+            if self.ledger is not None and op.amount > 0:
+                if self.ledger.get_balance(ESCROW) >= op.amount:
+                    self.ledger.transfer(
+                        ESCROW,
+                        TREASURY,
+                        op.amount,
+                        memo=f"Escrow refund for failed operation {op.id}",
+                        transaction_id=f"ref-loop-{op.id}",
+                    )
             op.transition_to(OperationState.FAILED, error_message=result.error_message)
             self.state.status = LoopStatus.STOPPED_FAILURE
             self._touch(f"Execution failed: {result.error_message}")
@@ -436,6 +470,20 @@ class OrbioPurchaseAgentLoop:
         self.state.last_verification_result = report.result.value
 
         if not report.is_verified():
+            # Finding 2: Rollback escrow and transition to FAILED on verification rejection
+            if self.ledger is not None and op.amount > 0:
+                if self.ledger.get_balance(ESCROW) >= op.amount:
+                    self.ledger.transfer(
+                        ESCROW,
+                        TREASURY,
+                        op.amount,
+                        memo=f"Escrow refund for rejected verification {op.id}",
+                        transaction_id=f"ref-ver-{op.id}",
+                    )
+            op.transition_to(
+                OperationState.FAILED,
+                error_message=f"Verification rejected: {report.codes}",
+            )
             self.state.status = LoopStatus.STOPPED_FAILURE
             self._touch(f"Verification rejected: {report.codes}")
             self._pending_approval = None
@@ -448,6 +496,19 @@ class OrbioPurchaseAgentLoop:
                 verification_result=report.result.value,
                 message="Verification rejected",
             )
+
+        # Finding 1: Settle escrow to EXTERNAL_SINK and transition to SUCCEEDED on verified success
+        if self.ledger is not None and op.amount > 0:
+            if self.ledger.get_balance(ESCROW) >= op.amount:
+                self.ledger.transfer(
+                    ESCROW,
+                    EXTERNAL_SINK,
+                    op.amount,
+                    memo=f"Settlement for verified operation {op.id}",
+                    transaction_id=f"set-loop-{op.id}",
+                )
+                self.org.treasury_balance = self.ledger.get_balance(TREASURY)
+        op.transition_to(OperationState.SUCCEEDED, provider_reference=result.provider_reference)
 
         evidence = report.evidence
         credit = int(evidence.credit_out) if evidence else 0

@@ -56,12 +56,20 @@ class TargetAllowlistRule(PolicyRule):
     def evaluate(self, proposal: ActionProposal, agent: AgentRecord, org: Organisation, **kwargs: Any) -> Optional[str]:
         if proposal.action_type == ActionType.BLOCKCHAIN_TRANSACTION or proposal.target.startswith(("blockchain://", "evm://", "sepolia://")):
             return None
-        # Phase 14A/14B: Orbio targets are validated by dedicated Orbio rules / purchase policy
+        # Phase 14A: Orbio inference/key targets are validated by dedicated Orbio rules
         if proposal.action_type in {
             ActionType.EXTERNAL_INFERENCE,
             ActionType.ORBIO_KEY_LIFECYCLE,
-            ActionType.ORBIO_CREDIT_PURCHASE,
         }:
+            return None
+        if proposal.action_type == ActionType.ORBIO_CREDIT_PURCHASE:
+            rules = kwargs.get("rules") or []
+            has_purchase_rule = any(
+                getattr(r, "rule_id", "") == "RULE-ORBIO-PURCHASE-01"
+                for r in rules
+            )
+            if not has_purchase_rule:
+                return "ORBIO_CREDIT_PURCHASE not authorized: dedicated OrbioPurchaseGovernanceRule is required but not registered in PolicyEngine"
             return None
         if proposal.target.startswith("orbio://"):
             return None

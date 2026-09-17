@@ -130,77 +130,120 @@ def extract_evidence_from_execution(
     operation: Optional[ConsequentialOperation] = None,
     intent: Optional[OrbioPurchaseIntent] = None,
 ) -> Optional[OrbioPurchaseEvidence]:
-    """Normalize ProviderExecutionResult.raw_response into OrbioPurchaseEvidence."""
+    """Normalize ProviderExecutionResult.raw_response into OrbioPurchaseEvidence.
+
+    Extracts genuine receipt evidence strictly from provider response (raw / raw_receipt).
+    Does NOT manufacture missing receipt fields from caller / operation parameters.
+    """
     raw = result.raw_response if isinstance(result.raw_response, dict) else {}
-    params = (operation.parameters if operation and isinstance(operation.parameters, dict) else {}) or {}
+    raw_receipt = raw.get("raw_receipt") if isinstance(raw.get("raw_receipt"), dict) else {}
 
-    # Simulated exchange shape
-    usdg = raw.get("usdg_spent", params.get("usdg_in"))
-    credit = raw.get("credit_out")
-    activation = raw.get("activation_id", "")
-    events = raw.get("events") or []
+    events = raw.get("events") or raw_receipt.get("events") or []
+    if not isinstance(events, list):
+        events = []
+
+    # Activation ID from raw, raw_receipt, or events
+    activation = raw.get("activation_id") or raw_receipt.get("activation_id") or ""
     if not activation and events:
-        activation = str(events[0].get("activation_id") or "")
+        for e in events:
+            if isinstance(e, dict) and e.get("activation_id"):
+                activation = str(e.get("activation_id"))
+                break
 
+    # Credit Out from raw, raw_receipt, or events (supporting BlockchainReceiptEvidence)
+    credit = raw.get("credit_out")
+    if credit is None and raw_receipt:
+        credit = raw_receipt.get("credit_out")
+    if credit is None and events:
+        for e in events:
+            if isinstance(e, dict):
+                if "credit_out" in e:
+                    credit = e["credit_out"]
+                    break
+                elif "credit_amount" in e:
+                    credit = e["credit_amount"]
+                    break
+                elif "credits" in e:
+                    credit = e["credits"]
+                    break
+
+    # USDG Spent from raw, raw_receipt, or amount_wei
+    usdg = raw.get("usdg_spent")
+    if usdg is None and raw_receipt:
+        usdg = raw_receipt.get("usdg_spent")
+    if usdg is None and "amount_wei" in raw:
+        usdg = raw.get("amount_wei")
+
+    # If outcome is TIMEOUT or UNKNOWN and no economic fields are present, return None (pending)
     if usdg is None and credit is None and not activation:
-        # Pending / timeout payloads often lack economic fields
         if result.outcome in {ProviderOutcome.TIMEOUT.value, ProviderOutcome.UNKNOWN.value}:
             return None
-        # Try BlockchainReceiptEvidence-like dump
-        if "transaction_hash" in raw and "intent_hash" in raw:
-            return OrbioPurchaseEvidence(
-                purchase_intent_hash=str(
-                    params.get("purchase_intent_hash") or raw.get("intent_hash") or ""
-                ),
-                provider_reference=str(result.provider_reference or raw.get("transaction_hash") or ""),
-                chain_id=raw.get("chain_id") or params.get("chain_id"),
-                network=raw.get("network") or params.get("network"),
-                exchange_contract=str(
-                    raw.get("recipient") or params.get("exchange_contract") or params.get("recipient") or ""
-                ),
-                usdg_spent=int(params.get("usdg_in", 0)),
-                credit_out=int(raw.get("credit_out", 0) or 0),
-                min_credit_out=int(params.get("min_credit_out", 0)),
-                beneficiary=str(params.get("beneficiary_bytes32") or params.get("beneficiary") or ""),
-                activation_id=str(raw.get("activation_id") or ""),
-                tenant_id=operation.tenant_id if operation else None,
-                organisation_id=operation.organisation_id if operation else None,
-                evidence_hash=result.evidence_hash,
-                provider_name=result.provider_name,
-                events=list(events),
-                raw=raw,
-            )
-        return None
 
+    # Authentic evidence extracted strictly from provider raw/raw_receipt (NEVER manufactured from params)
     intent_hash = str(
         raw.get("purchase_intent_hash")
-        or params.get("purchase_intent_hash")
-        or (intent.compute_purchase_intent_hash() if intent else "")
+        or raw.get("intent_hash")
+        or raw_receipt.get("purchase_intent_hash")
+        or raw_receipt.get("intent_hash")
+        or ""
     )
     beneficiary = str(
         raw.get("beneficiary")
-        or params.get("beneficiary_bytes32")
-        or params.get("beneficiary")
+        or raw.get("beneficiary_bytes32")
+        or raw_receipt.get("beneficiary")
+        or raw_receipt.get("beneficiary_bytes32")
         or ""
     )
+    if not beneficiary and events:
+        for e in events:
+            if isinstance(e, dict) and (e.get("beneficiary") or e.get("beneficiary_bytes32")):
+                beneficiary = str(e.get("beneficiary") or e.get("beneficiary_bytes32"))
+                break
+
     exchange = str(
         raw.get("exchange_contract")
-        or params.get("exchange_contract")
-        or params.get("recipient")
+        or raw.get("recipient")
+        or raw_receipt.get("exchange_contract")
+        or raw_receipt.get("recipient")
+        or ""
+    )
+
+    chain_id = raw.get("chain_id") or raw_receipt.get("chain_id")
+    if chain_id is not None:
+        try:
+            chain_id = int(chain_id)
+        except (ValueError, TypeError):
+            pass
+
+    network = raw.get("network") or raw_receipt.get("network")
+    if network is not None:
+        network = str(network)
+
+    min_credit_out = raw.get("min_credit_out") or raw_receipt.get("min_credit_out")
+    try:
+        min_credit_out = int(min_credit_out) if min_credit_out is not None else 0
+    except (ValueError, TypeError):
+        min_credit_out = 0
+
+    provider_ref = str(
+        result.provider_reference
+        or raw.get("transaction_hash")
+        or raw.get("reference")
+        or raw_receipt.get("transaction_hash")
         or ""
     )
 
     return OrbioPurchaseEvidence(
         purchase_intent_hash=intent_hash,
-        provider_reference=str(result.provider_reference or ""),
-        chain_id=params.get("chain_id") or raw.get("chain_id"),
-        network=params.get("network") or raw.get("network"),
+        provider_reference=provider_ref,
+        chain_id=chain_id,
+        network=network,
         exchange_contract=exchange,
         usdg_spent=int(usdg or 0),
         credit_out=int(credit or 0),
-        min_credit_out=int(raw.get("min_credit_out", params.get("min_credit_out", 0)) or 0),
+        min_credit_out=min_credit_out,
         beneficiary=beneficiary,
-        activation_id=str(activation),
+        activation_id=str(activation or ""),
         tenant_id=(
             operation.tenant_id if operation else raw.get("tenant_id")
         ),
@@ -302,6 +345,20 @@ class OrbioPurchaseVerifier:
             return fail(
                 PurchaseVerificationCode.PROVIDER_NOT_SUCCESS,
                 f"Provider outcome '{provider_outcome}' is not SUCCESS",
+            )
+
+        # Critical receipt evidence presence (Finding 6)
+        if (
+            not evidence.exchange_contract
+            or evidence.chain_id is None
+            or not evidence.network
+            or not evidence.beneficiary
+            or not evidence.provider_reference
+            or not evidence.purchase_intent_hash
+        ):
+            return fail(
+                PurchaseVerificationCode.MISSING_EVIDENCE,
+                "Critical receipt evidence missing: exchange_contract, chain_id, network, beneficiary, provider_reference, or purchase_intent_hash",
             )
 
         # Intent hash binding

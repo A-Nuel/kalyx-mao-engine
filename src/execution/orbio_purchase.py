@@ -181,8 +181,12 @@ class OrbioPurchaseBridge:
             )
         if preparation.blockchain_intent is None:
             raise PolicyViolationError("Missing blockchain intent projection after ALLOW")
-
-        key = idempotency_key or preparation.purchase_intent.idempotency_key
+        if idempotency_key is not None and idempotency_key != preparation.purchase_intent.idempotency_key:
+            raise ValueError(
+                f"Supplied idempotency_key '{idempotency_key}' does not match authorized purchase intent "
+                f"idempotency_key '{preparation.purchase_intent.idempotency_key}'"
+            )
+        key = preparation.purchase_intent.idempotency_key
         prop_id = proposal_id or f"prop-{preparation.purchase_intent.operation_id}"
         dec_id = decision_id or preparation.policy_decision.decision_id
 

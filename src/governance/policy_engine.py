@@ -219,9 +219,12 @@ class PolicyEngine:
         for rule in self.rules:
             evaluated_rules.append(rule.rule_id)
             try:
-                violation = rule.evaluate(proposal, agent, org, ledger=ledger)
+                violation = rule.evaluate(proposal, agent, org, ledger=ledger, rules=self.rules)
             except TypeError:
-                violation = rule.evaluate(proposal, agent, org)
+                try:
+                    violation = rule.evaluate(proposal, agent, org, ledger=ledger)
+                except TypeError:
+                    violation = rule.evaluate(proposal, agent, org)
             if violation:
                 return PolicyDecision(
                     id=str(uuid.uuid4()),
