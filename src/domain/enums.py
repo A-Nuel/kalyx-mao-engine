@@ -48,6 +48,9 @@ class ActionType(str, Enum):
     EXTERNAL_INFERENCE = "EXTERNAL_INFERENCE"
     # Phase 14B — governed on-chain purchase + activation of Orbio CREDIT
     ORBIO_CREDIT_PURCHASE = "ORBIO_CREDIT_PURCHASE"
+    # Phase 15 — productive work execution and revenue collection
+    EXECUTE_WORK_ORDER = "EXECUTE_WORK_ORDER"
+    COLLECT_REVENUE = "COLLECT_REVENUE"
 
 class OperationState(str, Enum):
     CREATED = "created"
@@ -70,3 +73,22 @@ class OrgSolvencyState(str, Enum):
     SOLVENT = "SOLVENT"
     RESOURCE_EXHAUSTED = "RESOURCE_EXHAUSTED"
     INSOLVENT = "INSOLVENT"
+
+class CurrencyAsset(str, Enum):
+    ORG_CREDIT = "ORG_CREDIT"
+    USDG = "USDG"
+    ORBIO_CREDIT = "ORBIO_CREDIT"
+
+class WorkOrderStatus(str, Enum):
+    PROPOSED = "PROPOSED"
+    AUTHORIZED = "AUTHORIZED"
+    IN_PROGRESS = "IN_PROGRESS"
+    DELIVERED = "DELIVERED"
+    VERIFIED = "VERIFIED"
+    SETTLED = "SETTLED"
+    REJECTED = "REJECTED"
+    EXPIRED = "EXPIRED"
+
+class DeliverableStatus(str, Enum):
+    ACCEPTED = "ACCEPTED"
+    REJECTED = "REJECTED"
