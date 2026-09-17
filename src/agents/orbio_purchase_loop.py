@@ -37,6 +37,11 @@ from src.settlement.orbio_purchase_verifier import (
     PurchaseVerificationResult,
 )
 
+# Matches SimulatedOrbioExchangeProvider.DEFAULT_FILL_RATE_BPS (98%).
+# Used only to size proposals so expected CREDIT can meet the objective;
+# actual fill is always taken from verified evidence, never assumed as settlement truth.
+_EXPECTED_FILL_RATE_BPS = 9800
+
 
 class LoopStatus(str, Enum):
     READY = "READY"
@@ -148,6 +153,7 @@ class OrbioPurchaseAgentLoop:
         default_beneficiary: str,
         chain_id: int = 46630,
         network: str = "robinhood-testnet",
+        expected_fill_rate_bps: int = _EXPECTED_FILL_RATE_BPS,
     ):
         self.state = state
         self.org = org
@@ -163,18 +169,13 @@ class OrbioPurchaseAgentLoop:
         self.default_beneficiary = default_beneficiary
         self.chain_id = chain_id
         self.network = network
+        self.expected_fill_rate_bps = expected_fill_rate_bps
 
-        # Human approvals are supplied externally; agent cannot forge them
         self._pending_approval: Optional[HumanPurchaseApproval] = None
         self._pending_intent: Optional[OrbioPurchaseIntent] = None
         self._pending_operation: Optional[ConsequentialOperation] = None
 
-    # ------------------------------------------------------------------
-    # Observe
-    # ------------------------------------------------------------------
-
     def observe(self) -> Dict[str, Any]:
-        """Read-only observation of agent/mission need."""
         need = max(0, self.state.target_credit - self.state.acquired_credit)
         return {
             "agent_id": self.state.agent_id,
@@ -189,10 +190,6 @@ class OrbioPurchaseAgentLoop:
             "objective_met": self.state.objective_met(),
         }
 
-    # ------------------------------------------------------------------
-    # Propose (typed intent only)
-    # ------------------------------------------------------------------
-
     def propose_purchase(
         self,
         *,
@@ -201,7 +198,6 @@ class OrbioPurchaseAgentLoop:
         amount_credits: int = 0,
         reason: str = "Acquire Orbio CREDIT to continue mission",
     ) -> AgentPurchaseProposal:
-        """Construct a typed proposal. Does not execute."""
         if self.state.tenant_id != self.org.tenant_id or self.state.organisation_id != self.org.id:
             self.state.status = LoopStatus.STOPPED_CROSS_TENANT
             raise PermissionError("Agent tenant/org does not match organisation context")
@@ -243,20 +239,17 @@ class OrbioPurchaseAgentLoop:
             expected_outcome=f"Activate at least {min_credit_out} CREDIT toward target {self.state.target_credit}",
         )
 
-    # ------------------------------------------------------------------
-    # External human approval injection (operator path)
-    # ------------------------------------------------------------------
-
     def supply_human_approval(self, approval: HumanPurchaseApproval) -> None:
-        """Operator supplies approval bound to exact intent hash. Agent cannot forge this."""
         self._pending_approval = approval
 
-    # ------------------------------------------------------------------
-    # Single governed step
-    # ------------------------------------------------------------------
+    def _usdg_for_credit_need(self, need: int) -> int:
+        """Size USDG so expected fill meets remaining CREDIT need."""
+        if need <= 0:
+            return 0
+        bps = max(1, self.expected_fill_rate_bps)
+        return (need * 10_000 + bps - 1) // bps
 
     def step(self) -> LoopStepResult:
-        """Run one governed iteration. Returns terminal or intermediate status."""
         obs = self.observe()
 
         if self.state.objective_met():
@@ -289,13 +282,16 @@ class OrbioPurchaseAgentLoop:
             self._touch("No credit needed")
             return self._result(LoopStatus.OBJECTIVE_COMPLETE, message="No credit needed")
 
-        # Propose bounded purchase sized to remaining need (not unrestricted)
-        usdg_in = min(need, self.max_single_usdg, self.max_cumulative_usdg - self.state.cumulative_usdg_spent)
+        remaining_budget = self.max_cumulative_usdg - self.state.cumulative_usdg_spent
+        usdg_in = min(
+            self._usdg_for_credit_need(need),
+            self.max_single_usdg,
+            remaining_budget,
+        )
         if usdg_in <= 0:
             self.state.status = LoopStatus.STOPPED_SPEND_LIMIT
             return self._result(LoopStatus.STOPPED_SPEND_LIMIT, message="No remaining budget")
 
-        # Conservative min_credit_out: 90% of usdg_in (within policy slippage rules)
         min_credit_out = max(1, (usdg_in * 90) // 100)
         proposal = self.propose_purchase(
             usdg_in=usdg_in,
@@ -304,7 +300,6 @@ class OrbioPurchaseAgentLoop:
             reason=f"Need {need} CREDIT for mission; proposing bounded purchase",
         )
 
-        # Guard: never re-propose identical completed objective hash
         ih = proposal.intent.compute_purchase_intent_hash()
         if ih in self.state.completed_intent_hashes:
             self.state.status = LoopStatus.OBJECTIVE_COMPLETE
@@ -336,9 +331,7 @@ class OrbioPurchaseAgentLoop:
 
         if prep.policy_decision.result == PurchaseDecisionResult.DENY:
             self.state.status = LoopStatus.STOPPED_POLICY_DENY
-            self._touch(
-                f"Policy denied: {prep.policy_decision.denial_codes}"
-            )
+            self._touch(f"Policy denied: {prep.policy_decision.denial_codes}")
             return self._result(
                 LoopStatus.STOPPED_POLICY_DENY,
                 proposal=proposal,
@@ -346,7 +339,6 @@ class OrbioPurchaseAgentLoop:
                 message="Policy denied",
             )
 
-        # ALLOW — create operation and execute via provider (not agent)
         return self._execute_authorized(proposal, prep)
 
     def _handle_waiting_human(self) -> LoopStepResult:
@@ -360,13 +352,11 @@ class OrbioPurchaseAgentLoop:
                 message="Still waiting for human approval",
             )
 
-        # Reject evasion: approval must match pending intent exactly
         prep = self.bridge.prepare(
             self._pending_intent,
             human_approval=self._pending_approval,
         )
         if not prep.is_authorized:
-            # Do not allow agent to shrink amount and retry automatically
             self.state.status = LoopStatus.WAITING_HUMAN
             self._pending_approval = None
             self._touch("Approval invalid for pending intent; still waiting")
@@ -396,7 +386,6 @@ class OrbioPurchaseAgentLoop:
     ) -> LoopStepResult:
         op = self.bridge.create_operation_from_preparation(prep, self.org)
 
-        # Optional Kalyx escrow reservation for amount_credits
         if self.ledger is not None and op.amount > 0:
             if self.ledger.get_balance(TREASURY) >= op.amount:
                 self.ledger.transfer(
@@ -407,7 +396,6 @@ class OrbioPurchaseAgentLoop:
                     transaction_id=f"esc-loop-{op.id}",
                 )
 
-        # Advance state machine toward submit (deterministic offline path)
         op.transition_to(OperationState.AUTHORIZED)
         op.transition_to(OperationState.ESCROWED)
         op.transition_to(OperationState.SUBMITTED)
@@ -444,7 +432,6 @@ class OrbioPurchaseAgentLoop:
                 message="Execution failed",
             )
 
-        # Verify — agent does not declare success
         report = self.verifier.verify_execution(proposal.intent, result, operation=op)
         self.state.last_verification_result = report.result.value
 
@@ -462,7 +449,6 @@ class OrbioPurchaseAgentLoop:
                 message="Verification rejected",
             )
 
-        # Update agent state from verified evidence only
         evidence = report.evidence
         credit = int(evidence.credit_out) if evidence else 0
         usdg = int(evidence.usdg_spent) if evidence else proposal.intent.usdg_in
@@ -535,7 +521,6 @@ class OrbioPurchaseAgentLoop:
                 message="Reconciliation rejected",
             )
 
-        # VERIFIED via reconciliation
         evidence = ver.evidence
         credit = int(evidence.credit_out) if evidence else 0
         usdg = int(evidence.usdg_spent) if evidence else 0
@@ -561,40 +546,20 @@ class OrbioPurchaseAgentLoop:
             message=msg,
         )
 
-    # ------------------------------------------------------------------
-    # Safety: banned agent behaviors (explicitly tested)
-    # ------------------------------------------------------------------
-
     def attempt_bypass_human_with_smaller_amount(self, smaller_usdg: int) -> bool:
-        """Adversarial helper: agent tries to evade human gate by shrinking size.
-
-        Returns True if evasion would be accepted by the loop controller.
-        Correct behavior: False — loop stays WAITING_HUMAN on original intent.
-        """
         if self.state.status != LoopStatus.WAITING_HUMAN or self._pending_intent is None:
             return False
-        # Controller refuses to replace pending intent with a smaller one
         return False
 
     def attempt_split_purchase_evasion(self, parts: int) -> bool:
-        """Adversarial helper: split to evade autonomous ceiling while WAITING_HUMAN.
-
-        Returns whether the controller allows issuing split intents while waiting.
-        Correct behavior: False.
-        """
         if self.state.status == LoopStatus.WAITING_HUMAN:
             return False
         return False
 
     def attempt_mutate_authorized_intent(self, intent: OrbioPurchaseIntent, **changes) -> bool:
-        """Agent cannot mutate an authorized intent and keep the same hash/approval."""
         original_hash = intent.compute_purchase_intent_hash()
         mutated = intent.model_copy(update=changes)
         return mutated.compute_purchase_intent_hash() == original_hash
-
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
 
     def _touch(self, reason: str) -> None:
         self.state.reasons.append(reason)
@@ -623,7 +588,6 @@ class OrbioPurchaseAgentLoop:
         )
 
     def run_until_terminal(self, max_steps: Optional[int] = None) -> List[LoopStepResult]:
-        """Drive the loop until a terminal status or max_steps."""
         steps: List[LoopStepResult] = []
         limit = max_steps if max_steps is not None else self.max_iterations * 3
         terminal = {
@@ -641,8 +605,7 @@ class OrbioPurchaseAgentLoop:
             if result.status in terminal:
                 break
             if result.status == LoopStatus.WAITING_HUMAN:
-                break  # must wait for external approval
+                break
             if result.status == LoopStatus.WAITING_RECONCILE:
-                # allow one more step if reconciler can resolve; else break after attempt
                 continue
         return steps
