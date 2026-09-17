@@ -62,6 +62,10 @@ class SelfSustainingLoopRunner:
         exchange_provider: Optional[SimulatedOrbioExchangeProvider] = None,
         reserve_ratio: float = 0.20,
     ):
+        if work_verifier.secret_key != surplus_reconciler.receipt_secret_key:
+            raise ValueError(
+                "work_verifier.secret_key and surplus_reconciler.receipt_secret_key must match"
+            )
         self.ledger = ledger
         self.work_executor = work_executor
         self.work_verifier = work_verifier
@@ -80,7 +84,6 @@ class SelfSustainingLoopRunner:
         work_order.transition_to(WorkOrderStatus.IN_PROGRESS)
         org_id = work_order.organisation_id
 
-        # 1. Resource Preflight: check available Orbio credits
         current_credits = 0
         if self.exchange_provider is not None:
             current_credits = self.exchange_provider.get_credit_balance(org_id)
@@ -90,7 +93,6 @@ class SelfSustainingLoopRunner:
         direct_expense_usdg = 0
         credits_needed = work_order.required_orbio_credits
 
-        # 2. Resource Acquisition via Phase 14B loop if credits are insufficient
         if current_credits < credits_needed:
             shortfall = credits_needed - current_credits
             if purchase_loop is None:
@@ -109,14 +111,9 @@ class SelfSustainingLoopRunner:
                     error_message=f"Need {shortfall} Orbio credits but no purchase loop provided.",
                 )
 
-            # Sizing USDG needed (converting native micro-units to whole USDG for ledger/budget comparison)
             usdg_needed_native = purchase_loop._usdg_for_credit_need(shortfall)
-            # Ceil native 6-decimal USDG into whole USDG budget units. Floor division
-            # would understate a fractional-unit acquisition and could admit an
-            # unaffordable mission at the budget boundary.
             usdg_needed_whole = max(1, (usdg_needed_native + 1_000_000 - 1) // 1_000_000)
 
-            # Enforce self-funded budget limit if specified (e.g. Mission 2)
             if available_budget_limit is not None and usdg_needed_whole > available_budget_limit:
                 work_order.transition_to(WorkOrderStatus.REJECTED)
                 return MissionExecutionResult(
@@ -133,7 +130,6 @@ class SelfSustainingLoopRunner:
                     error_message=f"Acquisition cost {usdg_needed_whole} USDG exceeds self-funded mission budget {available_budget_limit} USDG.",
                 )
 
-            # Run Phase 14B acquisition step
             treasury_before = self.ledger.get_balance(TREASURY)
             step_result = purchase_loop.step()
             treasury_after = self.ledger.get_balance(TREASURY)
@@ -160,7 +156,6 @@ class SelfSustainingLoopRunner:
                     error_message=f"Orbio credit acquisition failed: {step_result.message}",
                 )
 
-        # 3. Productive Work Execution
         try:
             deliverable = self.work_executor.execute_work(
                 work_order=work_order,
@@ -184,7 +179,6 @@ class SelfSustainingLoopRunner:
                 error_message=f"Work execution failed: {str(e)}",
             )
 
-        # 4. Independent Deliverable Verification
         receipt = self.work_verifier.verify(work_order=work_order, deliverable=deliverable)
         if not receipt.is_verified() or not receipt.verify_hmac(self.work_verifier.secret_key):
             work_order.transition_to(WorkOrderStatus.REJECTED)
@@ -204,8 +198,6 @@ class SelfSustainingLoopRunner:
 
         work_order.transition_to(WorkOrderStatus.VERIFIED)
 
-        # 5. Client Revenue Settlement & Surplus Reconciliation
-        # Simulate client depositing bounty USDG into the REVENUE account
         gross_bounty = work_order.bounty_amount
         self.ledger._mint(
             to_account=REVENUE,
