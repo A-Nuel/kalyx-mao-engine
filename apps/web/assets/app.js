@@ -437,9 +437,11 @@ const App = (() => {
   // ==================== VIEW 2: MISSIONS ====================
   async function refreshMissions() {
     if (!activeOrgId) return;
-    const [orgData, orgs] = await Promise.all([
+    const [orgData, orgs, lineageData, workOrdersData] = await Promise.all([
       API.getOrganisation(activeOrgId).catch(() => null),
       API.getOrganisations().catch(() => []),
+      API.getMissionLineage(activeOrgId).catch(() => null),
+      API.getWorkOrders(activeOrgId).catch(() => null),
     ]);
 
     if (orgData) {
@@ -447,7 +449,59 @@ const App = (() => {
       setTxt('missionHeroTitle', org.mission || 'Autonomous Liquidity Rebalancing');
       setTxt('missionHeroCode', org.id);
       setTxt('missionHeroBudgetBurn', `${fmtNum(org.treasury_balance)} CR allocated`);
-      setTxt('missionHeroDeliverables', `${orgData.tasks.length} Delegated Tasks`);
+      
+      let taskSummary = `${orgData.tasks.length} Delegated Tasks`;
+      if (lineageData && lineageData.total > 0) {
+        taskSummary += ` • ${lineageData.total} Recursive Cycles`;
+      }
+      if (workOrdersData && workOrdersData.total > 0) {
+        taskSummary += ` • ${workOrdersData.total} Work Orders`;
+      }
+      setTxt('missionHeroDeliverables', taskSummary);
+    }
+
+    // Phase 16: Work Orders Table
+    const woTbody = $('workOrdersTableBody');
+    if (woTbody && workOrdersData && workOrdersData.work_orders) {
+      const wos = workOrdersData.work_orders;
+      const badge = $('workOrderCountBadge');
+      if (badge) badge.textContent = `${wos.length} Order${wos.length !== 1 ? 's' : ''}`;
+      if (wos.length === 0) {
+        woTbody.innerHTML = '<tr><td colspan="5" class="py-6 px-4 text-center text-slate-500 italic">No work orders yet &mdash; run a demo to generate one</td></tr>';
+      } else {
+        woTbody.innerHTML = wos.map(item => {
+          const wo = item.work_order;
+          const deliv = item.deliverable;
+          const statusColor = wo.status === 'SETTLED' ? 'text-emerald-400 bg-emerald-500/10' :
+                              wo.status === 'VERIFIED' ? 'text-blue-400 bg-blue-500/10' :
+                              wo.status === 'IN_PROGRESS' ? 'text-amber-400 bg-amber-500/10' :
+                              wo.status === 'REJECTED' ? 'text-rose-400 bg-rose-500/10' :
+                              'text-slate-400 bg-slate-500/10';
+          return `
+          <tr class="hover:bg-white/[0.02] transition-colors">
+            <td class="py-3 px-4 font-mono text-on-surface-variant truncate max-w-[140px]">${esc(wo.work_order_id)}</td>
+            <td class="py-3 px-4 text-slate-300 truncate max-w-[160px]">${esc(wo.title)}</td>
+            <td class="py-3 px-4 text-emerald-400 font-mono font-bold">${fmtNum(wo.bounty_amount)} USDG</td>
+            <td class="py-3 px-4">
+              <span class="px-2 py-0.5 rounded-full font-label-sm text-label-sm uppercase font-semibold ${statusColor}">${esc(wo.status)}</span>
+            </td>
+            <td class="py-3 px-4 text-slate-400">${deliv ? '<span class="text-primary">&#x2714; Delivered</span>' : '<span class="text-slate-600">Pending</span>'}</td>
+          </tr>`;
+        }).join('');
+      }
+    }
+
+    // Phase 16: Mission Lineage Counts
+    if (lineageData) {
+      const all = lineageData.lineage || [];
+      const roots = all.filter(m => !m.parent_mission_id);
+      const children = all.filter(m => !!m.parent_mission_id);
+      const cycleCountEl = $('missionLineageCycleCount');
+      const rootCountEl = $('missionLineageRootCount');
+      const childCountEl = $('missionLineageChildCount');
+      if (cycleCountEl) cycleCountEl.textContent = all.length;
+      if (rootCountEl) rootCountEl.textContent = roots.length;
+      if (childCountEl) childCountEl.textContent = children.length;
     }
 
     // Missions Historical Record Table
@@ -473,6 +527,7 @@ const App = (() => {
       `).join('');
     }
   }
+
 
   // ==================== VIEW 3: ORGANISATION ====================
   async function refreshOrganisation() {
@@ -559,13 +614,39 @@ const App = (() => {
   // ==================== VIEW 4: TREASURY ====================
   async function refreshTreasury() {
     if (!activeOrgId) return;
-    const ledger = await API.getLedger(activeOrgId).catch(() => null);
+    const [ledger, breakdown] = await Promise.all([
+      API.getLedger(activeOrgId).catch(() => null),
+      API.getTreasuryBreakdown(activeOrgId).catch(() => null),
+    ]);
     if (!ledger) return;
 
     setTxt('treasuryAvailableBalance', fmtNum(ledger.treasury));
     setTxt('treasuryEscrowBalance', fmtNum(ledger.escrow));
-    setTxt('treasuryBurnRate', '142.6');
-    setTxt('treasuryVelocity', ledger.conserved ? 'CONSERVED' : 'BREACH');
+
+    if (breakdown) {
+      const regime = breakdown.solvency_regime || 'EXPANSION';
+      setTxt('treasuryBurnRate', regime);
+      setTxt('treasuryVelocity', `${ledger.conserved ? 'CONSERVED' : 'BREACH'} « Surplus: ${fmtNum(breakdown.cumulative_net_surplus_usdg)} USDG`);
+
+      // Phase 16: Solvency regime badge in header + cumulative metrics panel
+      const regimeBadge = $('solvencyRegimeBadge');
+      if (regimeBadge) {
+        regimeBadge.textContent = regime;
+        regimeBadge.className = `ml-2 px-2.5 py-0.5 rounded-full font-label-sm text-label-sm font-medium uppercase tracking-wider border ${
+          regime === 'EXPANSION' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+          regime === 'AUSTERE'   ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
+                                   'bg-rose-500/10 text-rose-400 border-rose-500/20'
+        }`;
+      }
+      setTxt('treasurySolvencyRegime', regime);
+      setTxt('treasuryCumulativeRevenue', `${fmtNum(breakdown.cumulative_gross_revenue_usdg || 0)} USDG`);
+      setTxt('treasuryCumulativeSurplus', `${fmtNum(breakdown.cumulative_net_surplus_usdg || 0)} USDG`);
+      setTxt('treasuryRevenueEvents', breakdown.revenue_events_count || 0);
+    } else {
+      setTxt('treasuryBurnRate', '142.6');
+      setTxt('treasuryVelocity', ledger.conserved ? 'CONSERVED' : 'BREACH');
+    }
+
 
     const tbody = $('treasuryLedgerTableBody');
     if (tbody && ledger.entries && ledger.entries.length > 0) {
@@ -925,7 +1006,28 @@ const App = (() => {
     }, 4000);
   }
 
-  return {
+  
+  async function stepDaemon() {
+    if (!activeOrgId) { alert('No active organisation selected.'); return; }
+    const btn = $('daemonStepBtn');
+    const result = $('daemonLastResult');
+    if (btn) { btn.disabled = true; btn.classList.add('opacity-60'); }
+    if (result) result.textContent = 'Running cycle…';
+    try {
+      const data = await API.stepDaemon(activeOrgId);
+      const regime = data.regime || 'UNKNOWN';
+      const surplus = data.success ? `+${fmtNum(data.treasury_after - data.treasury_before)} USDG surplus` : 'no work executed';
+      if (result) result.textContent = `Cycle ${data.cycle_number} • ${regime} • ${surplus}`;
+      // Refresh treasury to show updated balance
+      await refreshTreasury();
+    } catch (err) {
+      if (result) result.textContent = `Error: ${err.message}`;
+    } finally {
+      if (btn) { btn.disabled = false; btn.classList.remove('opacity-60'); }
+    }
+  }
+
+return {
     init,
     setRoute,
     openDrawer,
@@ -944,6 +1046,7 @@ const App = (() => {
     runBenchmark,
     reconcileLatest,
     selectOrg,
+    stepDaemon,
     refreshCurrentView,
   };
 })();

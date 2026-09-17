@@ -178,11 +178,40 @@ const API = (() => {
       return request(`/api/organisations/${encodeURIComponent(orgId)}/economy/events?limit=${limit}`);
     },
 
+    // Phase 16: Autonomous Operations & Work Orders
+    async getWorkOrders(orgId, status = null) {
+      const qs = status ? `?status=${encodeURIComponent(status)}` : '';
+      return request(`/api/v1/organisations/${encodeURIComponent(orgId)}/work-orders${qs}`);
+    },
+    async createWorkOrder(orgId, data) {
+      return request(`/api/v1/organisations/${encodeURIComponent(orgId)}/work-orders`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+    async executeWorkOrder(orgId, workOrderId) {
+      return request(`/api/v1/organisations/${encodeURIComponent(orgId)}/work-orders/${encodeURIComponent(workOrderId)}/execute`, {
+        method: 'POST',
+      });
+    },
+    async getMissionLineage(orgId) {
+      return request(`/api/v1/organisations/${encodeURIComponent(orgId)}/missions/lineage`);
+    },
+    async getTreasuryBreakdown(orgId) {
+      return request(`/api/v1/organisations/${encodeURIComponent(orgId)}/treasury/breakdown`);
+    },
+    async stepDaemon(orgId) {
+      return request(`/api/v1/organisations/${encodeURIComponent(orgId)}/daemon/step`, {
+        method: 'POST',
+      });
+    },
+
     // Scripted Judge Demo
     async runDemo() {
       return request('/api/demo/run', { method: 'POST' });
     },
   };
+
 })();
 
 window.API = API;

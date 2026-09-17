@@ -1,5 +1,5 @@
 import uuid
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from src.agents.base import BaseAgent
 from src.agents.schemas import (
     MissionPlanOutput,
@@ -71,3 +71,27 @@ class CEOAgent(BaseAgent):
     def review_mission(self, mission: str, execution_history: List[Dict[str, Any]]) -> MissionReviewOutput:
         prompt = f"Mission: {mission}\nHistory: {execution_history}\nReview mission outcome."
         return self.adapter.generate_structured(prompt, MissionReviewOutput)
+
+    def select_best_work_order(
+        self,
+        work_orders: List[Any],
+        evaluations: Dict[str, Any],
+    ) -> Optional[Any]:
+        """
+        Prioritize and select the best viable WorkOrder.
+        Ranks by highest expected surplus, then highest margin ratio.
+        """
+        viable_orders = [
+            wo for wo in work_orders
+            if evaluations.get(wo.work_order_id) and evaluations[wo.work_order_id].viable
+        ]
+        if not viable_orders:
+            return None
+        return max(
+            viable_orders,
+            key=lambda wo: (
+                evaluations[wo.work_order_id].expected_surplus_usdg,
+                evaluations[wo.work_order_id].margin_ratio,
+            ),
+        )
+

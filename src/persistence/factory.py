@@ -63,3 +63,10 @@ def create_scoped_ledger(
     tenant_ledger = TenantScopedLedger(raw_ledger, tenant_id=tenant_id, initial_treasury=0)
     return OrganisationScopedLedger(tenant_ledger, organisation_id=organisation_id, initial_treasury=initial_treasury)
 
+
+def create_work_order_repo(db: Any) -> Any:
+    """Create a WorkOrderRepository bound to the database or connection."""
+    from src.persistence.work_order_repository import WorkOrderRepository
+    return WorkOrderRepository(db)
+
+
