@@ -46,6 +46,11 @@ class SurplusReconciler:
         self._receipt_secret_key = receipt_secret_key
         self._events: Dict[str, RevenueEvent] = {}
 
+    @property
+    def receipt_secret_key(self) -> str:
+        """Secret used to authenticate deliverable receipts before settlement."""
+        return self._receipt_secret_key
+
     def reconcile_surplus(
         self,
         work_order: WorkOrder,
@@ -131,17 +136,16 @@ class SurplusReconciler:
             gross_revenue_usdg=gross_revenue_usdg,
             direct_expense_usdg=direct_expense_usdg,
             net_surplus_usdg=net_surplus_usdg,
-            orbio_credits_consumed=orbio_credits_consumed,
             allocated_to_mission_budget=allocated_to_mission,
             allocated_to_reserve=allocated_to_reserve,
-            settled_at=datetime.utcnow(),
-            ledger_tx_id=tx_group,
+            orbio_credits_consumed=orbio_credits_consumed,
+            recorded_at=datetime.utcnow(),
         )
         self._events[event_id] = event
         return event
 
-    def get_event(self, revenue_event_id: str) -> Optional[RevenueEvent]:
-        return self._events.get(revenue_event_id)
+    def get_event(self, event_id: str) -> Optional[RevenueEvent]:
+        return self._events.get(event_id)
 
-    def get_events_for_work_order(self, work_order_id: str) -> List[RevenueEvent]:
-        return [e for e in self._events.values() if e.work_order_id == work_order_id]
+    def list_events(self) -> List[RevenueEvent]:
+        return list(self._events.values())
