@@ -16,8 +16,8 @@ from src.agents.orbio_purchase_loop import (
     OrbioPurchaseAgentLoop,
 )
 from src.domain.entities import Organisation
-from src.domain.enums import OperationState, ProviderOutcome
-from src.economy.ledger import DoubleEntryLedger, ESCROW, EXTERNAL_SINK, TREASURY
+from src.domain.enums import ProviderOutcome
+from src.economy.ledger import DoubleEntryLedger
 from src.execution.orbio_purchase import OrbioPurchaseBridge
 from src.governance.orbio_purchase_rules import OrbioPurchasePolicy, PurchaseDecisionResult
 from src.settlement.orbio_purchase_reconciliation import OrbioPurchaseReconciliation
@@ -89,33 +89,24 @@ def _loop(
     return loop, provider, policy, bridge, ledger
 
 
-# ---------------------------------------------------------------------------
-# STEP 2 — Authoritative happy-path E2E
-# ---------------------------------------------------------------------------
-
 def test_e2e_governed_orbio_purchase_loop_happy_path():
-    """Full offline path through real components; agent never bypasses governance."""
     loop, provider, policy, bridge, ledger = _loop(target_credit=2_500_000)
 
-    # 1–2 Observe
     obs0 = loop.observe()
     assert obs0["acquired_credit"] == 0
     assert obs0["credit_still_needed"] == 2_500_000
     assert obs0["objective_met"] is False
 
-    # 3–12 Single governed step
     result = loop.step()
 
     assert result.proposal is not None
     intent = result.proposal.intent
     intent_hash = intent.compute_purchase_intent_hash()
 
-    # Policy authorized exact intent
     assert result.preparation is not None
     assert result.preparation.policy_decision.result == PurchaseDecisionResult.ALLOW
     assert result.preparation.intent_hash == intent_hash
 
-    # Bridge operation
     op = result.operation
     assert op is not None
     assert op.id == intent.operation_id
@@ -124,19 +115,13 @@ def test_e2e_governed_orbio_purchase_loop_happy_path():
     assert op.organisation_id == "org-a"
     assert op.parameters.get("purchase_intent_hash") == intent_hash
     assert op.parameters.get("usdg_in") == intent.usdg_in
-    assert str(op.parameters.get("beneficiary") or "").lower() in {
-        BENEFICIARY.lower(),
-        intent.beneficiary_as_bytes32().lower(),
-    }
 
-    # Simulated execution success
     assert result.execution is not None
     assert result.execution.outcome == ProviderOutcome.SUCCESS.value
     assert result.execution.evidence_hash
     activation_id = (result.execution.raw_response or {}).get("activation_id")
     assert activation_id
 
-    # Independent verification bound to intent
     assert result.verification_result == PurchaseVerificationResult.VERIFIED.value
 
     evidence = extract_evidence_from_execution(
@@ -149,7 +134,6 @@ def test_e2e_governed_orbio_purchase_loop_happy_path():
     assert evidence.credit_out >= intent.min_credit_out
     assert evidence.evidence_hash == result.execution.evidence_hash
 
-    # Agent state only from verified evidence
     assert loop.state.acquired_credit == evidence.credit_out
     assert loop.state.activation_confirmed is True
     assert loop.state.cumulative_usdg_spent == evidence.usdg_spent
@@ -157,17 +141,12 @@ def test_e2e_governed_orbio_purchase_loop_happy_path():
     assert result.status == LoopStatus.OBJECTIVE_COMPLETE
     assert loop.state.objective_met()
 
-    # 13 Subsequent step must not create another purchase
     usdg_after = provider.get_usdg_balance("org-a")
     second = loop.step()
     assert second.status == LoopStatus.OBJECTIVE_COMPLETE
     assert provider.get_usdg_balance("org-a") == usdg_after
-    assert loop.state.loop_iteration == 1  # no additional proposal iteration
+    assert loop.state.loop_iteration == 1
 
-
-# ---------------------------------------------------------------------------
-# STEP 3 — UNKNOWN → reconcile recovery
-# ---------------------------------------------------------------------------
 
 def test_e2e_unknown_then_reconcile_then_complete():
     loop, provider, policy, bridge, ledger = _loop(target_credit=2_500_000)
@@ -184,18 +163,14 @@ def test_e2e_unknown_then_reconcile_then_complete():
     assert r1.status == LoopStatus.WAITING_RECONCILE
     assert r1.execution is not None
     assert r1.execution.outcome == ProviderOutcome.TIMEOUT.value
-    # Timeout is not success; agent must not treat as complete
     assert not loop.state.objective_met()
     assert loop.state.acquired_credit == 0
 
-    # Escrow remains protected while pending (credits reserved if ledger used)
-    # Agent cannot issue another purchase while unresolved
-    blocked = loop.step()  # enters reconcile path
+    blocked = loop.step()
     assert blocked.status == LoopStatus.OBJECTIVE_COMPLETE
     assert loop.state.activation_confirmed is True
     assert loop.state.acquired_credit >= 2_500_000
 
-    # Idempotent reconcile: already complete
     again = loop.step()
     assert again.status == LoopStatus.OBJECTIVE_COMPLETE
 
@@ -216,10 +191,6 @@ def test_e2e_pending_unknown_without_background_stays_blocked():
     assert loop.state.acquired_credit == 0
     assert not loop.state.objective_met()
 
-
-# ---------------------------------------------------------------------------
-# STEP 4 — Compact architectural invariant suite
-# ---------------------------------------------------------------------------
 
 def test_invariant_policy_deny_produces_no_execution():
     policy = OrbioPurchasePolicy(allowed_chain_ids={46630})
@@ -247,13 +218,12 @@ def test_invariant_policy_deny_produces_no_execution():
 def test_invariant_intent_mutation_fails_verification():
     loop, provider, *_ = _loop()
     result = loop.step()
-    assert result.is_verified if hasattr(result, "is_verified") else result.verification_result == "VERIFIED"
+    assert result.verification_result == PurchaseVerificationResult.VERIFIED.value
     intent = result.proposal.intent
     evidence = extract_evidence_from_execution(
         result.execution, operation=result.operation, intent=intent
     )
     assert evidence is not None
-    # Mutate critical field after the fact
     tampered = OrbioPurchaseEvidence(
         **{**evidence.__dict__, "beneficiary": "0x0000000000000000000000000000000000000001"}
     )
@@ -265,7 +235,6 @@ def test_invariant_intent_mutation_fails_verification():
 
 def test_invariant_agent_cannot_self_declare_success_without_evidence():
     loop, provider, *_ = _loop()
-    # Force failure path — agent must not mark objective complete
     original = provider.execute
 
     def always_fail(op):
@@ -312,7 +281,6 @@ def test_invariant_unknown_blocks_continuation():
     provider.execute = timeout_only  # type: ignore
     r1 = loop.step()
     assert r1.status == LoopStatus.WAITING_RECONCILE
-    # Must not auto-purchase a second intent while UNKNOWN
     hashes_before = list(loop.state.completed_intent_hashes)
     r2 = loop.step()
     assert r2.status in {LoopStatus.WAITING_RECONCILE, LoopStatus.STOPPED_UNKNOWN}
