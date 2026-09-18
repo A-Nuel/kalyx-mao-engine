@@ -21,7 +21,7 @@ from src.execution.work_executor import BaseWorkExecutor, SimulatedWorkExecutor
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_ORBIO_BASE_URL = "https://api.orbio.net/v1"
+DEFAULT_ORBIO_BASE_URL = "https://www.orbio.so/api/v1"
 DEFAULT_ORBIO_MODEL = "orbio-compute-v1"
 
 
@@ -42,7 +42,7 @@ class OrbioGatewayAdapter(BaseWorkExecutor):
         transport: Optional[httpx.BaseTransport] = None,
         timeout_seconds: float = 30.0,
     ) -> None:
-        self.base_url = (api_key_url := os.getenv("ORBIO_API_BASE_URL")) or base_url
+        self.base_url = (os.getenv("ORBIO_GATEWAY_BASE") or os.getenv("ORBIO_API_BASE_URL") or base_url).rstrip("/")
         self.api_key = api_key or os.getenv("ORBIO_API_KEY")
         self.model = model
         self._credit_store = credit_store if credit_store is not None else {}
@@ -91,12 +91,15 @@ class OrbioGatewayAdapter(BaseWorkExecutor):
         # If no key available and not in testing with a custom client, fall back
         if not effective_key and not hasattr(self._client, "_is_mock_injected"):
             logger.info("No active Orbio API key; falling back to simulated executor")
-            return self.fallback_executor.execute_work(
+            deliv = self.fallback_executor.execute_work(
                 work_order=work_order,
                 producer_agent_id=producer_agent_id,
                 organisation_id=organisation_id,
                 activated_api_key=activated_api_key,
             )
+            if isinstance(deliv.execution_telemetry, dict):
+                deliv.execution_telemetry["is_simulated"] = True
+            return deliv
 
         # 2. Call Orbio /chat/completions endpoint
         endpoint = f"{self.base_url.rstrip('/')}/chat/completions"
@@ -130,12 +133,15 @@ class OrbioGatewayAdapter(BaseWorkExecutor):
         except Exception as e:
             logger.warning(f"Orbio Gateway call failed ({e}); falling back to fallback executor")
             if self.fallback_executor:
-                return self.fallback_executor.execute_work(
+                deliv = self.fallback_executor.execute_work(
                     work_order=work_order,
                     producer_agent_id=producer_agent_id,
                     organisation_id=organisation_id,
                     activated_api_key=activated_api_key,
                 )
+                if isinstance(deliv.execution_telemetry, dict):
+                    deliv.execution_telemetry["is_simulated"] = True
+                return deliv
             raise
 
         latency_ms = int((time.perf_counter() - start_time) * 1000)
@@ -168,6 +174,7 @@ class OrbioGatewayAdapter(BaseWorkExecutor):
 
         # 5. Build telemetry
         telemetry = {
+            "is_simulated": False,
             "executor": "OrbioGatewayAdapter",
             "model": self.model,
             "endpoint": endpoint,

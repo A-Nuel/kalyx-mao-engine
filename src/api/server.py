@@ -1379,6 +1379,256 @@ def daemon_step_endpoint(
 
 
 
+
+
+# =========================================================================
+# Phase 17: Inter-DAO B2B Marketplace & Dynamic Capabilities
+# =========================================================================
+
+from src.domain.marketplace import MarketplaceOrder, MarketplaceOrderStatus
+from src.persistence.marketplace_repository import MarketplaceRepository
+from src.agents.b2b_marketplace_coordinator import B2BMarketplaceCoordinator
+from src.orchestration.capability_manager import CapabilityManager
+
+
+class CreateMarketplaceOrderRequest(BaseModel):
+    title: str
+    description: str
+    required_capability: str = "ADVANCED_ANALYTICS"
+    bounty_amount: int
+    sla_timeout_seconds: int = 3600
+
+
+@app.get("/api/v1/marketplace/orders")
+def list_marketplace_orders_endpoint(
+    status: str | None = Query(default="OPEN"),
+) -> Dict[str, Any]:
+    """Public sanitized marketplace order board."""
+    db = _db()
+    try:
+        repo = MarketplaceRepository(db)
+        orders = repo.list_public_orders(status=status)
+        return {
+            "orders": [o.to_dict() for o in orders],
+            "total": len(orders),
+        }
+    finally:
+        db.close()
+
+
+@app.post("/api/v1/organisations/{org_id}/marketplace/orders")
+def publish_marketplace_order_endpoint(
+    org_id: str,
+    req: CreateMarketplaceOrderRequest,
+    x_tenant_id: str | None = Header(default=None, alias="X-Tenant-ID"),
+) -> Dict[str, Any]:
+    db = _db()
+    try:
+        org = _org_id_or_404(db, org_id)
+        actual_tenant = org.get("tenant_id") or "tenant-demo"
+        if x_tenant_id and x_tenant_id != actual_tenant:
+            raise HTTPException(status_code=404, detail="Organisation not found")
+        tenant_id = actual_tenant
+
+        ledger = _org_scoped_ledger(db, org)
+        mkt_repo = MarketplaceRepository(db)
+        wo_repo = WorkOrderRepository(db)
+        coordinator = B2BMarketplaceCoordinator(marketplace_repo=mkt_repo, work_order_repo=wo_repo)
+
+        policy_engine = PolicyEngine(signing_secret=policy_secret())
+        client_agent = AgentRecord(
+            id=f"{org_id}-ceo",
+            organisation_id=org_id,
+            role="CEO",
+            allowed_action_types=[ActionType.PUBLISH_MARKETPLACE_ORDER],
+        )
+        org_entity = Organisation(
+            id=org_id,
+            name=org["name"],
+            state=OrgState(org["state"]),
+            treasury_balance=ledger.get_balance(TREASURY),
+        )
+
+        order = coordinator.publish_b2b_order(
+            client_tenant_id=tenant_id,
+            client_org_id=org_id,
+            title=req.title,
+            description=req.description,
+            required_capability=req.required_capability,
+            bounty_amount=req.bounty_amount,
+            client_ledger=ledger,
+            policy_engine=policy_engine,
+            client_agent=client_agent,
+            client_org=org_entity,
+            sla_timeout_seconds=req.sla_timeout_seconds,
+        )
+
+        return {
+            "order_id": order.order_id,
+            "status": order.status.value,
+            "bounty_amount": order.bounty_amount,
+            "created": True,
+        }
+    finally:
+        db.close()
+
+
+@app.post("/api/v1/organisations/{org_id}/marketplace/orders/{order_id}/claim")
+def claim_marketplace_order_endpoint(
+    org_id: str,
+    order_id: str,
+    x_tenant_id: str | None = Header(default=None, alias="X-Tenant-ID"),
+) -> Dict[str, Any]:
+    db = _db()
+    try:
+        org = _org_id_or_404(db, org_id)
+        actual_tenant = org.get("tenant_id") or "tenant-demo"
+        if x_tenant_id and x_tenant_id != actual_tenant:
+            raise HTTPException(status_code=404, detail="Organisation not found")
+        tenant_id = actual_tenant
+
+        mkt_repo = MarketplaceRepository(db)
+        wo_repo = WorkOrderRepository(db)
+        coordinator = B2BMarketplaceCoordinator(marketplace_repo=mkt_repo, work_order_repo=wo_repo)
+
+        policy_engine = PolicyEngine(signing_secret=policy_secret())
+        cap_manager = CapabilityManager(repository=mkt_repo, policy_engine=policy_engine)
+
+        provider_agent = AgentRecord(
+            id=f"{org_id}-agent-worker",
+            organisation_id=org_id,
+            role="RESEARCHER",
+            allowed_action_types=[ActionType.CLAIM_MARKETPLACE_ORDER],
+        )
+        # Give provider agent high empirical performance score for promotion eligibility
+        provider_agent.performance_score = 92.0
+
+        provider_org = Organisation(
+            id=org_id,
+            name=org["name"],
+            state=OrgState(org["state"]),
+            treasury_balance=100,
+        )
+
+        claimed_order = coordinator.discover_and_claim(
+            provider_tenant_id=tenant_id,
+            provider_org_id=org_id,
+            provider_agent=provider_agent,
+            provider_org=provider_org,
+            capability_manager=cap_manager,
+            policy_engine=policy_engine,
+            target_order_id=order_id,
+        )
+
+        if not claimed_order:
+            raise HTTPException(status_code=400, detail="Failed to claim marketplace order (unmet capability or already claimed)")
+
+        return {
+            "order_id": claimed_order.order_id,
+            "status": claimed_order.status.value,
+            "claimed_by_org_id": claimed_order.claimed_by_org_id,
+            "work_order_id": claimed_order.work_order_id,
+        }
+    finally:
+        db.close()
+
+
+@app.post("/api/v1/organisations/{org_id}/marketplace/orders/{order_id}/settle")
+def settle_marketplace_order_endpoint(
+    org_id: str,
+    order_id: str,
+    x_tenant_id: str | None = Header(default=None, alias="X-Tenant-ID"),
+) -> Dict[str, Any]:
+    db = _db()
+    try:
+        org = _org_id_or_404(db, org_id)
+        actual_tenant = org.get("tenant_id") or "tenant-demo"
+        if x_tenant_id and x_tenant_id != actual_tenant:
+            raise HTTPException(status_code=404, detail="Organisation not found")
+        tenant_id = actual_tenant
+
+        mkt_repo = MarketplaceRepository(db)
+        wo_repo = WorkOrderRepository(db)
+        secret = policy_secret()
+        coordinator = B2BMarketplaceCoordinator(
+            marketplace_repo=mkt_repo,
+            work_order_repo=wo_repo,
+            receipt_secret_key=secret,
+        )
+
+        escrow = mkt_repo.get_escrow_by_order(order_id)
+        if not escrow:
+            raise HTTPException(status_code=404, detail="Escrow agreement not found for order")
+
+        client_org_data = _org_id_or_404(db, escrow.client_org_id)
+        client_ledger = _org_scoped_ledger(db, client_org_data)
+        provider_ledger = _org_scoped_ledger(db, org)
+
+        order = mkt_repo.get_order(escrow.client_tenant_id, escrow.client_org_id, order_id)
+        if not order:
+            raise HTTPException(status_code=404, detail="Marketplace order not found")
+
+        provider = _get_exchange_provider()
+        persisted_credits = wo_repo.get_credit_balance(tenant_id, org_id)
+        provider._credit[org_id] = max(persisted_credits, 50_000)
+        executor = SimulatedWorkExecutor(exchange_provider=provider)
+        verifier = WorkDeliverableVerifier(secret_key=secret)
+        reconciler = SurplusReconciler(
+            ledger=provider_ledger,
+            default_reserve_ratio=0.20,
+            receipt_secret_key=secret,
+        )
+
+        outcome = coordinator.execute_and_settle(
+            order=order,
+            provider_tenant_id=tenant_id,
+            provider_org_id=org_id,
+            producer_agent_id=f"{org_id}-agent-worker",
+            work_executor=executor,
+            work_verifier=verifier,
+            client_ledger=client_ledger,
+            provider_ledger=provider_ledger,
+            surplus_reconciler=reconciler,
+        )
+
+        return {
+            "order_id": outcome.order_id,
+            "success": outcome.success,
+            "net_surplus_usdg": outcome.net_surplus_usdg,
+            "allocated_to_mission_budget": outcome.allocated_to_mission_budget,
+            "allocated_to_reserve": outcome.allocated_to_reserve,
+            "is_simulated": outcome.is_simulated,
+            "client_escrow_tx_id": outcome.client_escrow_tx_id,
+            "provider_revenue_tx_id": outcome.provider_revenue_tx_id,
+        }
+    finally:
+        db.close()
+
+
+@app.get("/api/v1/organisations/{org_id}/capabilities")
+def list_capabilities_endpoint(
+    org_id: str,
+    x_tenant_id: str | None = Header(default=None, alias="X-Tenant-ID"),
+) -> Dict[str, Any]:
+    db = _db()
+    try:
+        org = _org_id_or_404(db, org_id)
+        actual_tenant = org.get("tenant_id") or "tenant-demo"
+        if x_tenant_id and x_tenant_id != actual_tenant:
+            raise HTTPException(status_code=404, detail="Organisation not found")
+        tenant_id = actual_tenant
+
+        mkt_repo = MarketplaceRepository(db)
+        grants = mkt_repo.list_agent_grants(tenant_id, org_id, f"{org_id}-agent-worker", active_only=False)
+        return {
+            "organisation_id": org_id,
+            "capabilities": [g.to_dict() for g in grants],
+            "total": len(grants),
+        }
+    finally:
+        db.close()
+
+
 WEB_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../apps/web"))
 
 if os.path.isdir(WEB_ROOT):

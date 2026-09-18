@@ -206,6 +206,34 @@ const API = (() => {
       });
     },
 
+    // Phase 17: B2B Marketplace & Governed Capabilities
+    async getMarketplaceOrders(status = null) {
+      const qs = status ? `?status=${encodeURIComponent(status)}` : '';
+      return request(`/api/v1/marketplace/orders${qs}`);
+    },
+    async createMarketplaceOrder(data) {
+      return request('/api/v1/marketplace/orders', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+    async claimMarketplaceOrder(orderId, data) {
+      return request(`/api/v1/marketplace/orders/${encodeURIComponent(orderId)}/claim`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+    async settleMarketplaceOrder(orderId, data) {
+      return request(`/api/v1/marketplace/orders/${encodeURIComponent(orderId)}/settle`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
+    async getAgentCapabilities(orgId, agentId = null) {
+      const qs = agentId ? `?agent_id=${encodeURIComponent(agentId)}` : '';
+      return request(`/api/v1/organisations/${encodeURIComponent(orgId)}/capabilities${qs}`);
+    },
+
     // Scripted Judge Demo
     async runDemo() {
       return request('/api/demo/run', { method: 'POST' });

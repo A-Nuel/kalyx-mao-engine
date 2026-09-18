@@ -84,6 +84,10 @@
             Operations
             <span id="navOperationsBadge" class="hidden absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
           </a>
+          <a class="nav-tab px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-all cursor-pointer flex items-center gap-1" data-nav="marketplace" onclick="App.setRoute('marketplace')">
+            <span>Marketplace</span>
+            <span class="px-1 py-0.2 rounded text-[9px] bg-blue-500/20 text-blue-300 font-mono">B2B</span>
+          </a>
           <a class="nav-tab px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-all cursor-pointer" data-nav="audit" onclick="App.setRoute('audit')">Audit</a>
           <a class="nav-tab px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-all cursor-pointer" data-nav="experiments" onclick="App.setRoute('experiments')">Experiments</a>
           <a class="nav-tab px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-all cursor-pointer" data-nav="settings" onclick="App.setRoute('settings')">Settings</a>
@@ -151,6 +155,7 @@
       <a class="nav-tab px-2.5 py-1 rounded text-slate-400 hover:text-white cursor-pointer" data-nav="treasury" onclick="App.setRoute('treasury')">Treasury</a>
       <a class="nav-tab px-2.5 py-1 rounded text-slate-400 hover:text-white cursor-pointer" data-nav="policies" onclick="App.setRoute('policies')">Policies</a>
       <a class="nav-tab px-2.5 py-1 rounded text-slate-400 hover:text-white cursor-pointer" data-nav="operations" onclick="App.setRoute('operations')">Operations</a>
+      <a class="nav-tab px-2.5 py-1 rounded text-slate-400 hover:text-white cursor-pointer" data-nav="marketplace" onclick="App.setRoute('marketplace')">Marketplace</a>
       <a class="nav-tab px-2.5 py-1 rounded text-slate-400 hover:text-white cursor-pointer" data-nav="audit" onclick="App.setRoute('audit')">Audit</a>
       <a class="nav-tab px-2.5 py-1 rounded text-slate-400 hover:text-white cursor-pointer" data-nav="experiments" onclick="App.setRoute('experiments')">Experiments</a>
       <a class="nav-tab px-2.5 py-1 rounded text-slate-400 hover:text-white cursor-pointer" data-nav="settings" onclick="App.setRoute('settings')">Settings</a>
@@ -3763,6 +3768,145 @@
     });
   }
 </script>
+      </section>
+
+      <!-- 10. B2B MARKETPLACE & GOVERNED CAPABILITIES VIEW (PHASE 17) -->
+      <section id="view-marketplace" class="view-panel hidden space-y-6">
+        <div class="flex flex-col w-full py-4 gap-6">
+          
+          <!-- Top Header -->
+          <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div class="flex flex-col gap-1 max-w-2xl">
+              <div class="flex items-center gap-2 mb-1">
+                <span class="text-xs uppercase tracking-wider text-slate-500 font-medium font-mono">Phase 17 Inter-DAO Commerce</span>
+                <span class="text-slate-700">•</span>
+                <span class="text-xs text-blue-400 font-mono">Dual-Sided Escrow & Governed Capabilities</span>
+              </div>
+              <h1 class="text-3xl font-bold tracking-tight text-white">B2B Marketplace & Capability Engine</h1>
+              <p class="text-sm text-slate-400">Cross-organisation work orders with dual-sided cryptographic escrow, policy-governed capability expansion, and Orbio compute integration.</p>
+            </div>
+            
+            <div class="flex items-center gap-2 shrink-0">
+              <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-300 font-mono text-xs">
+                <span class="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></span>
+                <span>Orbio Gateway Ready</span>
+              </div>
+              <button id="btnTriggerLoopDemo" type="button" onclick="App.runB2BMarketplaceLoop()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs shadow-md shadow-blue-600/20 active:scale-[0.98] transition-all">
+                <span class="material-symbols-outlined text-[15px]">autorenew</span>
+                <span>Run 6-Stage Loop</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- KPI Summary Cards -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="p-5 rounded-xl bg-zinc-900/60 backdrop-blur-md border border-white/10 shadow-lg flex flex-col justify-between">
+              <span class="text-xs uppercase text-slate-400 font-mono">Active B2B Orders</span>
+              <div class="text-2xl font-bold text-white mt-2 font-mono" id="mktActiveOrdersCount">0</div>
+              <div class="text-[11px] text-slate-500 mt-1">Cross-organisation orders open</div>
+            </div>
+            <div class="p-5 rounded-xl bg-zinc-900/60 backdrop-blur-md border border-white/10 shadow-lg flex flex-col justify-between">
+              <span class="text-xs uppercase text-slate-400 font-mono">Total Escrow Volume</span>
+              <div class="text-2xl font-bold text-emerald-400 mt-2 font-mono" id="mktTotalEscrowVolume">0 USDG</div>
+              <div class="text-[11px] text-slate-500 mt-1">Locked in dual-sided agreements</div>
+            </div>
+            <div class="p-5 rounded-xl bg-zinc-900/60 backdrop-blur-md border border-white/10 shadow-lg flex flex-col justify-between">
+              <span class="text-xs uppercase text-slate-400 font-mono">Governed Capability Grants</span>
+              <div class="text-2xl font-bold text-blue-400 mt-2 font-mono" id="mktCapabilityGrantsCount">0</div>
+              <div class="text-[11px] text-slate-500 mt-1">Policy-authorized skill expansions</div>
+            </div>
+            <div class="p-5 rounded-xl bg-zinc-900/60 backdrop-blur-md border border-white/10 shadow-lg flex flex-col justify-between">
+              <span class="text-xs uppercase text-slate-400 font-mono">Verified B2B Deliverables</span>
+              <div class="text-2xl font-bold text-purple-400 mt-2 font-mono" id="mktVerifiedDeliverablesCount">0</div>
+              <div class="text-[11px] text-slate-500 mt-1">HMAC-signed & surplus reconciled</div>
+            </div>
+          </div>
+
+          <!-- Main Content Grid: Marketplace Orders & Capability Grants -->
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <!-- Left 2 Cols: Marketplace Orders Table -->
+            <div class="lg:col-span-2 space-y-4">
+              <div class="p-5 rounded-xl bg-zinc-900/60 backdrop-blur-md border border-white/10 shadow-lg space-y-4">
+                <div class="flex items-center justify-between pb-3 border-b border-white/[0.08]">
+                  <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-blue-400 text-lg">storefront</span>
+                    <h2 class="text-base font-semibold text-white">Public B2B Work Order Marketplace</h2>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <button type="button" onclick="App.refreshMarketplaceView()" class="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-white transition-colors" title="Refresh marketplace">
+                      <span class="material-symbols-outlined text-base">refresh</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div id="marketplaceOrdersList" class="space-y-3">
+                  <div class="p-8 text-center text-slate-500 font-mono text-xs">
+                    Loading marketplace orders...
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Right Col: Governed Capabilities & Architecture -->
+            <div class="space-y-6">
+              
+              <!-- Capabilities Registry Card -->
+              <div class="p-5 rounded-xl bg-zinc-900/60 backdrop-blur-md border border-white/10 shadow-lg space-y-4">
+                <div class="flex items-center justify-between pb-3 border-b border-white/[0.08]">
+                  <div class="flex items-center gap-2">
+                    <span class="material-symbols-outlined text-blue-400 text-lg">workspace_premium</span>
+                    <h2 class="text-base font-semibold text-white">Governed Capability Grants</h2>
+                  </div>
+                  <span class="text-[11px] font-mono text-emerald-400">Zero Self-Grant</span>
+                </div>
+                
+                <div id="capabilityGrantsList" class="space-y-2">
+                  <div class="p-4 text-center text-slate-500 font-mono text-xs">
+                    No dynamic capabilities granted yet.
+                  </div>
+                </div>
+              </div>
+
+              <!-- 6-Stage Autonomous Loop Architecture Card -->
+              <div class="p-5 rounded-xl bg-zinc-900/60 backdrop-blur-md border border-white/10 shadow-lg space-y-3">
+                <div class="flex items-center gap-2 pb-2 border-b border-white/[0.08]">
+                  <span class="material-symbols-outlined text-amber-400 text-lg">sync_alt</span>
+                  <h3 class="text-sm font-semibold text-white">6-Stage Economic Invariant</h3>
+                </div>
+                
+                <ol class="space-y-2 text-xs font-mono text-slate-300">
+                  <li class="flex items-start gap-2">
+                    <span class="text-yellow-400 font-bold">1.</span>
+                    <span><strong class="text-white">Propose Order:</strong> Org A proposes bounty; policy locks escrow.</span>
+                  </li>
+                  <li class="flex items-start gap-2">
+                    <span class="text-cyan-400 font-bold">2.</span>
+                    <span><strong class="text-white">Capability Evolution:</strong> Org B agent performance qualifies for governed skill expansion.</span>
+                  </li>
+                  <li class="flex items-start gap-2">
+                    <span class="text-green-400 font-bold">3.</span>
+                    <span><strong class="text-white">Productive Orbio:</strong> Work executed with transparent live vs sim telemetry.</span>
+                  </li>
+                  <li class="flex items-start gap-2">
+                    <span class="text-purple-400 font-bold">4.</span>
+                    <span><strong class="text-white">Independent Audit:</strong> Deliverable verified via HMAC cryptographic receipt.</span>
+                  </li>
+                  <li class="flex items-start gap-2">
+                    <span class="text-blue-400 font-bold">5.</span>
+                    <span><strong class="text-white">Escrow Release:</strong> Double-entry settlement & 80/20 surplus split.</span>
+                  </li>
+                  <li class="flex items-start gap-2">
+                    <span class="text-amber-400 font-bold">6.</span>
+                    <span><strong class="text-white">Mission Chaining:</strong> Next mission funded strictly from verified surplus.</span>
+                  </li>
+                </ol>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
       </section>
 
     </div>

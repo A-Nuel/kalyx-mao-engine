@@ -197,12 +197,20 @@ class BlockchainSettlementProvider(ConsequentialProviderAdapter):
                 raw_receipt=receipt,
             )
             evidence_hash = evidence.compute_evidence_hash()
+            raw_resp = evidence.model_dump(mode="json")
+            is_sim = "simulated" in self.rpc_client.__class__.__name__.lower()
+            raw_resp["is_simulated"] = is_sim
+            raw_resp["explorer_url"] = (
+                f"https://sepolia.etherscan.io/tx/{tx_ref}"
+                if not is_sim and intent.chain_id == 11155111
+                else (f"https://explorer.testnet.chain.robinhood.com/tx/{tx_ref}" if not is_sim and intent.chain_id == 46630 else None)
+            )
             return ProviderExecutionResult(
                 provider_name=self.name,
                 operation_id=operation.id,
                 outcome=ProviderOutcome.SUCCESS.value,
                 provider_reference=tx_ref,
-                raw_response=evidence.model_dump(mode="json"),
+                raw_response=raw_resp,
                 error_message=None,
                 evidence_hash=evidence_hash,
             )

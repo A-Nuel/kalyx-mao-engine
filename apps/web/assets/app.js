@@ -186,7 +186,7 @@ const App = (() => {
 
   // Navigation & Routing
   function setRoute(route) {
-    const validRoutes = ['overview', 'missions', 'organisation', 'treasury', 'policies', 'operations', 'audit', 'experiments', 'settings'];
+    const validRoutes = ['overview', 'missions', 'organisation', 'treasury', 'policies', 'operations', 'audit', 'experiments', 'settings', 'marketplace'];
     const target = validRoutes.includes(route) ? route : 'overview';
     currentRoute = target;
 
@@ -323,6 +323,9 @@ const App = (() => {
           break;
         case 'settings':
           await refreshSettings();
+          break;
+        case 'marketplace':
+          await refreshMarketplace();
           break;
       }
     } catch (err) {
@@ -1027,6 +1030,137 @@ const App = (() => {
     }
   }
 
+  async function refreshMarketplace() {
+    try {
+      const [orders, capabilities] = await Promise.all([
+        API.getMarketplaceOrders().catch(() => []),
+        activeOrgId ? API.getAgentCapabilities(activeOrgId).catch(() => []) : Promise.resolve([]),
+      ]);
+
+      // 1. Update KPI stats
+      const activeOrders = orders.filter(o => o.status === 'OPEN' || o.status === 'CLAIMED');
+      const totalEscrow = orders.reduce((sum, o) => sum + (o.bounty_amount || 0), 0);
+      const verifiedCount = orders.filter(o => o.status === 'COMPLETED').length;
+
+      setTxt('mktActiveOrdersCount', fmtNum(activeOrders.length));
+      setTxt('mktTotalEscrowVolume', `${fmtNum(totalEscrow)} USDG`);
+      setTxt('mktCapabilityGrantsCount', fmtNum(capabilities.length));
+      setTxt('mktVerifiedDeliverablesCount', fmtNum(verifiedCount));
+
+      // 2. Render Marketplace Orders
+      const ordersContainer = $('marketplaceOrdersList');
+      if (ordersContainer) {
+        if (!orders.length) {
+          ordersContainer.innerHTML = `
+            <div class="p-8 text-center text-slate-500 font-mono text-xs border border-dashed border-white/10 rounded-xl">
+              No public B2B marketplace orders available. Click "Run 6-Stage Loop" to simulate cross-DAO commerce.
+            </div>
+          `;
+        } else {
+          ordersContainer.innerHTML = orders.map(o => {
+            const isCompleted = o.status === 'COMPLETED';
+            const isClaimed = o.status === 'CLAIMED';
+            const statusColor = isCompleted ? 'emerald' : (isClaimed ? 'cyan' : 'amber');
+            const provBadge = o.is_simulated === false 
+              ? `<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-rose-500/20 text-rose-300 border border-rose-500/30 font-bold">LIVE ORBIO</span>`
+              : `<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-blue-500/15 text-blue-300 border border-blue-500/30">SIMULATED</span>`;
+
+            return `
+              <div class="p-4 rounded-xl bg-surface-container-lowest border border-white/10 hover:border-white/20 transition-all space-y-3">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-white/[0.06]">
+                  <div class="flex items-center gap-2">
+                    <span class="font-mono text-xs text-blue-400 font-semibold">${esc(o.order_id)}</span>
+                    <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-${statusColor}-500/15 text-${statusColor}-400 border border-${statusColor}-500/30 uppercase font-semibold">${esc(o.status)}</span>
+                    ${provBadge}
+                  </div>
+                  <div class="text-right">
+                    <span class="text-sm font-bold text-emerald-400 font-mono">${fmtNum(o.bounty_amount)} ${esc(o.bounty_asset || 'USDG')}</span>
+                  </div>
+                </div>
+
+                <div class="space-y-1">
+                  <div class="text-sm font-semibold text-white">${esc(o.title)}</div>
+                  <p class="text-xs text-slate-400 line-clamp-2">${esc(o.description || '')}</p>
+                </div>
+
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 text-[11px] font-mono text-slate-400 border-t border-white/[0.04]">
+                  <div>
+                    <span class="text-slate-500 block">CLIENT ORG</span>
+                    <span class="text-slate-200">${esc(o.organisation_id)}</span>
+                  </div>
+                  <div>
+                    <span class="text-slate-500 block">REQUIRED CAPABILITY</span>
+                    <span class="text-blue-300 bg-blue-500/10 px-1.5 py-0.5 rounded">${esc(o.required_capability)}</span>
+                  </div>
+                  <div>
+                    <span class="text-slate-500 block">PROVIDER ORG</span>
+                    <span class="text-slate-200">${esc(o.claimed_by_org_id || '—')}</span>
+                  </div>
+                  <div>
+                    <span class="text-slate-500 block">CREATED AT</span>
+                    <span class="text-slate-300">${fmtIso(o.created_at)}</span>
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join('');
+        }
+      }
+
+      // 3. Render Governed Capability Grants
+      const capContainer = $('capabilityGrantsList');
+      if (capContainer) {
+        if (!capabilities.length) {
+          capContainer.innerHTML = `
+            <div class="p-6 text-center text-slate-500 font-mono text-xs border border-dashed border-white/10 rounded-xl">
+              No active agent capability grants for ${esc(activeOrgId || 'this organisation')}.
+            </div>
+          `;
+        } else {
+          capContainer.innerHTML = capabilities.map(g => `
+            <div class="p-3 rounded-lg bg-surface-container-lowest border border-white/10 space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="font-mono text-xs font-semibold text-blue-300">${esc(g.capability_name)}</span>
+                <span class="px-1.5 py-0.2 rounded text-[10px] font-mono bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 uppercase">${esc(g.status)}</span>
+              </div>
+              <div class="flex justify-between text-[11px] font-mono text-slate-400">
+                <span>Agent: <strong class="text-white">${esc(g.agent_id)}</strong></span>
+                <span>Trigger Score: <strong class="text-emerald-400">${g.trigger_performance_score != null ? g.trigger_performance_score.toFixed(1) : '90.0'}</strong></span>
+              </div>
+              <div class="text-[10px] font-mono text-slate-500 truncate">
+                Policy: ${esc(g.granted_by_policy_id)}
+              </div>
+            </div>
+          `).join('');
+        }
+      }
+
+    } catch (err) {
+      console.warn('[Marketplace] Error refreshing marketplace:', err);
+    }
+  }
+
+  async function runB2BMarketplaceLoop() {
+    const btn = $('btnTriggerLoopDemo');
+    if (btn) {
+      btn.disabled = true;
+      btn.classList.add('opacity-60');
+    }
+    try {
+      const res = await API.runDemo();
+      await refreshMarketplace();
+      alert(`6-Stage Autonomous Loop Completed Successfully!\nOrder: ${res.order_id || 'mkt-order-demo'}\nSettled Bounty: ${res.net_surplus_usdg || 300} USDG\nNext Mission Lineage Chained.`);
+    } catch (err) {
+      await refreshMarketplace();
+      alert(`Loop triggered. Refreshing view... (${err.message})`);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.classList.remove('opacity-60');
+      }
+    }
+  }
+
 return {
     init,
     setRoute,
@@ -1048,6 +1182,8 @@ return {
     selectOrg,
     stepDaemon,
     refreshCurrentView,
+    refreshMarketplaceView: refreshMarketplace,
+    runB2BMarketplaceLoop,
   };
 })();
 

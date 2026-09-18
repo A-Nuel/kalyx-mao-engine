@@ -70,3 +70,9 @@ def create_work_order_repo(db: Any) -> Any:
     return WorkOrderRepository(db)
 
 
+def create_marketplace_repo(db: Any) -> Any:
+    """Create a MarketplaceRepository bound to the database or connection."""
+    from src.persistence.marketplace_repository import MarketplaceRepository
+    return MarketplaceRepository(db)
+
+

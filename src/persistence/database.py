@@ -275,6 +275,75 @@ CREATE TABLE IF NOT EXISTS org_credit_balances (
     FOREIGN KEY (tenant_id) REFERENCES tenants(id),
     FOREIGN KEY (organisation_id) REFERENCES organisations(id)
 );
+
+CREATE TABLE IF NOT EXISTS marketplace_orders (
+    tenant_id TEXT NOT NULL DEFAULT 'tenant-demo',
+    organisation_id TEXT NOT NULL,
+    order_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    specification_hash TEXT NOT NULL,
+    required_capability TEXT NOT NULL,
+    bounty_amount INTEGER NOT NULL,
+    bounty_asset TEXT NOT NULL DEFAULT 'USDG',
+    sla_timeout_seconds INTEGER NOT NULL DEFAULT 3600,
+    status TEXT NOT NULL DEFAULT 'OPEN',
+    claimed_by_tenant_id TEXT,
+    claimed_by_org_id TEXT,
+    claimed_by_agent_id TEXT,
+    work_order_id TEXT,
+    deliverable_id TEXT,
+    created_at TEXT NOT NULL,
+    claimed_at TEXT,
+    completed_at TEXT,
+    PRIMARY KEY (tenant_id, organisation_id, order_id),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+    FOREIGN KEY (organisation_id) REFERENCES organisations(id)
+);
+CREATE INDEX IF NOT EXISTS idx_mkt_orders_status ON marketplace_orders (status);
+CREATE INDEX IF NOT EXISTS idx_mkt_orders_claimed ON marketplace_orders (claimed_by_tenant_id, claimed_by_org_id);
+
+CREATE TABLE IF NOT EXISTS marketplace_escrows (
+    tenant_id TEXT NOT NULL DEFAULT 'tenant-demo',
+    organisation_id TEXT NOT NULL,
+    escrow_id TEXT NOT NULL,
+    order_id TEXT NOT NULL,
+    client_tenant_id TEXT NOT NULL,
+    client_org_id TEXT NOT NULL,
+    provider_tenant_id TEXT,
+    provider_org_id TEXT,
+    bounty_amount INTEGER NOT NULL,
+    bounty_asset TEXT NOT NULL DEFAULT 'USDG',
+    status TEXT NOT NULL DEFAULT 'HELD',
+    client_ledger_tx_id TEXT,
+    provider_ledger_tx_id TEXT,
+    created_at TEXT NOT NULL,
+    released_at TEXT,
+    PRIMARY KEY (tenant_id, organisation_id, escrow_id),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+    FOREIGN KEY (organisation_id) REFERENCES organisations(id)
+);
+CREATE INDEX IF NOT EXISTS idx_mkt_escrow_order ON marketplace_escrows (order_id);
+CREATE INDEX IF NOT EXISTS idx_mkt_escrow_status ON marketplace_escrows (status);
+
+CREATE TABLE IF NOT EXISTS agent_capability_grants (
+    tenant_id TEXT NOT NULL DEFAULT 'tenant-demo',
+    organisation_id TEXT NOT NULL,
+    grant_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL,
+    capability_name TEXT NOT NULL,
+    permission_level TEXT NOT NULL,
+    trigger_performance_score REAL NOT NULL,
+    granted_by_policy_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'ACTIVE',
+    granted_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    PRIMARY KEY (tenant_id, organisation_id, grant_id),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+    FOREIGN KEY (organisation_id) REFERENCES organisations(id)
+);
+CREATE INDEX IF NOT EXISTS idx_agent_cap_grants ON agent_capability_grants (tenant_id, organisation_id, agent_id);
+CREATE INDEX IF NOT EXISTS idx_agent_cap_status ON agent_capability_grants (status);
 """
 
 class Database:

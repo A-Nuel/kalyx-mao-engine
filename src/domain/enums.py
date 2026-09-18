@@ -51,6 +51,11 @@ class ActionType(str, Enum):
     # Phase 15 — productive work execution and revenue collection
     EXECUTE_WORK_ORDER = "EXECUTE_WORK_ORDER"
     COLLECT_REVENUE = "COLLECT_REVENUE"
+    # Phase 17 — B2B marketplace and dynamic capability expansion
+    PROPOSE_CAPABILITY_EXPANSION = "PROPOSE_CAPABILITY_EXPANSION"
+    PUBLISH_MARKETPLACE_ORDER = "PUBLISH_MARKETPLACE_ORDER"
+    CLAIM_MARKETPLACE_ORDER = "CLAIM_MARKETPLACE_ORDER"
+    RELEASE_MARKETPLACE_ESCROW = "RELEASE_MARKETPLACE_ESCROW"
 
 class OperationState(str, Enum):
     CREATED = "created"

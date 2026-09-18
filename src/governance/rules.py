@@ -71,7 +71,16 @@ class TargetAllowlistRule(PolicyRule):
             if not has_purchase_rule:
                 return "ORBIO_CREDIT_PURCHASE not authorized: dedicated OrbioPurchaseGovernanceRule is required but not registered in PolicyEngine"
             return None
-        if proposal.target.startswith("orbio://"):
+        if proposal.target.startswith(("orbio://", "marketplace://", "capability://")):
+            return None
+        if proposal.action_type in {
+            ActionType.PROPOSE_CAPABILITY_EXPANSION,
+            ActionType.PUBLISH_MARKETPLACE_ORDER,
+            ActionType.CLAIM_MARKETPLACE_ORDER,
+            ActionType.RELEASE_MARKETPLACE_ESCROW,
+            ActionType.EXECUTE_WORK_ORDER,
+            ActionType.COLLECT_REVENUE,
+        }:
             return None
         if proposal.target not in self.approved_targets:
             return f"Target '{proposal.target}' is not on the approved destination allowlist"
