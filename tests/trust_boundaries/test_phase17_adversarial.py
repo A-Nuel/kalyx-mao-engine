@@ -307,7 +307,7 @@ def test_attack_04_rejected_deliverable_blocks_settlement(test_context):
     # Escrow must still be HELD; Provider treasury must NOT increase
     assert ctx["client_ledger"].get_balance(ESCROW) == initial_escrow
     assert ctx["provider_ledger"].get_balance(TREASURY) == initial_provider_treasury
-    escrow = ctx["marketplace_repo"].get_escrow_by_order(order.order_id)
+    escrow = ctx["marketplace_repo"].get_escrow_by_order(order.order_id, "tenant-alpha", "org-alpha")
     assert escrow.status == EscrowStatus.HELD
 
 
