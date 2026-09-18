@@ -1,0 +1,56 @@
+﻿services:
+  kalyx-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kalyx-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - KALYX_ENV=demo
+      - KALYX_DB=/app/data/kalyx.db
+      - KALYX_POLICY_SECRET=kalyx-phase17-production-hardening-secret-32-chars
+      - KALYX_IDENTITY_AUTH=demo
+      - KALYX_REQUIRE_OPERATOR_AUTH=false
+    volumes:
+      - kalyx-data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  kalyx-demo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kalyx-demo
+    environment:
+      - KALYX_ENV=demo
+      - KALYX_DB=/app/data/kalyx.db
+      - KALYX_POLICY_SECRET=kalyx-phase17-production-hardening-secret-32-chars
+      - KALYX_IDENTITY_AUTH=demo
+    volumes:
+      - kalyx-data:/app/data
+    command: ["python", "scripts/run_phase17_demo.py"]
+    profiles: ["demo"]
+
+  kalyx-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kalyx-test
+    environment:
+      - KALYX_ENV=demo
+      - KALYX_POLICY_SECRET=kalyx-phase17-production-hardening-secret-32-chars
+      - KALYX_IDENTITY_AUTH=demo
+    volumes:
+      - kalyx-data:/app/data
+    command: ["python", "-m", "pytest", "tests/", "-v"]
+    profiles: ["test"]
+
+volumes:
+  kalyx-data:
+    driver: local

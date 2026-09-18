@@ -377,6 +377,22 @@ class WorkOrderRepository:
                 ),
             )
 
+    def get_revenue_event_by_work_order(
+        self, tenant_id: str, organisation_id: str, work_order_id: str
+    ) -> Optional[RevenueEvent]:
+        cursor = self.conn.cursor() if hasattr(self.conn, "cursor") else self.conn
+        row = cursor.execute(
+            """
+            SELECT * FROM revenue_events
+            WHERE tenant_id = ? AND organisation_id = ? AND work_order_id = ?
+            ORDER BY settled_at DESC LIMIT 1
+            """,
+            (tenant_id, organisation_id, work_order_id),
+        ).fetchone()
+        if not row:
+            return None
+        return self._row_to_revenue_event(row)
+
     def list_revenue_events(
         self, tenant_id: str, organisation_id: str
     ) -> List[RevenueEvent]:

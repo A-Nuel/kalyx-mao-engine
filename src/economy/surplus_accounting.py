@@ -2,7 +2,7 @@ import hashlib
 import hmac
 import math
 import uuid
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from datetime import datetime
 
 from src.domain.enums import CurrencyAsset
@@ -36,6 +36,7 @@ class SurplusReconciler:
         ledger: DoubleEntryLedger,
         default_reserve_ratio: float = 0.20,
         receipt_secret_key: str = "",
+        work_order_repo: Optional[Any] = None,
     ):
         if not (0.0 <= default_reserve_ratio <= 1.0):
             raise ValueError("default_reserve_ratio must be between 0.0 and 1.0")
@@ -44,6 +45,7 @@ class SurplusReconciler:
         self._ledger = ledger
         self._reserve_ratio = default_reserve_ratio
         self._receipt_secret_key = receipt_secret_key
+        self._work_order_repo = work_order_repo
         self._events: Dict[str, RevenueEvent] = {}
 
     def reconcile_surplus(
@@ -61,6 +63,16 @@ class SurplusReconciler:
             raise ValueError(f"Cannot reconcile receipt with invalid HMAC signature {receipt.receipt_id}")
         if receipt.work_order_id != work_order.work_order_id:
             raise ValueError(f"Receipt work_order_id mismatch: {receipt.work_order_id} vs {work_order.work_order_id}")
+        # In-memory duplicate check
+        if any(e.work_order_id == work_order.work_order_id for e in self._events.values()):
+            raise ValueError(f"Work order '{work_order.work_order_id}' has already been reconciled.")
+        # Authoritative durable persistence duplicate check
+        if self._work_order_repo is not None:
+            existing = self._work_order_repo.get_revenue_event_by_work_order(
+                work_order.tenant_id, work_order.organisation_id, work_order.work_order_id
+            )
+            if existing is not None:
+                raise ValueError(f"Work order '{work_order.work_order_id}' has already been reconciled in durable storage.")
         if gross_revenue_usdg < 0:
             raise ValueError("gross_revenue_usdg cannot be negative")
         if direct_expense_usdg < 0:

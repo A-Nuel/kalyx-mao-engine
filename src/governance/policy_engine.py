@@ -15,6 +15,7 @@ from src.governance.rules import (
     OrgPauseRule,
     AgentStatusRule,
 )
+from src.governance.capability_policy import CapabilityEvolutionRule
 from src.governance.blockchain_rules import (
     AllowedChainRule,
     RecipientAllowlistRule,
@@ -63,6 +64,7 @@ class PolicyEngine:
             TransactionAmountCeilingRule(),
             GasExposureRule(),
             IntentMatchRule(),
+            CapabilityEvolutionRule(),
         ]
         self.human_approval_threshold = human_approval_threshold
         self.token_ttl_seconds = token_ttl_seconds

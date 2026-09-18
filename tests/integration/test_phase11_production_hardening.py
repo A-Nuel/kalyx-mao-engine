@@ -361,9 +361,9 @@ def test_health_check_endpoint_contract(test_db, monkeypatch):
 
     # Degraded health when database is completely unreachable.
     # Use a path whose parent cannot be created on Linux CI runners
-    # (/dev/null is a file, so makedirs of a child path fails).
-    # The assertion remains 503 Service Unavailable — contract unchanged.
-    monkeypatch.setenv("KALYX_DB", "/dev/null/kalyx_unreachable.db")
+    import sys
+    unreachable_path = "Z:\\nonexistent_volume_kalyx\\unreachable.db" if sys.platform == "win32" else "/dev/null/kalyx_unreachable.db"
+    monkeypatch.setenv("KALYX_DB", unreachable_path)
     res_degraded = client.get("/api/health")
     assert res_degraded.status_code == 503
     degraded_data = res_degraded.json()

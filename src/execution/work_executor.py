@@ -122,7 +122,9 @@ class SimulatedWorkExecutor(BaseWorkExecutor):
             }
 
         telemetry = {
+            "is_simulated": True,
             "executor": "SimulatedWorkExecutor",
+            "endpoint": "simulated://local",
             "activated_api_key_used": activated_api_key or "simulated-key",
             "latency_ms": 42,
             "credits_deducted": required_credits,
