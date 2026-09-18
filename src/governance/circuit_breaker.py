@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
+from src.governance.admin_governance import AdminApproval, AdminGovernanceManager
+
 
 class CircuitBreakerState(str, Enum):
     NORMAL = "NORMAL"
@@ -26,8 +28,9 @@ class SystemCircuitBreaker:
     4. All state transitions are recorded in an append-only audit trail.
     """
 
-    def __init__(self, db_or_conn: Any) -> None:
+    def __init__(self, db_or_conn: Any, governance_manager: Optional[AdminGovernanceManager] = None) -> None:
         self.conn = getattr(db_or_conn, "conn", db_or_conn)
+        self.governance_manager = governance_manager
 
     def is_paused(self, tenant_id: str, organisation_id: str) -> bool:
         """Inspect the authoritative database record for circuit breaker status."""
@@ -112,36 +115,55 @@ class SystemCircuitBreaker:
         approvals_data: Optional[List[Dict[str, Any]]] = None,
         reason: str = "Governance quorum verified resumption",
     ) -> str:
-        """Governed resumption requiring verified multi-signature approvals.
-
-        Returns the audit record ID.
-        """
+        """Resume only after cryptographically verified, unconsumed 2-of-2 approvals."""
+        if self.governance_manager is None:
+            raise ValueError("AdminGovernanceManager is required for circuit breaker resumption")
         if len(set(approver_ids)) < 2:
-            raise ValueError(f"Resumption requires at least 2 distinct administrative approvers, got {len(set(approver_ids))}")
-
+            raise ValueError(
+                f"Resumption requires at least 2 distinct administrative approvers, got {len(set(approver_ids))}"
+            )
+        if not approvals_data or len(approvals_data) < 2:
+            raise ValueError("Resumption requires at least 2 cryptographically signed approval records")
+        approvals: List[AdminApproval] = []
+        try:
+            for raw in approvals_data:
+                approval = raw if isinstance(raw, AdminApproval) else AdminApproval(
+                    approval_id=str(raw["approval_id"]), tenant_id=str(raw["tenant_id"]),
+                    action_type=str(raw["action_type"]), target_id=str(raw["target_id"]),
+                    payload_hash=str(raw["payload_hash"]), approver_id=str(raw["approver_id"]),
+                    expires_at=float(raw["expires_at"]), signature=str(raw["signature"]),
+                )
+                approvals.append(approval)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError(f"Malformed administrative approval record: {exc}") from exc
+        if [a.approver_id for a in approvals] != approver_ids:
+            raise ValueError("Approval identities do not match the supplied approver_ids")
+        quorum_ok, quorum_error = self.governance_manager.verify_and_consume_quorum(
+            approvals=approvals,
+            required_approvals=2,
+            expected_tenant_id=tenant_id,
+            expected_action_type="CIRCUIT_BREAKER_RESUME",
+            expected_target_id=organisation_id,
+            actual_payload={"organisation_id": organisation_id},
+        )
+        if not quorum_ok:
+            raise ValueError(f"Circuit breaker resumption governance rejected: {quorum_error}")
         now_str = datetime.now(timezone.utc).isoformat()
         state_before = self.get_state(tenant_id, organisation_id).value
         audit_id = f"cb-audit-{uuid.uuid4().hex[:12]}"
-        approvals_json = json.dumps(approvals_data or [{"approver_id": a} for a in approver_ids])
-
+        approvals_json = json.dumps([a.to_dict() for a in approvals], sort_keys=True)
         with self.conn:
-            # 1. Reset circuit breaker state to NORMAL
             self.conn.execute(
                 """
                 INSERT INTO system_circuit_breaker (
                     tenant_id, organisation_id, state, paused_by, paused_reason, paused_at, updated_at
                 ) VALUES (?, ?, 'NORMAL', NULL, NULL, NULL, ?)
                 ON CONFLICT (tenant_id, organisation_id) DO UPDATE SET
-                    state = 'NORMAL',
-                    paused_by = NULL,
-                    paused_reason = NULL,
-                    paused_at = NULL,
+                    state = 'NORMAL', paused_by = NULL, paused_reason = NULL, paused_at = NULL,
                     updated_at = excluded.updated_at
                 """,
                 (tenant_id, organisation_id, now_str),
             )
-
-            # 2. Append audit trail
             self.conn.execute(
                 """
                 INSERT INTO circuit_breaker_audit (
@@ -150,17 +172,11 @@ class SystemCircuitBreaker:
                 ) VALUES (?, ?, ?, 'RESUME', ?, ?, ?, 'NORMAL', ?, ?)
                 """,
                 (
-                    audit_id,
-                    tenant_id,
-                    organisation_id,
-                    f"multi-sig:{','.join(approver_ids)}",
-                    reason,
-                    state_before,
-                    approvals_json,
-                    now_str,
+                    audit_id, tenant_id, organisation_id,
+                    f"multi-sig:{','.join(approver_ids)}", reason,
+                    state_before, approvals_json, now_str,
                 ),
             )
-
         return audit_id
 
     def list_audit_history(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -60,12 +61,15 @@ class B2BMarketplaceCoordinator:
         self,
         marketplace_repo: MarketplaceRepository,
         work_order_repo: Optional[WorkOrderRepository] = None,
-        receipt_secret_key: str = "kalyx-phase17-secret-key-42",
+        receipt_secret_key: Optional[str] = None,
         circuit_breaker: Optional[SystemCircuitBreaker] = None,
     ) -> None:
         self.marketplace_repo = marketplace_repo
         self.work_order_repo = work_order_repo
-        self.receipt_secret_key = receipt_secret_key
+        resolved_secret = receipt_secret_key or os.getenv("KALYX_RECEIPT_SECRET_KEY")
+        if not resolved_secret:
+            raise ValueError("receipt_secret_key is required (inject it explicitly or set KALYX_RECEIPT_SECRET_KEY)")
+        self.receipt_secret_key = resolved_secret
         self.circuit_breaker = circuit_breaker
 
     def publish_b2b_order(
@@ -308,7 +312,7 @@ class B2BMarketplaceCoordinator:
                 f"(claimed by: {order.claimed_by_org_id}, {order.claimed_by_agent_id})"
             )
 
-        escrow = self.marketplace_repo.get_escrow_by_order(order.order_id)
+        escrow = self.marketplace_repo.get_escrow_by_order(order.order_id, order.tenant_id, order.organisation_id)
         if not escrow or escrow.status != EscrowStatus.HELD:
             raise ValueError(
                 f"Active escrow not found or not HELD for order '{order.order_id}' "
@@ -454,7 +458,7 @@ class B2BMarketplaceCoordinator:
         if order.status == MarketplaceOrderStatus.COMPLETED:
             raise ValueError(f"Cannot refund escrow for completed order '{order_id}'.")
 
-        escrow = self.marketplace_repo.get_escrow_by_order(order_id)
+        escrow = self.marketplace_repo.get_escrow_by_order(order_id, tenant_id, organisation_id)
         if not escrow or escrow.status != EscrowStatus.HELD:
             raise ValueError(f"No escrow in HELD status found for order '{order_id}'.")
 
