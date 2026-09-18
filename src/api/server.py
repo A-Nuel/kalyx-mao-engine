@@ -1556,7 +1556,7 @@ def settle_marketplace_order_endpoint(
             receipt_secret_key=secret,
         )
 
-        escrow = mkt_repo.get_escrow_by_order(order_id)
+        escrow = mkt_repo.get_escrow_by_order(order_id, tenant_id, org_id)
         if not escrow:
             raise HTTPException(status_code=404, detail="Escrow agreement not found for order")
 
