@@ -57,12 +57,19 @@ def test_derive_solvency_regime():
     assert derive_solvency_regime(0, expansion_threshold=150, standby_threshold=40) == SolvencyRegime.STANDBY
 
 
+RECEIPT_SECRET = "receipt-secret-daemon-test"
+
+
 def test_daemon_standby_preserves_capital(repo):
     ledger = DoubleEntryLedger(initial_treasury=20)  # Below 40 -> STANDBY
     provider = SimulatedOrbioExchangeProvider()
     executor = SimulatedWorkExecutor(exchange_provider=provider)
-    verifier = WorkDeliverableVerifier(secret_key="secret")
-    reconciler = SurplusReconciler(ledger=ledger, default_reserve_ratio=0.20)
+    verifier = WorkDeliverableVerifier(secret_key=RECEIPT_SECRET)
+    reconciler = SurplusReconciler(
+        ledger=ledger,
+        default_reserve_ratio=0.20,
+        receipt_secret_key=RECEIPT_SECRET,
+    )
     runner = SelfSustainingLoopRunner(
         ledger=ledger,
         work_executor=executor,
@@ -116,8 +123,12 @@ def test_daemon_multi_cycle_chaining_and_metrics(repo):
     provider = SimulatedOrbioExchangeProvider()
     provider._credit["org-daemon"] = 2_000_000  # Seed credits so no USDG purchases needed
     executor = SimulatedWorkExecutor(exchange_provider=provider)
-    verifier = WorkDeliverableVerifier(secret_key="secret")
-    reconciler = SurplusReconciler(ledger=ledger, default_reserve_ratio=0.20)
+    verifier = WorkDeliverableVerifier(secret_key=RECEIPT_SECRET)
+    reconciler = SurplusReconciler(
+        ledger=ledger,
+        default_reserve_ratio=0.20,
+        receipt_secret_key=RECEIPT_SECRET,
+    )
     runner = SelfSustainingLoopRunner(
         ledger=ledger,
         work_executor=executor,
@@ -206,3 +217,56 @@ def test_daemon_multi_cycle_chaining_and_metrics(repo):
     assert daemon.cycle_count == 2
     assert daemon.total_revenue_earned_usdg == 250  # 100 + 150
     assert daemon.total_compute_consumed_credits == 1_000_000  # 500k + 500k
+
+
+def test_daemon_cycle_requires_matching_receipt_secret(repo):
+    """Proves that a daemon cycle fails settlement if the deliverable verifier and reconciler keys do not match."""
+    ledger = DoubleEntryLedger(initial_treasury=200)
+    provider = SimulatedOrbioExchangeProvider()
+    provider._credit["org-daemon"] = 1_000_000
+    executor = SimulatedWorkExecutor(exchange_provider=provider)
+    verifier = WorkDeliverableVerifier(secret_key="daemon-secret-A")
+    reconciler = SurplusReconciler(
+        ledger=ledger,
+        default_reserve_ratio=0.20,
+        receipt_secret_key="daemon-secret-B",
+    )
+    runner = SelfSustainingLoopRunner(
+        ledger=ledger,
+        work_executor=executor,
+        work_verifier=verifier,
+        surplus_reconciler=reconciler,
+        exchange_provider=provider,
+    )
+    adapter = MockAgentAdapter()
+    ceo = CEOAgent(agent_id="ceo-1", adapter=adapter)
+    analyst = FinancialAnalystAgent(agent_id="fa-1", adapter=adapter)
+    coordinator = WorkOrderCoordinator(
+        ceo_agent=ceo,
+        financial_analyst=analyst,
+        loop_runner=runner,
+        work_order_repo=repo,
+    )
+
+    daemon = AutonomousDaemon(
+        tenant_id="tenant-daemon",
+        organisation_id="org-daemon",
+        coordinator=coordinator,
+        ledger=ledger,
+        work_order_repo=repo,
+    )
+
+    wo = WorkOrder(
+        tenant_id="tenant-daemon",
+        organisation_id="org-daemon",
+        work_order_id="wo-mismatch-cycle",
+        client_id="c-mismatch",
+        title="Mismatch Cycle Order",
+        description="Deliverable signed with secret-A but reconciler expects secret-B",
+        deliverable_type="analysis",
+        required_orbio_credits=500_000,
+        bounty_amount=100,
+    )
+
+    with pytest.raises(ValueError, match="invalid HMAC signature"):
+        daemon.step_cycle(candidate_work_orders=[wo])

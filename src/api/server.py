@@ -1087,8 +1087,13 @@ def execute_work_order_endpoint(
         ledger = _org_scoped_ledger(db, org)
         provider = SimulatedOrbioExchangeProvider()
         executor = SimulatedWorkExecutor(exchange_provider=provider)
-        verifier = WorkDeliverableVerifier(secret_key=policy_secret())
-        reconciler = SurplusReconciler(ledger=ledger, default_reserve_ratio=0.20)
+        secret = policy_secret()
+        verifier = WorkDeliverableVerifier(secret_key=secret)
+        reconciler = SurplusReconciler(
+            ledger=ledger,
+            default_reserve_ratio=0.20,
+            receipt_secret_key=secret,
+        )
         runner = SelfSustainingLoopRunner(
             ledger=ledger,
             work_executor=executor,
@@ -1195,8 +1200,13 @@ def daemon_step_endpoint(
         ledger = _org_scoped_ledger(db, org)
         provider = SimulatedOrbioExchangeProvider()
         executor = SimulatedWorkExecutor(exchange_provider=provider)
-        verifier = WorkDeliverableVerifier(secret_key=policy_secret())
-        reconciler = SurplusReconciler(ledger=ledger, default_reserve_ratio=0.20)
+        secret = policy_secret()
+        verifier = WorkDeliverableVerifier(secret_key=secret)
+        reconciler = SurplusReconciler(
+            ledger=ledger,
+            default_reserve_ratio=0.20,
+            receipt_secret_key=secret,
+        )
         runner = SelfSustainingLoopRunner(
             ledger=ledger,
             work_executor=executor,

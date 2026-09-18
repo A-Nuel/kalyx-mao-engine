@@ -63,14 +63,21 @@ def work_executor(exchange_provider):
     return SimulatedWorkExecutor(exchange_provider=exchange_provider)
 
 
+RECEIPT_SECRET = "receipt-secret-phase16-test"
+
+
 @pytest.fixture
 def work_verifier():
-    return WorkDeliverableVerifier(secret_key="verifier-secret-phase16")
+    return WorkDeliverableVerifier(secret_key=RECEIPT_SECRET)
 
 
 @pytest.fixture
 def surplus_reconciler(ledger):
-    return SurplusReconciler(ledger=ledger, default_reserve_ratio=0.30)
+    return SurplusReconciler(
+        ledger=ledger,
+        default_reserve_ratio=0.30,
+        receipt_secret_key=RECEIPT_SECRET,
+    )
 
 
 
@@ -314,3 +321,56 @@ def test_work_order_coordinator_unviable_rejection(coordinator, repo):
     persisted_wo = repo.get_work_order("tenant-test", "org-test", "wo-loss-making")
     assert persisted_wo is not None
     assert persisted_wo.status == WorkOrderStatus.REJECTED
+
+
+def test_work_order_coordinator_rejects_mismatched_receipt_secret(ledger, work_executor, repo):
+    """Proves that a mismatch between WorkDeliverableVerifier signing key and SurplusReconciler key blocks settlement."""
+    provider = SimulatedOrbioExchangeProvider()
+    provider._credit["org-test"] = 1_000_000
+    executor = SimulatedWorkExecutor(exchange_provider=provider)
+    verifier = WorkDeliverableVerifier(secret_key="verifier-key-alpha")
+    reconciler = SurplusReconciler(
+        ledger=ledger,
+        default_reserve_ratio=0.20,
+        receipt_secret_key="verifier-key-beta",
+    )
+    loop_runner = SelfSustainingLoopRunner(
+        ledger=ledger,
+        work_executor=executor,
+        work_verifier=verifier,
+        surplus_reconciler=reconciler,
+        exchange_provider=provider,
+        reserve_ratio=0.20,
+    )
+    adapter = MockAgentAdapter()
+    ceo = CEOAgent(agent_id="ceo-test", adapter=adapter)
+    analyst = FinancialAnalystAgent(agent_id="fa-test", adapter=adapter)
+    coord = WorkOrderCoordinator(
+        ceo_agent=ceo,
+        financial_analyst=analyst,
+        loop_runner=loop_runner,
+        work_order_repo=repo,
+    )
+
+    wo = WorkOrder(
+        tenant_id="tenant-test",
+        organisation_id="org-test",
+        work_order_id="wo-key-mismatch",
+        client_id="client-test",
+        title="Valid order with mismatched secrets",
+        description="Delivery will be signed with key-alpha but reconciler expects key-beta",
+        deliverable_type="SECURITY_AUDIT",
+        required_orbio_credits=100_000,
+        bounty_amount=200,
+        status=WorkOrderStatus.PROPOSED,
+    )
+    repo.save_work_order(wo)
+
+    with pytest.raises(ValueError, match="invalid HMAC signature"):
+        coord.select_and_coordinate(
+            mission_id="m-mismatch",
+            work_orders=[wo],
+            current_treasury_usdg=500,
+            current_orbio_credits=1_000_000,
+            producer_agent_id="agent-sec",
+        )
