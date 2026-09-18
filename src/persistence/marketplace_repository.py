@@ -142,9 +142,15 @@ class MarketplaceRepository:
                     """
                     SELECT execution_telemetry_json
                     FROM work_deliverables
-                    WHERE tenant_id = ? AND organisation_id = ? AND deliverable_id = ?
+                    WHERE deliverable_id = ?
+                      AND tenant_id = ?
+                      AND organisation_id = ?
                     """,
-                    (order.tenant_id, order.organisation_id, order.deliverable_id),
+                    (
+                        order.deliverable_id,
+                        order.claimed_by_tenant_id,
+                        order.claimed_by_org_id,
+                    ),
                 ).fetchone()
                 if telemetry_row:
                     try:
@@ -302,16 +308,30 @@ class MarketplaceRepository:
     def get_escrow_by_order(
         self, order_id: str, tenant_id: str, organisation_id: str
     ) -> Optional[EscrowAgreement]:
-        """Fetch an escrow only inside its authoritative client tenant/org scope."""
+        """Resolve an escrow by client scope or an authenticated provider claim scope.
+
+        The client creates and owns the escrow, while the provider performs settlement.
+        A provider therefore cannot resolve the escrow by its own tenant/org unless the
+        marketplace order explicitly records that provider as the current claimant.
+        """
         if not tenant_id or not organisation_id:
             raise ValueError("tenant_id and organisation_id are required for scoped escrow lookup")
         cursor = self.conn.cursor() if hasattr(self.conn, "cursor") else self.conn
         row = cursor.execute(
             """
-            SELECT * FROM marketplace_escrows
-            WHERE tenant_id = ? AND organisation_id = ? AND order_id = ?
+            SELECT e.*
+            FROM marketplace_escrows AS e
+            JOIN marketplace_orders AS o
+              ON o.tenant_id = e.client_tenant_id
+             AND o.organisation_id = e.client_org_id
+             AND o.order_id = e.order_id
+            WHERE e.order_id = ?
+              AND (
+                    (e.tenant_id = ? AND e.organisation_id = ?)
+                 OR (o.claimed_by_tenant_id = ? AND o.claimed_by_org_id = ?)
+              )
             """,
-            (tenant_id, organisation_id, order_id),
+            (order_id, tenant_id, organisation_id, tenant_id, organisation_id),
         ).fetchone()
         if not row:
             return None
