@@ -209,7 +209,8 @@ const API = (() => {
     // Phase 17: B2B Marketplace & Governed Capabilities
     async getMarketplaceOrders(status = null) {
       const qs = status ? `?status=${encodeURIComponent(status)}` : '';
-      return request(`/api/v1/marketplace/orders${qs}`);
+      const result = await request(`/api/v1/marketplace/orders${qs}`);
+      return Array.isArray(result) ? result : (result.orders || []);
     },
     async createMarketplaceOrder(data) {
       return request('/api/v1/marketplace/orders', {
@@ -231,7 +232,8 @@ const API = (() => {
     },
     async getAgentCapabilities(orgId, agentId = null) {
       const qs = agentId ? `?agent_id=${encodeURIComponent(agentId)}` : '';
-      return request(`/api/v1/organisations/${encodeURIComponent(orgId)}/capabilities${qs}`);
+      const result = await request(`/api/v1/organisations/${encodeURIComponent(orgId)}/capabilities${qs}`);
+      return Array.isArray(result) ? result : (result.capabilities || []);
     },
 
     // Scripted Judge Demo
