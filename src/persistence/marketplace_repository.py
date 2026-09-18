@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -132,7 +133,27 @@ class MarketplaceRepository:
                 ORDER BY created_at DESC
                 """
             ).fetchall()
-        return [PublicMarketplaceOrder.from_order(self._row_to_order(r)) for r in rows]
+        projections = []
+        for row in rows:
+            order = self._row_to_order(row)
+            provenance = "UNEXECUTED"
+            if order.deliverable_id:
+                telemetry_row = cursor.execute(
+                    """
+                    SELECT execution_telemetry_json
+                    FROM work_deliverables
+                    WHERE tenant_id = ? AND organisation_id = ? AND deliverable_id = ?
+                    """,
+                    (order.tenant_id, order.organisation_id, order.deliverable_id),
+                ).fetchone()
+                if telemetry_row:
+                    try:
+                        telemetry = json.loads(telemetry_row["execution_telemetry_json"])
+                        provenance = str(telemetry.get("provenance") or ("SIMULATED" if telemetry.get("is_simulated") else "LIVE"))
+                    except (TypeError, ValueError):
+                        provenance = "UNKNOWN"
+            projections.append(PublicMarketplaceOrder.from_order(order, provenance=provenance))
+        return projections
 
     def claim_order(
         self,
