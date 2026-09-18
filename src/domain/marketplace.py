@@ -139,3 +139,48 @@ class EscrowAgreement:
             "created_at": self.created_at,
             "released_at": self.released_at,
         }
+
+
+@dataclass(frozen=True)
+class PublicMarketplaceOrder:
+    """Sanitized public marketplace order projection for cross-tenant discovery.
+
+    Exposes ONLY non-sensitive order specifications. Strips all private tenant data,
+    escrow ids, claiming agent/org ids, and execution telemetry.
+    """
+    order_id: str
+    title: str
+    description: str
+    required_capability: str
+    bounty_amount: int
+    bounty_asset: str = "USDG"
+    sla_timeout_seconds: int = 3600
+    status: MarketplaceOrderStatus = MarketplaceOrderStatus.OPEN
+    created_at: str = ""
+
+    @classmethod
+    def from_order(cls, order: MarketplaceOrder) -> PublicMarketplaceOrder:
+        return cls(
+            order_id=order.order_id,
+            title=order.title,
+            description=order.description,
+            required_capability=order.required_capability,
+            bounty_amount=order.bounty_amount,
+            bounty_asset=order.bounty_asset,
+            sla_timeout_seconds=order.sla_timeout_seconds,
+            status=order.status,
+            created_at=order.created_at,
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "order_id": self.order_id,
+            "title": self.title,
+            "description": self.description,
+            "required_capability": self.required_capability,
+            "bounty_amount": self.bounty_amount,
+            "bounty_asset": self.bounty_asset,
+            "sla_timeout_seconds": self.sla_timeout_seconds,
+            "status": self.status.value if isinstance(self.status, MarketplaceOrderStatus) else self.status,
+            "created_at": self.created_at,
+        }

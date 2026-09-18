@@ -26,6 +26,7 @@ from src.domain.work_order import (
 from src.economy.ledger import DoubleEntryLedger, ESCROW, EXTERNAL_SINK, TREASURY
 from src.economy.surplus_accounting import SurplusReconciler
 from src.execution.work_executor import BaseWorkExecutor
+from src.governance.circuit_breaker import SystemCircuitBreaker
 from src.governance.policy_engine import PolicyEngine
 from src.orchestration.capability_manager import CapabilityManager
 from src.persistence.marketplace_repository import MarketplaceRepository
@@ -60,10 +61,12 @@ class B2BMarketplaceCoordinator:
         marketplace_repo: MarketplaceRepository,
         work_order_repo: Optional[WorkOrderRepository] = None,
         receipt_secret_key: str = "kalyx-phase17-secret-key-42",
+        circuit_breaker: Optional[SystemCircuitBreaker] = None,
     ) -> None:
         self.marketplace_repo = marketplace_repo
         self.work_order_repo = work_order_repo
         self.receipt_secret_key = receipt_secret_key
+        self.circuit_breaker = circuit_breaker
 
     def publish_b2b_order(
         self,
@@ -82,11 +85,16 @@ class B2BMarketplaceCoordinator:
     ) -> MarketplaceOrder:
         """
         Client Org publishes a public B2B order:
-        1. Propose PUBLISH_MARKETPLACE_ORDER
-        2. Policy validates treasury balance
-        3. Ledger locks funds: TREASURY -> ESCROW
-        4. Persist order and escrow agreement
+        1. Check authoritative circuit breaker state
+        2. Propose PUBLISH_MARKETPLACE_ORDER
+        3. Policy validates treasury balance
+        4. Ledger locks funds: TREASURY -> ESCROW
+        5. Persist order and escrow agreement
         """
+        # Authoritative circuit breaker check
+        if self.circuit_breaker is not None and self.circuit_breaker.is_paused(client_tenant_id, client_org_id):
+            raise PermissionError(f"Organisation '{client_org_id}' circuit breaker is PAUSED: new order publication blocked")
+
         order_id = f"mkt-order-{uuid.uuid4().hex[:8]}"
 
         # 1. Propose & Policy evaluate
@@ -170,20 +178,29 @@ class B2BMarketplaceCoordinator:
     ) -> Optional[MarketplaceOrder]:
         """
         Provider Org discovers an open order and claims it:
-        1. Identifies eligible order
-        2. Checks capability; if missing, triggers governed capability evolution proposal
-        3. Claims order atomically
+        1. Check authoritative circuit breaker state
+        2. Identifies eligible order from public board
+        3. Checks capability; if missing, triggers governed capability evolution proposal
+        4. Claims order atomically
         """
-        orders = self.marketplace_repo.list_public_orders(status="OPEN")
+        # Authoritative circuit breaker check
+        if self.circuit_breaker is not None and self.circuit_breaker.is_paused(provider_tenant_id, provider_org_id):
+            raise PermissionError(f"Organisation '{provider_org_id}' circuit breaker is PAUSED: order claim blocked")
+
+        public_orders = self.marketplace_repo.list_public_orders(status="OPEN")
         eligible_order: Optional[MarketplaceOrder] = None
 
-        for o in orders:
-            if target_order_id and o.order_id != target_order_id:
+        for pub in public_orders:
+            if target_order_id and pub.order_id != target_order_id:
+                continue
+            # Fetch authoritative full order to check tenant/org ownership
+            full_order = self.marketplace_repo.get_order_by_id(pub.order_id)
+            if not full_order:
                 continue
             # Do not self-fulfill own order
-            if o.tenant_id == provider_tenant_id and o.organisation_id == provider_org_id:
+            if full_order.tenant_id == provider_tenant_id and full_order.organisation_id == provider_org_id:
                 continue
-            eligible_order = o
+            eligible_order = full_order
             break
 
         if not eligible_order:

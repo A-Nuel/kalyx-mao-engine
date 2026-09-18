@@ -6,11 +6,13 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from src.domain.capability import CapabilityGrant, CapabilityGrantStatus
+from src.domain.exceptions import IdempotencyConflict
 from src.domain.marketplace import (
     EscrowAgreement,
     EscrowStatus,
     MarketplaceOrder,
     MarketplaceOrderStatus,
+    PublicMarketplaceOrder,
 )
 
 
@@ -24,7 +26,22 @@ class MarketplaceRepository:
     # Marketplace Orders
     # ------------------------------------------------------------------
 
-    def create_order(self, order: MarketplaceOrder) -> None:
+    def create_order(self, order: MarketplaceOrder) -> MarketplaceOrder:
+        """Create a marketplace order with strict canonical hash idempotency.
+
+        1. If order doesn't exist: INSERT and return order (NEW).
+        2. If order exists with identical specification_hash: return existing order (DUPLICATE).
+        3. If order exists with different specification_hash: raise IdempotencyConflict (CONFLICT).
+        """
+        existing = self.get_order(order.tenant_id, order.organisation_id, order.order_id)
+        if existing is not None:
+            if existing.specification_hash == order.specification_hash:
+                return existing
+            raise IdempotencyConflict(
+                f"Marketplace order '{order.order_id}' already exists with conflicting specification hash: "
+                f"existing '{existing.specification_hash}' vs proposed '{order.specification_hash}'"
+            )
+
         created_str = (
             order.created_at.isoformat()
             if isinstance(order.created_at, datetime)
@@ -44,10 +61,6 @@ class MarketplaceRepository:
                     specification_hash, required_capability, bounty_amount,
                     bounty_asset, sla_timeout_seconds, status, created_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT (tenant_id, organisation_id, order_id) DO UPDATE SET
-                    title = excluded.title,
-                    description = excluded.description,
-                    status = excluded.status
                 """,
                 (
                     order.tenant_id,
@@ -64,6 +77,7 @@ class MarketplaceRepository:
                     created_str,
                 ),
             )
+        return order
 
     def get_order(
         self, tenant_id: str, organisation_id: str, order_id: str
@@ -80,10 +94,27 @@ class MarketplaceRepository:
             return None
         return self._row_to_order(row)
 
+    def get_order_by_id(self, order_id: str) -> Optional[MarketplaceOrder]:
+        """Fetch an order by order_id across organisations for discovery fulfillment."""
+        cursor = self.conn.cursor() if hasattr(self.conn, "cursor") else self.conn
+        row = cursor.execute(
+            """
+            SELECT * FROM marketplace_orders
+            WHERE order_id = ?
+            """,
+            (order_id,),
+        ).fetchone()
+        if not row:
+            return None
+        return self._row_to_order(row)
+
     def list_public_orders(
         self, status: Optional[str] = "OPEN"
-    ) -> List[MarketplaceOrder]:
-        """Lists public marketplace orders across organisations (sanitized public board)."""
+    ) -> List[PublicMarketplaceOrder]:
+        """Lists public marketplace orders across organisations as sanitized PublicMarketplaceOrder projections.
+
+        Cross-tenant discovery is supported while ensuring zero private tenant/escrow/claimant leakage.
+        """
         cursor = self.conn.cursor() if hasattr(self.conn, "cursor") else self.conn
         if status is not None:
             rows = cursor.execute(
@@ -101,7 +132,7 @@ class MarketplaceRepository:
                 ORDER BY created_at DESC
                 """
             ).fetchall()
-        return [self._row_to_order(r) for r in rows]
+        return [PublicMarketplaceOrder.from_order(self._row_to_order(r)) for r in rows]
 
     def claim_order(
         self,
@@ -178,7 +209,43 @@ class MarketplaceRepository:
     # Marketplace Escrows
     # ------------------------------------------------------------------
 
-    def save_escrow(self, escrow: EscrowAgreement) -> None:
+    def save_escrow(self, escrow: EscrowAgreement) -> EscrowAgreement:
+        """Persist escrow agreement with strict idempotency and conflict detection."""
+        existing = self.get_escrow(escrow.tenant_id, escrow.organisation_id, escrow.escrow_id)
+        if existing is not None:
+            if existing.order_id == escrow.order_id and existing.bounty_amount == escrow.bounty_amount:
+                # Same canonical target and terms: safe duplicate / idempotent update
+                with self.conn:
+                    self.conn.execute(
+                        """
+                        UPDATE marketplace_escrows
+                        SET status = ?,
+                            provider_tenant_id = COALESCE(?, provider_tenant_id),
+                            provider_org_id = COALESCE(?, provider_org_id),
+                            client_ledger_tx_id = COALESCE(?, client_ledger_tx_id),
+                            provider_ledger_tx_id = COALESCE(?, provider_ledger_tx_id),
+                            released_at = COALESCE(?, released_at)
+                        WHERE tenant_id = ? AND organisation_id = ? AND escrow_id = ?
+                        """,
+                        (
+                            escrow.status.value if isinstance(escrow.status, EscrowStatus) else str(escrow.status),
+                            escrow.provider_tenant_id,
+                            escrow.provider_org_id,
+                            escrow.client_ledger_tx_id,
+                            escrow.provider_ledger_tx_id,
+                            escrow.released_at,
+                            escrow.tenant_id,
+                            escrow.organisation_id,
+                            escrow.escrow_id,
+                        ),
+                    )
+                return self.get_escrow(escrow.tenant_id, escrow.organisation_id, escrow.escrow_id) or escrow
+            raise IdempotencyConflict(
+                f"Escrow '{escrow.escrow_id}' already exists with conflicting parameters: "
+                f"order_id '{existing.order_id}' vs '{escrow.order_id}', "
+                f"bounty '{existing.bounty_amount}' vs '{escrow.bounty_amount}'"
+            )
+
         created_str = (
             escrow.created_at.isoformat()
             if isinstance(escrow.created_at, datetime)
@@ -198,13 +265,6 @@ class MarketplaceRepository:
                     provider_org_id, bounty_amount, bounty_asset, status,
                     client_ledger_tx_id, provider_ledger_tx_id, created_at, released_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT (tenant_id, organisation_id, escrow_id) DO UPDATE SET
-                    status = excluded.status,
-                    provider_tenant_id = excluded.provider_tenant_id,
-                    provider_org_id = excluded.provider_org_id,
-                    client_ledger_tx_id = excluded.client_ledger_tx_id,
-                    provider_ledger_tx_id = excluded.provider_ledger_tx_id,
-                    released_at = excluded.released_at
                 """,
                 (
                     escrow.tenant_id,
@@ -224,6 +284,7 @@ class MarketplaceRepository:
                     escrow.released_at,
                 ),
             )
+        return escrow
 
     def get_escrow(
         self, tenant_id: str, organisation_id: str, escrow_id: str
