@@ -1061,9 +1061,12 @@ const App = (() => {
             const isCompleted = o.status === 'COMPLETED';
             const isClaimed = o.status === 'CLAIMED';
             const statusColor = isCompleted ? 'emerald' : (isClaimed ? 'cyan' : 'amber');
-            const provBadge = o.is_simulated === false 
+            const provenance = o.provenance || o.execution_provenance || (isCompleted ? 'VERIFIED' : 'GOVERNED');
+            const provBadge = provenance === 'LIVE_ORBIO' || provenance === 'LIVE'
               ? `<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-rose-500/20 text-rose-300 border border-rose-500/30 font-bold">LIVE ORBIO</span>`
-              : `<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-blue-500/15 text-blue-300 border border-blue-500/30">SIMULATED</span>`;
+              : provenance === 'SIMULATED'
+                ? `<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-blue-500/15 text-blue-300 border border-blue-500/30">SIMULATED</span>`
+                : `<span class="px-2 py-0.5 rounded text-[10px] font-mono bg-white/10 text-slate-300 border border-white/10">${esc(provenance)}</span>`;
 
             return `
               <div class="p-4 rounded-xl bg-surface-container-lowest border border-white/10 hover:border-white/20 transition-all space-y-3">
@@ -1085,16 +1088,16 @@ const App = (() => {
 
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 text-[11px] font-mono text-slate-400 border-t border-white/[0.04]">
                   <div>
-                    <span class="text-slate-500 block">CLIENT ORG</span>
-                    <span class="text-slate-200">${esc(o.organisation_id)}</span>
+                    <span class="text-slate-500 block">ORDER VISIBILITY</span>
+                    <span class="text-slate-200">PUBLIC PROJECTION</span>
                   </div>
                   <div>
                     <span class="text-slate-500 block">REQUIRED CAPABILITY</span>
                     <span class="text-blue-300 bg-blue-500/10 px-1.5 py-0.5 rounded">${esc(o.required_capability)}</span>
                   </div>
                   <div>
-                    <span class="text-slate-500 block">PROVIDER ORG</span>
-                    <span class="text-slate-200">${esc(o.claimed_by_org_id || '—')}</span>
+                    <span class="text-slate-500 block">CLAIM STATE</span>
+                    <span class="text-slate-200">${isCompleted ? 'VERIFIED' : (isClaimed ? 'CLAIMED' : 'OPEN')}</span>
                   </div>
                   <div>
                     <span class="text-slate-500 block">CREATED AT</span>
