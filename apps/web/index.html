@@ -1088,7 +1088,86 @@
           </div>
         </div>
 
-      </section>
+      
+        <!-- Phase 16: Work Orders Panel -->
+        <div class="mt-space-xl p-space-lg rounded-xl bg-surface-container-low/75 backdrop-blur-2xl shadow-xl space-y-space-md border border-white/[0.08]">
+          <div class="flex items-center justify-between pb-space-sm border-b border-white/[0.06]">
+            <div class="flex items-center gap-space-sm">
+              <span class="material-symbols-outlined text-primary text-xl">assignment</span>
+              <h3 class="font-headline-sm text-headline-sm text-on-surface font-medium">Work Orders</h3>
+              <span id="workOrderCountBadge" class="px-2 py-0.5 rounded bg-surface-container font-label-sm text-label-sm text-on-surface-variant">0 Orders</span>
+            </div>
+            <span class="text-xs font-mono text-slate-500">Phase 16 &middot; Autonomous Monetisation</span>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left font-mono text-xs">
+              <thead>
+                <tr class="border-b border-white/[0.08] text-slate-400">
+                  <th class="py-3 px-4">WORK ORDER ID</th>
+                  <th class="py-3 px-4">TITLE</th>
+                  <th class="py-3 px-4">BOUNTY</th>
+                  <th class="py-3 px-4">STATUS</th>
+                  <th class="py-3 px-4">DELIVERABLE</th>
+                </tr>
+              </thead>
+              <tbody id="workOrdersTableBody" class="divide-y divide-white/[0.04]">
+                <tr>
+                  <td colspan="5" class="py-6 px-4 text-center text-slate-500 italic">No work orders yet &mdash; run a demo to generate one</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Phase 16: Mission Lineage + Autonomous Daemon Control -->
+        <div class="mt-space-lg grid grid-cols-1 md:grid-cols-2 gap-gutter">
+          <!-- Mission Lineage Summary -->
+          <div class="p-space-lg rounded-xl bg-surface-container-low/60 backdrop-blur-xl shadow-md border border-white/[0.06]">
+            <div class="flex items-center gap-space-sm mb-space-md">
+              <span class="material-symbols-outlined text-tertiary text-lg">account_tree</span>
+              <h4 class="font-headline-sm text-headline-sm text-on-surface font-medium">Mission Lineage</h4>
+            </div>
+            <div class="space-y-space-sm">
+              <div class="flex items-center justify-between">
+                <span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Total Cycles</span>
+                <span id="missionLineageCycleCount" class="font-label-md text-label-md text-on-surface font-semibold">0</span>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Root Missions</span>
+                <span id="missionLineageRootCount" class="font-label-md text-label-md text-on-surface font-semibold">0</span>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Child Missions</span>
+                <span id="missionLineageChildCount" class="font-label-md text-label-md text-primary font-semibold">0</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Autonomous Daemon Control -->
+          <div class="p-space-lg rounded-xl bg-surface-container-low/60 backdrop-blur-xl shadow-md border border-white/[0.06]">
+            <div class="flex items-center gap-space-sm mb-space-md">
+              <span class="material-symbols-outlined text-primary text-lg">auto_mode</span>
+              <h4 class="font-headline-sm text-headline-sm text-on-surface font-medium">Autonomous Daemon</h4>
+            </div>
+            <p class="font-body-sm text-body-sm text-on-surface-variant mb-space-md">
+              Trigger a single governed economic cycle: regime detection &rarr; work evaluation &rarr; execution &rarr; surplus accounting.
+            </p>
+            <div class="flex items-center gap-space-sm flex-wrap">
+              <button
+                id="daemonStepBtn"
+                class="flex items-center gap-space-xs px-space-md py-2 rounded-lg bg-primary hover:brightness-110 active:scale-[0.98] text-on-primary font-body-sm text-body-sm font-medium transition-all shadow-md"
+                onclick="App.stepDaemon()"
+                type="button"
+              >
+                <span class="material-symbols-outlined text-sm">play_circle</span>
+                <span>Step Daemon Cycle</span>
+              </button>
+              <span id="daemonLastResult" class="font-label-sm text-label-sm text-on-surface-variant italic">No cycles run yet</span>
+            </div>
+          </div>
+        </div>
+
+</section>
 
       <!-- 3. ORGANISATION VIEW -->
       <section id="view-organisation" class="view-panel hidden">
@@ -1567,6 +1646,7 @@
         <span>Autonomous Org</span>
         <span class="opacity-40">/</span>
         <span class="text-primary font-medium">Financial Solvency</span>
+        <span id="solvencyRegimeBadge" class="ml-2 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-label-sm text-label-sm font-medium uppercase tracking-wider">—</span>
       </div>
       <h1 class="font-headline-lg text-headline-lg text-on-surface tracking-tight font-semibold">
         Treasury & Resource Allocation
@@ -1589,7 +1669,37 @@
   </div>
 
   <!-- 4 Surface KPI Cards (Obsidian Specular Tiers) -->
-  <div class="grid grid-cols-1 md:grid-cols-4 gap-gutter">
+  
+  <!-- Phase 16: Cumulative Revenue & Solvency Metrics -->
+  <div class="p-space-lg rounded-xl bg-surface-container-low/75 backdrop-blur-2xl shadow-xl border border-white/[0.08]">
+    <div class="flex items-center justify-between pb-space-sm border-b border-white/[0.06] mb-space-md">
+      <div class="flex items-center gap-space-sm">
+        <span class="material-symbols-outlined text-primary text-xl">insights</span>
+        <h3 class="font-headline-sm text-headline-sm text-on-surface font-medium">Phase 16 Economic Metrics</h3>
+      </div>
+      <span class="text-xs font-mono text-slate-500">Self-Sustaining Loop Accounting</span>
+    </div>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-gutter">
+      <div class="flex flex-col gap-1">
+        <span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Solvency Regime</span>
+        <span id="treasurySolvencyRegime" class="font-headline-sm text-headline-sm text-on-surface font-semibold">—</span>
+      </div>
+      <div class="flex flex-col gap-1">
+        <span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Cumulative Revenue</span>
+        <span id="treasuryCumulativeRevenue" class="font-headline-sm text-headline-sm text-emerald-400 font-semibold">0 USDG</span>
+      </div>
+      <div class="flex flex-col gap-1">
+        <span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Net Surplus</span>
+        <span id="treasuryCumulativeSurplus" class="font-headline-sm text-headline-sm text-primary font-semibold">0 USDG</span>
+      </div>
+      <div class="flex flex-col gap-1">
+        <span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Revenue Events</span>
+        <span id="treasuryRevenueEvents" class="font-headline-sm text-headline-sm text-on-surface font-semibold">0</span>
+      </div>
+    </div>
+  </div>
+
+<div class="grid grid-cols-1 md:grid-cols-4 gap-gutter">
     <!-- Card 1: Available Treasury Balance -->
     <div class="p-space-lg rounded-xl bg-surface-container-low/90 backdrop-blur-xl border border-white/10 shadow-lg flex flex-col justify-between space-y-space-md">
       <div class="flex items-center justify-between">

@@ -44,3 +44,11 @@ class MissionReviewOutput(BaseModel):
     mission_success: bool
     summary: str
     lessons_learned: List[str]
+
+class UnitEconomicsEvaluation(BaseModel):
+    viable: bool
+    margin_ratio: float
+    projected_direct_cost_usdg: int
+    expected_surplus_usdg: int
+    reason: str
+

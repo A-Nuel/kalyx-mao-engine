@@ -207,11 +207,17 @@ class SelfSustainingLoopRunner:
         # 5. Client Revenue Settlement & Surplus Reconciliation
         # Simulate client depositing bounty USDG into the REVENUE account
         gross_bounty = work_order.bounty_amount
-        self.ledger._mint(
-            to_account=REVENUE,
-            amount=gross_bounty,
-            memo=f"Client deposit for work order {work_order.work_order_id}",
-        )
+        if hasattr(self.ledger, "deposit_revenue"):
+            self.ledger.deposit_revenue(
+                amount=gross_bounty,
+                memo=f"Client deposit for work order {work_order.work_order_id}",
+            )
+        else:
+            self.ledger._mint(
+                to_account=REVENUE,
+                amount=gross_bounty,
+                memo=f"Client deposit for work order {work_order.work_order_id}",
+            )
 
         revenue_event = self.surplus_reconciler.reconcile_surplus(
             work_order=work_order,

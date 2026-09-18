@@ -92,3 +92,9 @@ class WorkOrderStatus(str, Enum):
 class DeliverableStatus(str, Enum):
     ACCEPTED = "ACCEPTED"
     REJECTED = "REJECTED"
+
+class SolvencyRegime(str, Enum):
+    EXPANSION = "EXPANSION"
+    AUSTERE = "AUSTERE"
+    STANDBY = "STANDBY"
+

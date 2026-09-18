@@ -42,6 +42,24 @@ class PostgresLedger:
             from_account=SYSTEM_MINT, to_account=to_account, amount=amount, memo=memo,
         )
 
+    def deposit_revenue(self, amount: int, memo: str, transaction_id: Optional[str] = None, to_account: str = "REVENUE") -> LedgerEntry:
+        if amount <= 0:
+            raise ValueError("Deposit amount must be positive")
+        tx_id = transaction_id or f"deposit-{uuid.uuid4()}"
+        entry_id = str(uuid.uuid4())
+        now = datetime.utcnow()
+        with self.db.conn:
+            self.db.conn.execute(
+                """INSERT INTO ledger_entries
+                   (id, timestamp, transaction_id, from_account, to_account, amount, memo, tenant_id)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                (entry_id, now, tx_id, SYSTEM_MINT, to_account, amount, memo, self.tenant_id),
+            )
+        return LedgerEntry(
+            id=entry_id, timestamp=now, transaction_id=tx_id,
+            from_account=SYSTEM_MINT, to_account=to_account, amount=amount, memo=memo,
+        )
+
     def get_balance(self, account: str) -> int:
         row = self.db.conn.execute(
             """SELECT COALESCE(SUM(CASE WHEN to_account = %s THEN amount ELSE 0 END), 0)

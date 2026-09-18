@@ -35,6 +35,29 @@ class OrganisationScopedLedger:
     def transfer(self, from_account: str, to_account: str, amount: int, memo: str, transaction_id: Optional[str] = None) -> LedgerEntry:
         return self.tenant_ledger.transfer(self._account(from_account), self._account(to_account), amount, memo, transaction_id)
 
+    def deposit_revenue(self, amount: int, memo: str, transaction_id: Optional[str] = None) -> LedgerEntry:
+        if amount <= 0:
+            raise ValueError("Deposit amount must be positive")
+        target_account = self._account("REVENUE")
+        entry_id = str(uuid.uuid4())
+        tx_id = transaction_id or f"{self.tenant_id}:org-{self.organisation_id}:deposit-{uuid.uuid4()}"
+        timestamp = __import__('datetime').datetime.utcnow()
+        full_to_account = f"{self.tenant_id}:{target_account}"
+        with self.db.conn:
+            self.db.conn.execute(
+                "INSERT INTO ledger_entries (id,timestamp,transaction_id,from_account,to_account,amount,memo,tenant_id) VALUES (?,?,?,?,?,?,?,?)",
+                (entry_id, timestamp.isoformat(), tx_id, "SYSTEM_MINT", full_to_account, amount, memo, self.tenant_id),
+            )
+        return LedgerEntry(
+            id=entry_id, timestamp=timestamp, transaction_id=tx_id,
+            from_account="SYSTEM_MINT", to_account=target_account, amount=amount, memo=memo,
+        )
+
+    def _mint(self, to_account: str, amount: int, memo: str) -> LedgerEntry:
+        if to_account == "REVENUE":
+            return self.deposit_revenue(amount, memo)
+        raise NotImplementedError(f"Minting to {to_account} is not supported on OrganisationScopedLedger")
+
     def get_entries(self, account: Optional[str] = None):
         prefix = f"{self.organisation_id}:"
         entries = self.tenant_ledger.get_entries(self._account(account) if account else None)
