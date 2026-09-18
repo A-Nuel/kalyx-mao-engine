@@ -14,6 +14,10 @@ jobs:
       matrix:
         python-version: ["3.11", "3.12"]
 
+    env:
+      # Deterministic test-only secret; production secrets must never be hard-coded here.
+      KALYX_RECEIPT_SECRET_KEY: ci-only-kalyx-receipt-secret
+
     services:
       postgres:
         image: postgres:16-alpine
