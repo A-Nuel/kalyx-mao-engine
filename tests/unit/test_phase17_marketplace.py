@@ -140,3 +140,72 @@ def test_escrow_repository_lifecycle():
     assert updated.status == EscrowStatus.RELEASED
     assert updated.provider_org_id == "org-beta"
     assert updated.released_at is not None
+
+
+def test_provider_scoped_escrow_lookup_resolves_claimed_client_escrow():
+    db = _init_test_db()
+    repo = MarketplaceRepository(db)
+
+    order = MarketplaceOrder.create(
+        tenant_id="tenant-demo",
+        organisation_id="org-alpha",
+        order_id="mkt-provider-scope",
+        title="Provider settlement",
+        description="Provider must resolve client-owned escrow",
+        required_capability="ADVANCED_ANALYTICS",
+        bounty_amount=200,
+    )
+    repo.create_order(order)
+    escrow = EscrowAgreement(
+        tenant_id="tenant-demo",
+        organisation_id="org-alpha",
+        escrow_id="escrow-provider-scope",
+        order_id=order.order_id,
+        client_tenant_id="tenant-demo",
+        client_org_id="org-alpha",
+        bounty_amount=200,
+        status=EscrowStatus.HELD,
+    )
+    repo.save_escrow(escrow)
+    assert repo.claim_order(
+        tenant_id="tenant-demo",
+        organisation_id="org-alpha",
+        order_id=order.order_id,
+        claimed_by_tenant_id="tenant-demo",
+        claimed_by_org_id="org-beta",
+        claimed_by_agent_id="agent-beta",
+        work_order_id="wo-provider-scope",
+    )
+
+    resolved = repo.get_escrow_by_order(order.order_id, "tenant-demo", "org-beta")
+    assert resolved is not None
+    assert resolved.escrow_id == "escrow-provider-scope"
+    assert resolved.client_org_id == "org-alpha"
+
+
+def test_provider_scoped_escrow_lookup_rejects_unrelated_provider():
+    db = _init_test_db()
+    repo = MarketplaceRepository(db)
+
+    order = MarketplaceOrder.create(
+        tenant_id="tenant-demo",
+        organisation_id="org-alpha",
+        order_id="mkt-provider-negative",
+        title="Provider settlement",
+        description="Unrelated provider must not resolve escrow",
+        required_capability="ADVANCED_ANALYTICS",
+        bounty_amount=200,
+    )
+    repo.create_order(order)
+    repo.save_escrow(EscrowAgreement(
+        tenant_id="tenant-demo",
+        organisation_id="org-alpha",
+        escrow_id="escrow-provider-negative",
+        order_id=order.order_id,
+        client_tenant_id="tenant-demo",
+        client_org_id="org-alpha",
+        bounty_amount=200,
+        status=EscrowStatus.HELD,
+    ))
+
+    assert repo.get_escrow_by_order(order.order_id, "tenant-demo", "org-beta") is None
