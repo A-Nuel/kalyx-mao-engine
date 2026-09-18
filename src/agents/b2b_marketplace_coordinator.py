@@ -485,7 +485,7 @@ class B2BMarketplaceCoordinator:
             status=MarketplaceOrderStatus.CANCELLED,
         )
 
-        res = self.marketplace_repo.get_escrow_by_order(order_id)
+        res = self.marketplace_repo.get_escrow_by_order(order_id, tenant_id, organisation_id)
         if not res:
             raise RuntimeError(f"Escrow '{order_id}' missing after refund update.")
         return res
