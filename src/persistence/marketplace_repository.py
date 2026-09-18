@@ -214,32 +214,9 @@ class MarketplaceRepository:
         existing = self.get_escrow(escrow.tenant_id, escrow.organisation_id, escrow.escrow_id)
         if existing is not None:
             if existing.order_id == escrow.order_id and existing.bounty_amount == escrow.bounty_amount:
-                # Same canonical target and terms: safe duplicate / idempotent update
-                with self.conn:
-                    self.conn.execute(
-                        """
-                        UPDATE marketplace_escrows
-                        SET status = ?,
-                            provider_tenant_id = COALESCE(?, provider_tenant_id),
-                            provider_org_id = COALESCE(?, provider_org_id),
-                            client_ledger_tx_id = COALESCE(?, client_ledger_tx_id),
-                            provider_ledger_tx_id = COALESCE(?, provider_ledger_tx_id),
-                            released_at = COALESCE(?, released_at)
-                        WHERE tenant_id = ? AND organisation_id = ? AND escrow_id = ?
-                        """,
-                        (
-                            escrow.status.value if isinstance(escrow.status, EscrowStatus) else str(escrow.status),
-                            escrow.provider_tenant_id,
-                            escrow.provider_org_id,
-                            escrow.client_ledger_tx_id,
-                            escrow.provider_ledger_tx_id,
-                            escrow.released_at,
-                            escrow.tenant_id,
-                            escrow.organisation_id,
-                            escrow.escrow_id,
-                        ),
-                    )
-                return self.get_escrow(escrow.tenant_id, escrow.organisation_id, escrow.escrow_id) or escrow
+                # Identical canonical terms are a true no-op. Never let a replay mutate
+                # lifecycle or settlement fields under an existing escrow identity.
+                return existing
             raise IdempotencyConflict(
                 f"Escrow '{escrow.escrow_id}' already exists with conflicting parameters: "
                 f"order_id '{existing.order_id}' vs '{escrow.order_id}', "
@@ -301,14 +278,19 @@ class MarketplaceRepository:
             return None
         return self._row_to_escrow(row)
 
-    def get_escrow_by_order(self, order_id: str) -> Optional[EscrowAgreement]:
+    def get_escrow_by_order(
+        self, order_id: str, tenant_id: str, organisation_id: str
+    ) -> Optional[EscrowAgreement]:
+        """Fetch an escrow only inside its authoritative client tenant/org scope."""
+        if not tenant_id or not organisation_id:
+            raise ValueError("tenant_id and organisation_id are required for scoped escrow lookup")
         cursor = self.conn.cursor() if hasattr(self.conn, "cursor") else self.conn
         row = cursor.execute(
             """
             SELECT * FROM marketplace_escrows
-            WHERE order_id = ?
+            WHERE tenant_id = ? AND organisation_id = ? AND order_id = ?
             """,
-            (order_id,),
+            (tenant_id, organisation_id, order_id),
         ).fetchone()
         if not row:
             return None
