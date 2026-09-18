@@ -1,4 +1,4 @@
-﻿-- Migration 009: Emergency Circuit Breaker and Multi-Signature Admin Governance
+-- Migration 009: Emergency Circuit Breaker and Multi-Signature Admin Governance
 CREATE TABLE IF NOT EXISTS system_circuit_breaker (
     tenant_id TEXT NOT NULL,
     organisation_id TEXT NOT NULL,
