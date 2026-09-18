@@ -47,7 +47,11 @@ class CapabilityGrant:
         if self.status != CapabilityGrantStatus.ACTIVE:
             return False
         ref = as_of or datetime.now(timezone.utc)
+        if ref.tzinfo is None:
+            ref = ref.replace(tzinfo=timezone.utc)
         exp = datetime.fromisoformat(self.expires_at)
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
         return ref <= exp
 
     def to_dict(self) -> Dict[str, Any]:

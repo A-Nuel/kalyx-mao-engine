@@ -388,6 +388,29 @@ class MarketplaceRepository:
                 return True
         return False
 
+    def revoke_capability(
+        self,
+        tenant_id: str,
+        organisation_id: str,
+        agent_id: str,
+        capability_name: Optional[str] = None,
+        capability: Optional[str] = None,
+    ) -> int:
+        """Revokes all active grants of capability_name for an agent."""
+        cap = capability_name or capability
+        if not cap:
+            raise ValueError("capability_name or capability is required")
+        with self.conn:
+            cursor = self.conn.execute(
+                """
+                UPDATE agent_capability_grants
+                SET status = 'REVOKED'
+                WHERE tenant_id = ? AND organisation_id = ? AND agent_id = ? AND capability_name = ? AND status = 'ACTIVE'
+                """,
+                (tenant_id, organisation_id, agent_id, cap),
+            )
+            return cursor.rowcount
+
     # ------------------------------------------------------------------
     # Row Mappers
     # ------------------------------------------------------------------

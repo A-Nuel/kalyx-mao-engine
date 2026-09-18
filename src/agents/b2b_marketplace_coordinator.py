@@ -156,6 +156,8 @@ class B2BMarketplaceCoordinator:
         self.marketplace_repo.save_escrow(escrow)
         return order
 
+    publish_order = publish_b2b_order
+
     def discover_and_claim(
         self,
         provider_tenant_id: str,
@@ -268,14 +270,43 @@ class B2BMarketplaceCoordinator:
     ) -> B2BSettlementOutcome:
         """
         Executes productive work, verifies deliverable, and settles escrow:
-        1. Synthesize WorkOrder
-        2. Execute work via work_executor (captures live vs sim telemetry)
-        3. Verify deliverable independently via work_verifier
-        4. Settle escrow:
+        1. Preflight validations (status, authorized claimant, escrow state, capability)
+        2. Synthesize WorkOrder
+        3. Execute work via work_executor (captures live vs sim telemetry)
+        4. Verify deliverable independently via work_verifier
+        5. Settle escrow:
            - Client Org: ESCROW -> EXTERNAL_SINK
            - Provider Org: REVENUE (deposit_revenue)
-        5. Reconcile surplus via SurplusReconciler
+        6. Reconcile surplus via SurplusReconciler
         """
+        # 0. Preflight checks
+        if order.status != MarketplaceOrderStatus.CLAIMED:
+            raise ValueError(
+                f"Marketplace order '{order.order_id}' cannot be executed: status is '{order.status}', must be CLAIMED."
+            )
+
+        if order.claimed_by_org_id != provider_org_id or order.claimed_by_agent_id != producer_agent_id:
+            raise PermissionError(
+                f"Caller ({provider_org_id}, {producer_agent_id}) is not the authorized claimant for order '{order.order_id}' "
+                f"(claimed by: {order.claimed_by_org_id}, {order.claimed_by_agent_id})"
+            )
+
+        escrow = self.marketplace_repo.get_escrow_by_order(order.order_id)
+        if not escrow or escrow.status != EscrowStatus.HELD:
+            raise ValueError(
+                f"Active escrow not found or not HELD for order '{order.order_id}' "
+                f"(current status: {escrow.status if escrow else 'None'})"
+            )
+
+        # Validate producer agent holds active, unrevoked capability
+        has_cap = self.marketplace_repo.has_capability(
+            provider_tenant_id, provider_org_id, producer_agent_id, order.required_capability
+        )
+        if not has_cap:
+            raise PermissionError(
+                f"Producer agent '{producer_agent_id}' does not hold active, unrevoked capability '{order.required_capability}'"
+            )
+
         work_order_id = order.work_order_id or f"wo-b2b-{order.order_id}"
         work_order = WorkOrder(
             tenant_id=provider_tenant_id,
@@ -351,17 +382,15 @@ class B2BMarketplaceCoordinator:
             self.work_order_repo.save_revenue_event(provider_tenant_id, provider_org_id, revenue_event)
 
         # 5. Update Marketplace Persistence
-        escrow = self.marketplace_repo.get_escrow_by_order(order.order_id)
-        if escrow:
-            self.marketplace_repo.update_escrow_status(
-                tenant_id=escrow.tenant_id,
-                organisation_id=escrow.organisation_id,
-                escrow_id=escrow.escrow_id,
-                status=EscrowStatus.RELEASED,
-                provider_tenant_id=provider_tenant_id,
-                provider_org_id=provider_org_id,
-                provider_ledger_tx_id=provider_rev_tx_id,
-            )
+        self.marketplace_repo.update_escrow_status(
+            tenant_id=escrow.tenant_id,
+            organisation_id=escrow.organisation_id,
+            escrow_id=escrow.escrow_id,
+            status=EscrowStatus.RELEASED,
+            provider_tenant_id=provider_tenant_id,
+            provider_org_id=provider_org_id,
+            provider_ledger_tx_id=provider_rev_tx_id,
+        )
 
         self.marketplace_repo.update_order_status(
             tenant_id=order.tenant_id,
@@ -385,3 +414,57 @@ class B2BMarketplaceCoordinator:
             is_simulated=is_simulated,
             success=True,
         )
+
+    def refund_escrow(
+        self,
+        tenant_id: str,
+        organisation_id: str,
+        order_id: str,
+        client_ledger: DoubleEntryLedger,
+        reason: str = "Order cancelled or expired",
+    ) -> EscrowAgreement:
+        """
+        Refunds held escrow back to client org treasury:
+        1. Validates order is OPEN or CANCELLED
+        2. Validates escrow is HELD
+        3. Transfers ESCROW -> TREASURY in client_ledger
+        4. Updates order to CANCELLED and escrow to REFUNDED
+        """
+        order = self.marketplace_repo.get_order(tenant_id, organisation_id, order_id)
+        if not order:
+            raise ValueError(f"Marketplace order '{order_id}' not found.")
+
+        if order.status == MarketplaceOrderStatus.COMPLETED:
+            raise ValueError(f"Cannot refund escrow for completed order '{order_id}'.")
+
+        escrow = self.marketplace_repo.get_escrow_by_order(order_id)
+        if not escrow or escrow.status != EscrowStatus.HELD:
+            raise ValueError(f"No escrow in HELD status found for order '{order_id}'.")
+
+        refund_tx_id = f"escrow-refund-{order_id}"
+        client_ledger.transfer(
+            from_account=ESCROW,
+            to_account=TREASURY,
+            amount=escrow.bounty_amount,
+            memo=f"Escrow refund for order {order_id}: {reason}",
+            transaction_id=refund_tx_id,
+        )
+
+        self.marketplace_repo.update_escrow_status(
+            tenant_id=escrow.tenant_id,
+            organisation_id=escrow.organisation_id,
+            escrow_id=escrow.escrow_id,
+            status=EscrowStatus.REFUNDED,
+        )
+
+        self.marketplace_repo.update_order_status(
+            tenant_id=order.tenant_id,
+            organisation_id=order.organisation_id,
+            order_id=order.order_id,
+            status=MarketplaceOrderStatus.CANCELLED,
+        )
+
+        res = self.marketplace_repo.get_escrow_by_order(order_id)
+        if not res:
+            raise RuntimeError(f"Escrow '{order_id}' missing after refund update.")
+        return res

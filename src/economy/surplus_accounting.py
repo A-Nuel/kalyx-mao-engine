@@ -61,6 +61,8 @@ class SurplusReconciler:
             raise ValueError(f"Cannot reconcile receipt with invalid HMAC signature {receipt.receipt_id}")
         if receipt.work_order_id != work_order.work_order_id:
             raise ValueError(f"Receipt work_order_id mismatch: {receipt.work_order_id} vs {work_order.work_order_id}")
+        if any(e.work_order_id == work_order.work_order_id for e in self._events.values()):
+            raise ValueError(f"Work order '{work_order.work_order_id}' has already been reconciled.")
         if gross_revenue_usdg < 0:
             raise ValueError("gross_revenue_usdg cannot be negative")
         if direct_expense_usdg < 0:

@@ -16,6 +16,7 @@ def test_capability_evolution_rule_high_performance():
     rule = CapabilityEvolutionRule(min_performance_threshold=0.80)
     agent = AgentRecord(id="agent-worker", organisation_id="org-beta", role=AgentRole.RESEARCHER)
     org = Organisation(id="org-beta", mission="Analytics Development", state=OrgState.PLANNING)
+    org.agents[agent.id] = agent
 
     proposal = ActionProposal(
         id="prop-1",
@@ -43,6 +44,7 @@ def test_capability_evolution_rule_low_performance():
     rule = CapabilityEvolutionRule(min_performance_threshold=0.80)
     agent = AgentRecord(id="agent-worker", organisation_id="org-beta", role=AgentRole.RESEARCHER)
     org = Organisation(id="org-beta", mission="Analytics Development", state=OrgState.PLANNING)
+    org.agents[agent.id] = agent
 
     proposal = ActionProposal(
         id="prop-2",
@@ -71,6 +73,7 @@ def test_capability_evolution_rule_anti_self_grant():
     rule = CapabilityEvolutionRule(min_performance_threshold=0.80)
     agent = AgentRecord(id="agent-worker", organisation_id="org-beta", role=AgentRole.RESEARCHER)
     org = Organisation(id="org-beta", mission="Analytics Development", state=OrgState.PLANNING)
+    org.agents[agent.id] = agent
 
     # Rogue agent attempts to propose and grant itself a capability without supervisor approval
     proposal = ActionProposal(
@@ -93,7 +96,7 @@ def test_capability_evolution_rule_anti_self_grant():
     )
     result = rule.evaluate(proposal, agent, org)
     assert result is not None
-    assert "cannot self-grant capabilities without supervisor/coordinator authorization" in result
+    assert "cannot self-grant capabilities" in result
 
 
 def test_capability_manager_grant_and_verify():

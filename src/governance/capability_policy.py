@@ -38,23 +38,32 @@ class CapabilityEvolutionRule(PolicyRule):
             return None
 
         params = proposal.parameters if isinstance(proposal.parameters, dict) else {}
-        target_agent_id = params.get("target_agent_id") or proposal.agent_id
-        proposer_agent_id = params.get("proposer_agent_id") or proposal.agent_id
+        target_agent_id = params.get("target_agent_id") or proposal.proposing_agent_id
+        proposer_agent_id = params.get("proposer_agent_id") or proposal.proposing_agent_id
 
-        # Anti-power-seeking: Unsupervised direct self-granting is strictly rejected
-        allow_self_proposal = params.get("supervisor_approved", False)
-        if target_agent_id == proposer_agent_id and not allow_self_proposal:
+        # Anti-power-seeking: Direct self-granting is strictly rejected under all circumstances
+        if target_agent_id == proposer_agent_id:
             return (
-                f"Agent '{target_agent_id}' cannot self-grant capabilities without supervisor/coordinator authorization."
+                f"Agent '{target_agent_id}' cannot self-grant capabilities. Expansion proposals must originate from an independent supervisor."
             )
 
-        # Retrieve empirical performance metrics
-        performance_score = params.get("performance_score")
-        if performance_score is None:
-            # Fallback to agent record attribute if available
-            performance_score = getattr(agent, "performance_score", None)
+        # Cross-organisation isolation: target agent must belong to the organisation
+        if target_agent_id not in org.agents:
+            return f"Target agent '{target_agent_id}' does not belong to organisation '{org.id}'."
 
-        if performance_score is None:
+        # Retrieve empirical performance metrics from authoritative agent record and proposal params
+        target_agent = org.agents.get(target_agent_id)
+        param_score = params.get("performance_score")
+        agent_score = getattr(target_agent, "performance_score", None) if target_agent else None
+
+        if param_score is not None and agent_score is not None:
+            # Conservative/anti-tampering guard: neither can override to inflate score
+            performance_score = min(float(param_score), float(agent_score))
+        elif agent_score is not None:
+            performance_score = float(agent_score)
+        elif param_score is not None:
+            performance_score = float(param_score)
+        else:
             return f"Cannot evaluate capability expansion for agent '{target_agent_id}': empirical performance score is missing."
 
         # Support both 0-1 scale and 0-100 scale
