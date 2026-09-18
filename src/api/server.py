@@ -51,6 +51,11 @@ from src.execution.work_executor import SimulatedWorkExecutor
 from src.settlement.work_verifier import WorkDeliverableVerifier
 from src.settlement.orbio_simulated_exchange import SimulatedOrbioExchangeProvider
 from src.economy.ledger import TREASURY
+from src.agents.orbio_purchase_loop import AgentLoopState, OrbioPurchaseAgentLoop
+from src.governance.orbio_purchase_rules import OrbioPurchasePolicy
+from src.execution.orbio_purchase import OrbioPurchaseBridge
+from src.settlement.orbio_purchase_verifier import OrbioPurchaseVerifier
+from src.settlement.orbio_purchase_reconciliation import OrbioPurchaseReconciliation
 
 # Fail closed at import time when KALYX_ENV=production.
 ensure_started()
@@ -135,6 +140,67 @@ def get_settlement_provider():
     return _default_settlement_provider
 
 
+_shared_exchange_provider = None
+
+
+def _get_exchange_provider() -> SimulatedOrbioExchangeProvider:
+    global _shared_exchange_provider
+    if _shared_exchange_provider is None:
+        _shared_exchange_provider = SimulatedOrbioExchangeProvider()
+    return _shared_exchange_provider
+
+
+def _build_purchase_loop(
+    org: Dict[str, Any],
+    ledger: Any,
+    provider: SimulatedOrbioExchangeProvider,
+    mission_id: str,
+    target_credit: int,
+) -> OrbioPurchaseAgentLoop:
+    org_id = org["id"]
+    tenant_id = org.get("tenant_id") or "tenant-demo"
+    org_entity = Organisation(
+        id=org_id,
+        mission=org.get("mission", "autonomous-operations"),
+        tenant_id=tenant_id,
+        treasury_balance=ledger.get_balance(TREASURY),
+    )
+    provider.set_usdg_balance(org_id, ledger.get_balance(TREASURY) * 1_000_000)
+    policy = OrbioPurchasePolicy(
+        autonomous_usdg_ceiling=100_000_000,
+        absolute_usdg_ceiling=100_000_000,
+    )
+    bridge = OrbioPurchaseBridge(purchase_policy=policy)
+    orbio_verifier = OrbioPurchaseVerifier()
+    orbio_reconciler = OrbioPurchaseReconciliation(
+        provider=provider,
+        ledger=ledger,
+        verifier=orbio_verifier,
+    )
+    beneficiary = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
+    state = AgentLoopState(
+        agent_id="agent-purchaser",
+        tenant_id=tenant_id,
+        organisation_id=org_id,
+        mission_id=mission_id,
+        objective="Acquire compute resources for mission",
+        target_credit=target_credit,
+    )
+    return OrbioPurchaseAgentLoop(
+        state=state,
+        org=org_entity,
+        policy=policy,
+        bridge=bridge,
+        provider=provider,
+        verifier=orbio_verifier,
+        reconciler=orbio_reconciler,
+        ledger=ledger,
+        max_single_usdg=50_000_000,
+        max_cumulative_usdg=50_000_000,
+        default_beneficiary=beneficiary,
+    )
+
+
 def _identity_enabled() -> bool:
     if is_production() or os.getenv("KALYX_IDENTITY_AUTH", "").strip().lower() == "production":
         return True
@@ -153,25 +219,35 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 class IdentityAuthorizationMiddleware(BaseHTTPMiddleware):
     """Authenticate resource scope before an organisation handler can read or modify it."""
     async def dispatch(self, request, call_next):
-        if not _identity_enabled() or not request.url.path.startswith("/api/organisations"):
+        if not _identity_enabled():
             return await call_next(request)
+
+        path = request.url.path
+        parts = [p for p in path.split("/") if p]
+        if "organisations" not in parts:
+            return await call_next(request)
+
+        org_idx = parts.index("organisations")
+        if org_idx == 0 or parts[0] != "api":
+            return await call_next(request)
+
         db = create_database()
         try:
-            parts = [p for p in request.url.path.split("/") if p]
             principal = request.headers.get("X-Principal-ID")
             tenant = request.headers.get("X-Tenant-ID")
             api_key = request.headers.get("X-API-Key")
             auth_header = request.headers.get("Authorization")
             try:
                 context = None
-                if len(parts) == 2 and parts[1] == "organisations":
+                if len(parts) == org_idx + 1:
                     if not tenant:
                         return JSONResponse({"error": "bad_request", "message": "Tenant scope required", "detail": "Tenant scope required"}, status_code=400)
                     context = require_identity_for_tenant(db, tenant, principal, tenant, authorization=auth_header, x_api_key=api_key)
-                elif len(parts) >= 3:
-                    context = require_identity_for_org(db, parts[2], principal, tenant, authorization=auth_header, x_api_key=api_key)
+                elif len(parts) >= org_idx + 2:
+                    target_org_id = parts[org_idx + 1]
+                    context = require_identity_for_org(db, target_org_id, principal, tenant, authorization=auth_header, x_api_key=api_key)
 
-                # Check write permissions on mutation actions (pause, resume, reconcile)
+                # Check write permissions on mutation actions (pause, resume, reconcile, work orders, daemon step)
                 if request.method in {"POST", "PUT", "DELETE", "PATCH"}:
                     require_write_permission(context)
             except HTTPException as exc:
@@ -990,7 +1066,10 @@ def list_work_orders_endpoint(
     db = _db()
     try:
         org = _org_id_or_404(db, org_id)
-        tenant_id = x_tenant_id or org.get("tenant_id") or "tenant-demo"
+        actual_tenant = org.get("tenant_id") or "tenant-demo"
+        if x_tenant_id and x_tenant_id != actual_tenant:
+            raise HTTPException(status_code=404, detail="Organisation not found")
+        tenant_id = actual_tenant
         repo = WorkOrderRepository(db)
         st_filter = WorkOrderStatus(status) if status else None
         orders = repo.list_work_orders(tenant_id=tenant_id, organisation_id=org_id, status=st_filter)
@@ -1044,7 +1123,10 @@ def create_work_order_endpoint(
     db = _db()
     try:
         org = _org_id_or_404(db, org_id)
-        tenant_id = x_tenant_id or org.get("tenant_id") or "tenant-demo"
+        actual_tenant = org.get("tenant_id") or "tenant-demo"
+        if x_tenant_id and x_tenant_id != actual_tenant:
+            raise HTTPException(status_code=404, detail="Organisation not found")
+        tenant_id = actual_tenant
         repo = WorkOrderRepository(db)
         wo_id = req.work_order_id or f"wo-{uuid.uuid4().hex[:8]}"
 
@@ -1078,14 +1160,21 @@ def execute_work_order_endpoint(
     db = _db()
     try:
         org = _org_id_or_404(db, org_id)
-        tenant_id = x_tenant_id or org.get("tenant_id") or "tenant-demo"
+        actual_tenant = org.get("tenant_id") or "tenant-demo"
+        if x_tenant_id and x_tenant_id != actual_tenant:
+            raise HTTPException(status_code=404, detail="Organisation not found")
+        tenant_id = actual_tenant
         repo = WorkOrderRepository(db)
         wo = repo.get_work_order(tenant_id, org_id, work_order_id)
         if not wo:
             raise HTTPException(status_code=404, detail="Work order not found")
 
         ledger = _org_scoped_ledger(db, org)
-        provider = SimulatedOrbioExchangeProvider()
+        provider = _get_exchange_provider()
+        persisted_credits = repo.get_credit_balance(tenant_id, org_id)
+        provider._credit[org_id] = persisted_credits
+        provider.set_usdg_balance(org_id, ledger.get_balance(TREASURY) * 1_000_000)
+
         executor = SimulatedWorkExecutor(exchange_provider=provider)
         secret = policy_secret()
         verifier = WorkDeliverableVerifier(secret_key=secret)
@@ -1114,14 +1203,28 @@ def execute_work_order_endpoint(
 
         treasury_usdg = ledger.get_balance(TREASURY)
         current_credits = provider.get_credit_balance(org_id)
+        mission_id = f"mission-exec-{uuid.uuid4().hex[:6]}"
+
+        purchase_loop = None
+        if wo.required_orbio_credits > current_credits:
+            purchase_loop = _build_purchase_loop(
+                org=org,
+                ledger=ledger,
+                provider=provider,
+                mission_id=mission_id,
+                target_credit=wo.required_orbio_credits,
+            )
 
         outcome = coordinator.select_and_coordinate(
-            mission_id=f"mission-exec-{uuid.uuid4().hex[:6]}",
+            mission_id=mission_id,
             work_orders=[wo],
             current_treasury_usdg=treasury_usdg,
             current_orbio_credits=current_credits,
             producer_agent_id="agent-engineer",
+            purchase_loop=purchase_loop,
         )
+
+        repo.save_credit_balance(tenant_id, org_id, provider.get_credit_balance(org_id))
 
         return {
             "success": outcome.success,
@@ -1145,7 +1248,10 @@ def get_mission_lineage_endpoint(
     db = _db()
     try:
         org = _org_id_or_404(db, org_id)
-        tenant_id = x_tenant_id or org.get("tenant_id") or "tenant-demo"
+        actual_tenant = org.get("tenant_id") or "tenant-demo"
+        if x_tenant_id and x_tenant_id != actual_tenant:
+            raise HTTPException(status_code=404, detail="Organisation not found")
+        tenant_id = actual_tenant
         repo = WorkOrderRepository(db)
         lineage = repo.list_mission_lineage(tenant_id=tenant_id, organisation_id=org_id)
         return {"lineage": lineage, "total": len(lineage)}
@@ -1161,7 +1267,10 @@ def get_treasury_breakdown_endpoint(
     db = _db()
     try:
         org = _org_id_or_404(db, org_id)
-        tenant_id = x_tenant_id or org.get("tenant_id") or "tenant-demo"
+        actual_tenant = org.get("tenant_id") or "tenant-demo"
+        if x_tenant_id and x_tenant_id != actual_tenant:
+            raise HTTPException(status_code=404, detail="Organisation not found")
+        tenant_id = actual_tenant
         ledger = _org_scoped_ledger(db, org)
         
         treasury_usdg = ledger.get_balance(TREASURY)
@@ -1195,10 +1304,17 @@ def daemon_step_endpoint(
     db = _db()
     try:
         org = _org_id_or_404(db, org_id)
-        tenant_id = x_tenant_id or org.get("tenant_id") or "tenant-demo"
+        actual_tenant = org.get("tenant_id") or "tenant-demo"
+        if x_tenant_id and x_tenant_id != actual_tenant:
+            raise HTTPException(status_code=404, detail="Organisation not found")
+        tenant_id = actual_tenant
         repo = WorkOrderRepository(db)
         ledger = _org_scoped_ledger(db, org)
-        provider = SimulatedOrbioExchangeProvider()
+        provider = _get_exchange_provider()
+        persisted_credits = repo.get_credit_balance(tenant_id, org_id)
+        provider._credit[org_id] = persisted_credits
+        provider.set_usdg_balance(org_id, ledger.get_balance(TREASURY) * 1_000_000)
+
         executor = SimulatedWorkExecutor(exchange_provider=provider)
         secret = policy_secret()
         verifier = WorkDeliverableVerifier(secret_key=secret)
@@ -1225,6 +1341,15 @@ def daemon_step_endpoint(
             work_order_repo=repo,
         )
 
+        def _factory(m_id: str, credits_needed: int = 1_000_000) -> OrbioPurchaseAgentLoop:
+            return _build_purchase_loop(
+                org=org,
+                ledger=ledger,
+                provider=provider,
+                mission_id=m_id,
+                target_credit=credits_needed,
+            )
+
         daemon = AutonomousDaemon(
             tenant_id=tenant_id,
             organisation_id=org_id,
@@ -1233,9 +1358,12 @@ def daemon_step_endpoint(
             work_order_repo=repo,
             expansion_threshold=150,
             standby_threshold=40,
+            purchase_loop_factory=_factory,
         )
 
         cycle_res = daemon.step_cycle()
+        repo.save_credit_balance(tenant_id, org_id, provider.get_credit_balance(org_id))
+
         return {
             "cycle_number": cycle_res.cycle_number,
             "regime": cycle_res.regime.value,
@@ -1248,6 +1376,7 @@ def daemon_step_endpoint(
         }
     finally:
         db.close()
+
 
 
 WEB_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../apps/web"))

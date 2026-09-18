@@ -108,11 +108,25 @@ class AutonomousDaemon:
         self.standby_threshold = standby_threshold
         self.purchase_loop_factory = purchase_loop_factory
 
-        self.cycle_count = 0
         self.total_revenue_earned_usdg = 0
         self.total_compute_consumed_credits = 0
         self.history: List[DaemonCycleResult] = []
-        self._last_mission_id: Optional[str] = None
+        if self.work_order_repo:
+            saved = self.work_order_repo.get_daemon_state(self.tenant_id, self.organisation_id)
+            self.cycle_count = saved.get("cycle_count", 0)
+            self._last_mission_id = saved.get("last_mission_id")
+        else:
+            self.cycle_count = 0
+            self._last_mission_id = None
+
+    def _persist_state(self) -> None:
+        if self.work_order_repo:
+            self.work_order_repo.save_daemon_state(
+                tenant_id=self.tenant_id,
+                organisation_id=self.organisation_id,
+                cycle_count=self.cycle_count,
+                last_mission_id=self._last_mission_id,
+            )
 
     def get_current_regime(self) -> SolvencyRegime:
         treasury_balance = self.ledger.get_balance(TREASURY)
@@ -144,6 +158,7 @@ class AutonomousDaemon:
                 "Preserving remaining capital."
             )
             logger.warning(summary)
+            self._persist_state()
             result = DaemonCycleResult(
                 cycle_number=self.cycle_count,
                 regime=regime,
@@ -168,6 +183,7 @@ class AutonomousDaemon:
 
         if not candidates:
             summary = f"Cycle {self.cycle_count}: No candidate work orders available."
+            self._persist_state()
             result = DaemonCycleResult(
                 cycle_number=self.cycle_count,
                 regime=regime,
@@ -199,7 +215,11 @@ class AutonomousDaemon:
         # Purchase loop creation if factory supplied
         purchase_loop = None
         if self.purchase_loop_factory and regime_policy.allow_credit_acquisition:
-            purchase_loop = self.purchase_loop_factory(mission_id)
+            target_needed = max([c.required_orbio_credits for c in candidates], default=1_000_000)
+            try:
+                purchase_loop = self.purchase_loop_factory(mission_id, target_needed)
+            except TypeError:
+                purchase_loop = self.purchase_loop_factory(mission_id)
 
         outcome = self.coordinator.select_and_coordinate(
             mission_id=mission_id,
@@ -230,6 +250,8 @@ class AutonomousDaemon:
                 f"Cycle {self.cycle_count} [{regime.value}] REJECTED/FAILED: {outcome.error_message}. "
                 f"Treasury preserved at {treasury_after} USDG."
             )
+
+        self._persist_state()
 
         result = DaemonCycleResult(
             cycle_number=self.cycle_count,

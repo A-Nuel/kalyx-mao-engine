@@ -20,6 +20,7 @@ from src.domain.exceptions import InsufficientCreditsError, TamperedAuditLogErro
 SYSTEM_MINT = "SYSTEM_MINT"
 TREASURY = "TREASURY"
 EXTERNAL_SINK = "EXTERNAL_SINK"
+REVENUE = "REVENUE"
 GENESIS_PREVIOUS_HASH = "0" * 64
 
 class SqliteLedger:
@@ -40,6 +41,23 @@ class SqliteLedger:
 
     def _mint(self, to_account: str, amount: int, memo: str) -> LedgerEntry:
         tx_id = f"mint-{uuid.uuid4()}"
+        entry_id = str(uuid.uuid4())
+        now_iso = datetime.utcnow().isoformat()
+        with self.db.conn:
+            self.db.conn.execute(
+                """
+                INSERT INTO ledger_entries (id, timestamp, transaction_id, from_account, to_account, amount, memo)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (entry_id, now_iso, tx_id, SYSTEM_MINT, to_account, amount, memo)
+            )
+        return LedgerEntry(id=entry_id, timestamp=datetime.fromisoformat(now_iso), transaction_id=tx_id,
+                           from_account=SYSTEM_MINT, to_account=to_account, amount=amount, memo=memo)
+
+    def deposit_revenue(self, amount: int, memo: str, transaction_id: Optional[str] = None, to_account: str = REVENUE) -> LedgerEntry:
+        if amount <= 0:
+            raise ValueError("Deposit amount must be positive")
+        tx_id = transaction_id or f"deposit-{uuid.uuid4()}"
         entry_id = str(uuid.uuid4())
         now_iso = datetime.utcnow().isoformat()
         with self.db.conn:

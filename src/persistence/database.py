@@ -254,6 +254,27 @@ CREATE TABLE IF NOT EXISTS mission_lineage (
     FOREIGN KEY (organisation_id) REFERENCES organisations(id)
 );
 CREATE INDEX IF NOT EXISTS idx_mission_lineage_parent ON mission_lineage (tenant_id, organisation_id, parent_mission_id);
+
+CREATE TABLE IF NOT EXISTS daemon_state (
+    tenant_id TEXT NOT NULL DEFAULT 'tenant-demo',
+    organisation_id TEXT NOT NULL,
+    cycle_count INTEGER NOT NULL DEFAULT 0,
+    last_mission_id TEXT,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (tenant_id, organisation_id),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+    FOREIGN KEY (organisation_id) REFERENCES organisations(id)
+);
+
+CREATE TABLE IF NOT EXISTS org_credit_balances (
+    tenant_id TEXT NOT NULL DEFAULT 'tenant-demo',
+    organisation_id TEXT NOT NULL,
+    credit_balance INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (tenant_id, organisation_id),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+    FOREIGN KEY (organisation_id) REFERENCES organisations(id)
+);
 """
 
 class Database:

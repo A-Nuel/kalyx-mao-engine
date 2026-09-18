@@ -476,3 +476,86 @@ class WorkOrderRepository:
             (tenant_id, organisation_id),
         ).fetchall()
         return [dict(r) for r in rows]
+
+    # ------------------------------------------------------------------
+    # Daemon State & Persistent Credits
+    # ------------------------------------------------------------------
+
+    def get_daemon_state(self, tenant_id: str, organisation_id: str) -> Dict[str, Any]:
+        cursor = self.conn.cursor() if hasattr(self.conn, "cursor") else self.conn
+        row = cursor.execute(
+            """
+            SELECT tenant_id, organisation_id, cycle_count, last_mission_id, updated_at
+            FROM daemon_state
+            WHERE tenant_id = ? AND organisation_id = ?
+            """,
+            (tenant_id, organisation_id),
+        ).fetchone()
+        if not row:
+            return {
+                "tenant_id": tenant_id,
+                "organisation_id": organisation_id,
+                "cycle_count": 0,
+                "last_mission_id": None,
+                "updated_at": None,
+            }
+        return {
+            "tenant_id": row["tenant_id"],
+            "organisation_id": row["organisation_id"],
+            "cycle_count": int(row["cycle_count"]),
+            "last_mission_id": row["last_mission_id"],
+            "updated_at": row["updated_at"],
+        }
+
+    def save_daemon_state(
+        self,
+        tenant_id: str,
+        organisation_id: str,
+        cycle_count: int,
+        last_mission_id: Optional[str],
+    ) -> None:
+        now_str = datetime.utcnow().isoformat()
+        with self.conn:
+            self.conn.execute(
+                """
+                INSERT INTO daemon_state (
+                    tenant_id, organisation_id, cycle_count, last_mission_id, updated_at
+                ) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT (tenant_id, organisation_id) DO UPDATE SET
+                    cycle_count = excluded.cycle_count,
+                    last_mission_id = excluded.last_mission_id,
+                    updated_at = excluded.updated_at
+                """,
+                (tenant_id, organisation_id, cycle_count, last_mission_id, now_str),
+            )
+
+    def get_credit_balance(self, tenant_id: str, organisation_id: str) -> int:
+        cursor = self.conn.cursor() if hasattr(self.conn, "cursor") else self.conn
+        row = cursor.execute(
+            """
+            SELECT credit_balance FROM org_credit_balances
+            WHERE tenant_id = ? AND organisation_id = ?
+            """,
+            (tenant_id, organisation_id),
+        ).fetchone()
+        if not row:
+            return 0
+        return int(row["credit_balance"])
+
+    def save_credit_balance(
+        self, tenant_id: str, organisation_id: str, credit_balance: int
+    ) -> None:
+        now_str = datetime.utcnow().isoformat()
+        with self.conn:
+            self.conn.execute(
+                """
+                INSERT INTO org_credit_balances (
+                    tenant_id, organisation_id, credit_balance, updated_at
+                ) VALUES (?, ?, ?, ?)
+                ON CONFLICT (tenant_id, organisation_id) DO UPDATE SET
+                    credit_balance = excluded.credit_balance,
+                    updated_at = excluded.updated_at
+                """,
+                (tenant_id, organisation_id, max(0, int(credit_balance)), now_str),
+            )
+

@@ -80,6 +80,23 @@ CREATE TABLE IF NOT EXISTS mission_lineage (
 );
 CREATE INDEX IF NOT EXISTS idx_mission_lineage_parent ON mission_lineage (tenant_id, organisation_id, parent_mission_id);
 
+CREATE TABLE IF NOT EXISTS daemon_state (
+    tenant_id TEXT NOT NULL,
+    organisation_id TEXT NOT NULL,
+    cycle_count INTEGER NOT NULL DEFAULT 0,
+    last_mission_id TEXT,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (tenant_id, organisation_id)
+);
+
+CREATE TABLE IF NOT EXISTS org_credit_balances (
+    tenant_id TEXT NOT NULL,
+    organisation_id TEXT NOT NULL,
+    credit_balance BIGINT NOT NULL DEFAULT 0,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (tenant_id, organisation_id)
+);
+
 INSERT INTO schema_migrations (version, applied_at)
 VALUES ('007_work_orders', NOW())
 ON CONFLICT (version) DO NOTHING;

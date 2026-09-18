@@ -44,6 +44,27 @@ class DoubleEntryLedger:
         self._total_minted += amount
         return entry
 
+    def deposit_revenue(self, amount: int, memo: str, transaction_id: Optional[str] = None) -> LedgerEntry:
+        if amount <= 0:
+            raise ValueError("Deposit amount must be positive")
+        tx_id = transaction_id or f"deposit-{uuid.uuid4()}"
+        if tx_id in self._recorded_tx_ids:
+            raise ValueError(f"Duplicate transaction_id: {tx_id}")
+        entry = LedgerEntry(
+            id=str(uuid.uuid4()),
+            timestamp=datetime.utcnow(),
+            transaction_id=tx_id,
+            from_account=SYSTEM_MINT,
+            to_account=REVENUE,
+            amount=amount,
+            memo=memo,
+        )
+        self._entries.append(entry)
+        self._recorded_tx_ids.add(tx_id)
+        self._balances[REVENUE] = self._balances.get(REVENUE, 0) + amount
+        self._total_minted += amount
+        return entry
+
     def get_balance(self, account: str) -> int:
         return self._balances.get(account, 0)
 
