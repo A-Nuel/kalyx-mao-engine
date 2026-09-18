@@ -1635,5 +1635,9 @@ if os.path.isdir(WEB_ROOT):
     app.mount("/assets", StaticFiles(directory=os.path.join(WEB_ROOT, "assets")), name="assets")
 
     @app.get("/")
-    def dashboard() -> FileResponse:
+    def landing() -> FileResponse:
+        return FileResponse(os.path.join(WEB_ROOT, "landing.html"))
+
+    @app.get("/command-centre")
+    def command_centre() -> FileResponse:
         return FileResponse(os.path.join(WEB_ROOT, "index.html"))
