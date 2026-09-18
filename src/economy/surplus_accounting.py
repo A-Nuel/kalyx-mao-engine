@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 import math
 import uuid
 from typing import Dict, List, Optional
@@ -18,7 +20,7 @@ class SurplusReconciler:
     """
     Reconciles external revenue and verified acquisition costs to calculate
     net surplus deterministically without conflating distinct economic assets.
-    
+
     Invariants:
     1. Revenue and external costs are denominated and settled in USDG.
     2. Compute resource usage (ORBIO_CREDIT) is recorded in telemetry and events,
@@ -26,13 +28,22 @@ class SurplusReconciler:
     3. Net surplus is non-negative: max(0, gross_revenue_usdg - direct_expense_usdg).
     4. Surplus is deterministically split between retained reserve and mission budget.
     5. All movements are recorded in DoubleEntryLedger preserving conservation.
+    6. Only an ACCEPTED receipt with a valid verifier HMAC may authorize settlement.
     """
 
-    def __init__(self, ledger: DoubleEntryLedger, default_reserve_ratio: float = 0.20):
+    def __init__(
+        self,
+        ledger: DoubleEntryLedger,
+        default_reserve_ratio: float = 0.20,
+        receipt_secret_key: str = "",
+    ):
         if not (0.0 <= default_reserve_ratio <= 1.0):
             raise ValueError("default_reserve_ratio must be between 0.0 and 1.0")
+        if not isinstance(receipt_secret_key, str) or not receipt_secret_key:
+            raise ValueError("receipt_secret_key is required for SurplusReconciler")
         self._ledger = ledger
         self._reserve_ratio = default_reserve_ratio
+        self._receipt_secret_key = receipt_secret_key
         self._events: Dict[str, RevenueEvent] = {}
 
     def reconcile_surplus(
@@ -46,6 +57,8 @@ class SurplusReconciler:
     ) -> RevenueEvent:
         if not receipt.is_verified():
             raise ValueError(f"Cannot reconcile unverified deliverable receipt {receipt.receipt_id}")
+        if not receipt.verify_hmac(self._receipt_secret_key):
+            raise ValueError(f"Cannot reconcile receipt with invalid HMAC signature {receipt.receipt_id}")
         if receipt.work_order_id != work_order.work_order_id:
             raise ValueError(f"Receipt work_order_id mismatch: {receipt.work_order_id} vs {work_order.work_order_id}")
         if gross_revenue_usdg < 0:

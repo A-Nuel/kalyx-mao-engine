@@ -15,7 +15,8 @@ from src.settlement.orbio_simulated_exchange import SimulatedOrbioExchangeProvid
 from src.settlement.work_verifier import WorkDeliverableVerifier
 
 BENEFICIARY = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
-ONE_CREDIT = 1_000_000  # Phase 14B native 6-decimal micro-units
+ONE_CREDIT = 1_000_000
+RECEIPT_SECRET = "verifier-secret-phase15"
 
 
 def create_loop_infrastructure(initial_treasury=50):
@@ -37,8 +38,12 @@ def create_loop_infrastructure(initial_treasury=50):
     )
 
     work_executor = SimulatedWorkExecutor(exchange_provider=provider)
-    work_verifier = WorkDeliverableVerifier(secret_key="verifier-secret-phase15")
-    surplus_reconciler = SurplusReconciler(ledger=ledger, default_reserve_ratio=0.20)
+    work_verifier = WorkDeliverableVerifier(secret_key=RECEIPT_SECRET)
+    surplus_reconciler = SurplusReconciler(
+        ledger=ledger,
+        default_reserve_ratio=0.20,
+        receipt_secret_key=RECEIPT_SECRET,
+    )
 
     loop_runner = SelfSustainingLoopRunner(
         ledger=ledger,
@@ -88,27 +93,10 @@ def create_purchase_loop(infra, mission_id, target_credit):
 
 
 def test_full_recursive_self_sustaining_loop():
-    """
-    Core Phase 15 E2E Proof:
-    1. Mission 1 requires 10 Orbio credits (10_000_000 micro-units), has 0 credits.
-    2. Acquires credits via Phase 14B loop (costs 10 USDG from Treasury).
-    3. Executes productive security audit, passing independent audit.
-    4. Collects 50 USDG revenue.
-    5. Reconciles: Gross 50 - Cost 10 = 40 Net Surplus.
-       - 8 USDG to SURPLUS_RESERVE
-       - 32 USDG to Next Mission Budget
-    6. Mission 2 is funded STRICTLY from the 32 USDG surplus (0 external capital).
-    7. Mission 2 acquires 15 credits (costing 15 USDG <= 32 USDG budget limit).
-    8. Mission 2 delivers work, passes verification, earns 70 USDG.
-    9. Complete ledger conservation verified across both cycles.
-    """
     infra = create_loop_infrastructure(initial_treasury=50)
     runner = infra["loop_runner"]
     ledger = infra["ledger"]
 
-    # -------------------------------------------------------------
-    # MISSION 1
-    # -------------------------------------------------------------
     wo1 = WorkOrder(
         work_order_id="wo-msn1-audit",
         tenant_id="tenant-a",
@@ -136,19 +124,14 @@ def test_full_recursive_self_sustaining_loop():
     assert res1.allocated_to_reserve == 8
     assert res1.allocated_to_next_mission == 32
     assert res1.receipt.is_verified() is True
+    assert res1.receipt.verify_hmac(RECEIPT_SECRET) is True
     assert res1.work_order.status == WorkOrderStatus.SETTLED
-
-    # Check ledger conservation after Mission 1
     assert ledger.get_balance(REVENUE) == 0
     assert ledger.get_balance(SURPLUS_RESERVE) == 8
-    # Treasury: 50 - 10 (spent) + 10 (cost reimbursement) + 32 (surplus) = 82
     assert ledger.get_balance(TREASURY) == 82
     assert ledger.get_balance(EXTERNAL_SINK) == 10
     assert ledger.verify_conservation() is True
 
-    # -------------------------------------------------------------
-    # MISSION 2 (Funded strictly from Mission 1 Surplus)
-    # -------------------------------------------------------------
     self_funded_budget = res1.allocated_to_next_mission
     assert self_funded_budget == 32
 
@@ -175,32 +158,24 @@ def test_full_recursive_self_sustaining_loop():
     )
 
     assert res2.success is True
-    assert res2.direct_expense_usdg == 15  # 15 USDG <= 32 USDG self-funded budget
-    assert res2.net_surplus_usdg == 55     # 70 - 15
-    assert res2.allocated_to_reserve == 11  # 20% of 55
-    assert res2.allocated_to_next_mission == 44 # 80% of 55
+    assert res2.direct_expense_usdg == 15
+    assert res2.net_surplus_usdg == 55
+    assert res2.allocated_to_reserve == 11
+    assert res2.allocated_to_next_mission == 44
     assert res2.receipt.is_verified() is True
+    assert res2.receipt.verify_hmac(RECEIPT_SECRET) is True
     assert res2.work_order.status == WorkOrderStatus.SETTLED
-
-    # Check ledger conservation after Mission 2
     assert ledger.get_balance(REVENUE) == 0
-    assert ledger.get_balance(SURPLUS_RESERVE) == 8 + 11 # 19
-    # Treasury: 82 - 15 + 15 + 44 = 126
+    assert ledger.get_balance(SURPLUS_RESERVE) == 19
     assert ledger.get_balance(TREASURY) == 126
-    assert ledger.get_balance(EXTERNAL_SINK) == 10 + 15 # 25
+    assert ledger.get_balance(EXTERNAL_SINK) == 25
     assert ledger.verify_conservation() is True
 
 
 def test_budget_overrun_protection_on_self_funded_mission():
-    """
-    If Mission 2 requires more resources than the surplus allocated by Mission 1,
-    the preflight check must reject the mission before any capital is spent.
-    """
     infra = create_loop_infrastructure(initial_treasury=50)
     runner = infra["loop_runner"]
     ledger = infra["ledger"]
-
-    # Budget limit from previous mission is only 10 USDG
     available_budget = 10
 
     wo = WorkOrder(
@@ -211,7 +186,7 @@ def test_budget_overrun_protection_on_self_funded_mission():
         title="Massive Compute Audit",
         description="Requires 40 Orbio credits",
         deliverable_type="SECURITY_AUDIT",
-        required_orbio_credits=40 * ONE_CREDIT,  # Costs ~40 USDG, exceeds 10 USDG limit!
+        required_orbio_credits=40 * ONE_CREDIT,
         bounty_amount=100,
         bounty_asset=CurrencyAsset.USDG,
     )
@@ -230,16 +205,11 @@ def test_budget_overrun_protection_on_self_funded_mission():
     assert result.success is False
     assert "exceeds self-funded mission budget" in result.error_message
     assert wo.status == WorkOrderStatus.REJECTED
-    # Invariant: Not a single cent spent from Treasury
     assert ledger.get_balance(TREASURY) == treasury_before
     assert ledger.verify_conservation() is True
 
 
 def test_audit_rejection_halts_revenue_release():
-    """
-    If the deliverable is rejected by the independent verifier (e.g. content hash mismatch),
-    the loop halts, no revenue is collected, and no surplus is minted.
-    """
     infra = create_loop_infrastructure(initial_treasury=50)
     runner = infra["loop_runner"]
     ledger = infra["ledger"]
@@ -258,9 +228,8 @@ def test_audit_rejection_halts_revenue_release():
     )
 
     purchase_loop = create_purchase_loop(infra, "msn-fail", target_credit=10 * ONE_CREDIT)
-
-    # Monkeypatch work_executor to simulate corruption
     orig_execute = runner.work_executor.execute_work
+
     def corrupt_execute(*args, **kwargs):
         deliv = orig_execute(*args, **kwargs)
         deliv.content_payload["audit_verdict"] = "MALICIOUS_TAMPER"
@@ -280,24 +249,16 @@ def test_audit_rejection_halts_revenue_release():
     assert result.net_surplus_usdg == 0
     assert result.allocated_to_next_mission == 0
     assert wo.status == WorkOrderStatus.REJECTED
-
-    # Revenue was NOT released
     assert ledger.get_balance(REVENUE) == 0
     assert ledger.get_balance(SURPLUS_RESERVE) == 0
     assert ledger.verify_conservation() is True
 
 
 def test_zero_surplus_loss_scenario_blocks_mission_2():
-    """
-    If Mission 1 produces 0 net surplus (loss scenario where bounty < cost),
-    the allocated budget for Mission 2 is 0. Attempting to run Mission 2 with
-    budget_limit=0 must immediately fail at preflight without spending any funds.
-    """
     infra = create_loop_infrastructure(initial_treasury=50)
     runner = infra["loop_runner"]
     ledger = infra["ledger"]
 
-    # WorkOrder 1 has a tiny bounty of 5 USDG, but costs 10 USDG to acquire credits
     wo1 = WorkOrder(
         work_order_id="wo-loss-01",
         tenant_id="tenant-a",
@@ -319,7 +280,6 @@ def test_zero_surplus_loss_scenario_blocks_mission_2():
         purchase_loop=purchase_loop1,
     )
 
-    # Mission 1 completes work, but generates 0 surplus
     assert res1.success is True
     assert res1.direct_expense_usdg == 10
     assert res1.net_surplus_usdg == 0
@@ -327,7 +287,6 @@ def test_zero_surplus_loss_scenario_blocks_mission_2():
     assert res1.allocated_to_next_mission == 0
     assert ledger.verify_conservation() is True
 
-    # Now attempt Mission 2 using Mission 1's surplus budget allocation (0 USDG)
     wo2 = WorkOrder(
         work_order_id="wo-msn2-fail",
         tenant_id="tenant-a",
@@ -349,10 +308,9 @@ def test_zero_surplus_loss_scenario_blocks_mission_2():
         work_order=wo2,
         producer_agent_id="agent-eng",
         purchase_loop=purchase_loop2,
-        available_budget_limit=res1.allocated_to_next_mission,  # 0 USDG!
+        available_budget_limit=res1.allocated_to_next_mission,
     )
 
-    # Mission 2 is rejected at preflight: 10 USDG acquisition cost exceeds 0 USDG budget
     assert res2.success is False
     assert "exceeds self-funded mission budget 0 USDG" in res2.error_message
     assert wo2.status == WorkOrderStatus.REJECTED
