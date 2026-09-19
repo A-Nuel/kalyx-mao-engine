@@ -131,5 +131,5 @@ def test_simulated_telemetry_never_contains_api_key():
 
     telemetry = deliverable.execution_telemetry
     assert telemetry["is_simulated"] is True
-    assert telemetry["activated_api_key_used"] is True
+    assert telemetry["activated_api_key_used"] is False
     assert secret not in str(telemetry)
