@@ -10,13 +10,13 @@ services:
     env_file:
       - .env
     environment:
-      KALYX_ENV: ${KALYX_ENV:-production}
+      KALYX_ENV: production
       KALYX_DATABASE_URL: ${KALYX_DATABASE_URL:?KALYX_DATABASE_URL is required}
       KALYX_POLICY_SECRET: ${KALYX_POLICY_SECRET:?KALYX_POLICY_SECRET is required}
       KALYX_OPERATOR_KEY: ${KALYX_OPERATOR_KEY:?KALYX_OPERATOR_KEY is required}
       KALYX_RECEIPT_SECRET_KEY: ${KALYX_RECEIPT_SECRET_KEY:?KALYX_RECEIPT_SECRET_KEY is required}
-      KALYX_IDENTITY_AUTH: ${KALYX_IDENTITY_AUTH:-production}
-      KALYX_REQUIRE_OPERATOR_AUTH: ${KALYX_REQUIRE_OPERATOR_AUTH:-true}
+      KALYX_IDENTITY_AUTH: production
+      KALYX_REQUIRE_OPERATOR_AUTH: "true"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
       interval: 30s
