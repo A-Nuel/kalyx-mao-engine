@@ -595,7 +595,7 @@ const App = (() => {
           alert(`AUDIT INTEGRITY BREACH DETECTED:\n\n${audit.chain_error}`);
         }
       } else {
-        alert('CRYPTOGRAPHIC AUDIT CHAIN VERIFIED\n\nConsensus Finality 99.98% • All Merkle state roots valid.');
+        alert('AUDIT CHAIN VERIFICATION COMPLETE\n\nThe current audit response is now reflected in the Command Centre.');
       }
       await refreshAudit();
     } catch (err) {
