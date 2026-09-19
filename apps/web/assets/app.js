@@ -32,6 +32,13 @@ const App = (() => {
     return typeof n === 'number' ? n.toLocaleString() : (n ?? '—');
   }
 
+  // DOM helpers used by every view/controller path. Keep these tiny and deterministic.
+  const $ = (id) => document.getElementById(id);
+  function setTxt(id, value) {
+    const el = $(id);
+    if (el) el.textContent = String(value ?? '');
+  }
+
   // Navigation & Routing
   function setRoute(route) {
     const validRoutes = ['overview', 'missions', 'organisation', 'treasury', 'policies', 'operations', 'marketplace', 'collateral', 'audit', 'experiments', 'settings'];
