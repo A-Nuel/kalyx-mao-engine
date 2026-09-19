@@ -69,7 +69,7 @@
           </div>
           <div class="flex items-center gap-2">
             <span class="text-lg font-semibold tracking-tight text-white">Kalyx</span>
-            <span class="font-mono text-[11px] uppercase px-2.5 py-0.5 rounded-full bg-white/[0.06] border border-white/[0.08] text-slate-300 font-medium">Autonomous Org</span>
+            <span class="font-mono text-[11px] uppercase px-2.5 py-0.5 rounded-full bg-white/[0.06] border border-white/[0.08] text-slate-300 font-medium">Autonomous Organization</span>
           </div>
         </div>
 
@@ -126,7 +126,7 @@
         <!-- Operational Health Badge -->
         <div class="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 shadow-[0_0_12px_rgba(16,185,129,0.15)]">
           <span id="engineStatusDot" class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]"></span>
-          <span id="engineStatusText" class="font-mono text-[11px] text-emerald-300 font-medium uppercase tracking-wider">OPERATIONAL</span>
+          <span id="engineStatusText" class="font-mono text-[11px] text-emerald-300 font-medium uppercase tracking-wider">CONNECTING</span>
         </div>
 
         <!-- Command Shortcut Button -->
@@ -139,10 +139,10 @@
         <!-- Director User Profile -->
         <div class="flex items-center gap-2.5 pl-2 border-l border-white/[0.08]">
           <div class="hidden lg:flex flex-col text-right">
-            <span class="text-xs text-white font-medium leading-none">Elena Vance</span>
-            <span class="font-mono text-[10px] text-slate-500 leading-none mt-1 uppercase tracking-wider">Director</span>
+            <span class="text-xs text-white font-medium leading-none">Workspace Operator</span>
+            <span id="principalRoleDisplay" class="font-mono text-[10px] text-slate-500 leading-none mt-1 uppercase tracking-wider">Operator</span>
           </div>
-          <img alt="Director Elena Vance" class="w-8 h-8 rounded-full object-cover ring-1 ring-white/20 shadow-md" src="https://lh3.googleusercontent.com/aida/AEtjO1URu4FeKft3v8sPA_HUN1HaNFL9fwcxeuik1VF76G_zEsLGRrDd-cfUOMbUN9jSb53Ybf9ZE1IOxa8WuIaYPgSWaGB_jEsoDfYmJcgaullJQHcdp9W5Eu6ZxJO4WkVLkyVNkNz0Clb1q8QD4wXq9V0508t1aaRULJ8_qCfPwm9J8PHSC3WpAAiqcm4xsXpg9qxg995VG5yZ4ykUQU5vymi4fzTmzJpcwMtGonRWrnIUMN9RwlA4M71VbJum" />
+          <img alt="Kalyx workspace operator" class="w-8 h-8 rounded-full object-cover ring-1 ring-white/20 shadow-md" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64'%3E%3Crect width='64' height='64' rx='32' fill='%231e3a8a'/%3E%3Ctext x='32' y='39' text-anchor='middle' font-family='Arial' font-size='26' fill='white'%3EK%3C/text%3E%3C/svg%3E" />
         </div>
       </div>
     </div>
@@ -165,6 +165,33 @@
   <!-- ========================================================================= -->
   <!-- MAIN VIEWPORT CONTAINER -->
   <!-- ========================================================================= -->
+  <!-- First-time fintech-style product walkthrough -->
+  <div id="kalyxTour" class="hidden fixed inset-0 z-[100]">
+    <div class="absolute inset-0 bg-black/75 backdrop-blur-sm" data-tour-dismiss></div>
+    <div id="tourSpotlight" class="tour-spotlight pointer-events-none"></div>
+    <section id="tourCard" class="fixed z-[102] w-[min(420px,calc(100vw-32px))] rounded-2xl border border-white/10 bg-[#0b0e15]/95 shadow-2xl backdrop-blur-xl p-5 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="tourTitle">
+      <div class="flex items-center justify-between gap-4 mb-4"><span id="tourKicker" class="font-mono text-[10px] uppercase tracking-[0.18em] text-blue-300">KALYX / ORIENTATION</span><button type="button" onclick="App.closeTour()" class="text-slate-500 hover:text-white" aria-label="Close tour">×</button></div>
+      <h2 id="tourTitle" class="text-xl font-semibold text-white tracking-tight">Welcome to Kalyx</h2>
+      <p id="tourBody" class="mt-2 text-sm leading-6 text-slate-300"></p>
+      <div class="mt-5 flex items-center justify-between gap-3"><span id="tourProgress" class="font-mono text-[10px] text-slate-500">1 / 7</span><div class="flex gap-2"><button type="button" onclick="App.skipTour()" class="px-3 py-2 text-xs text-slate-400 hover:text-white">Skip</button><button id="tourNext" type="button" onclick="App.nextTourStep()" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium">Start tour</button></div></div>
+    </section>
+  </div>
+
+  <div id="loopGuide" class="hidden fixed inset-0 z-[100]">
+    <div class="absolute inset-0 bg-black/80 backdrop-blur-sm"></div>
+    <section class="relative z-[101] mx-auto mt-[10vh] w-[min(760px,calc(100vw-32px))] rounded-2xl border border-white/10 bg-[#0b0e15]/98 shadow-2xl p-6 sm:p-8">
+      <div class="flex items-start justify-between gap-4"><div><div class="font-mono text-[10px] uppercase tracking-[0.18em] text-blue-300">KALYX / DEMO PATH</div><h2 class="mt-2 text-2xl font-semibold tracking-tight text-white">Follow one autonomous economic loop</h2><p class="mt-2 text-sm leading-6 text-slate-400">Every transition is governed; every economic outcome depends on verification.</p></div><button onclick="App.closeLoopGuide()" class="text-slate-500 hover:text-white text-xl">×</button></div>
+      <div class="mt-7 grid grid-cols-2 sm:grid-cols-4 gap-2"><div class="loop-step p-3 rounded-xl border border-white/10 bg-white/[0.02]" data-loop-step="0"><div class="font-mono text-[9px] text-slate-500">01</div><div class="mt-2 text-xs font-semibold text-white">PROPOSE</div></div><div class="loop-step p-3 rounded-xl border border-white/10 bg-white/[0.02]" data-loop-step="1"><div class="font-mono text-[9px] text-slate-500">02</div><div class="mt-2 text-xs font-semibold text-white">AUTHORIZE</div></div><div class="loop-step p-3 rounded-xl border border-white/10 bg-white/[0.02]" data-loop-step="2"><div class="font-mono text-[9px] text-slate-500">03</div><div class="mt-2 text-xs font-semibold text-white">EXECUTE</div></div><div class="loop-step p-3 rounded-xl border border-white/10 bg-white/[0.02]" data-loop-step="3"><div class="font-mono text-[9px] text-slate-500">04</div><div class="mt-2 text-xs font-semibold text-white">VERIFY</div></div><div class="loop-step p-3 rounded-xl border border-white/10 bg-white/[0.02]" data-loop-step="4"><div class="font-mono text-[9px] text-slate-500">05</div><div class="mt-2 text-xs font-semibold text-white">SETTLE</div></div><div class="loop-step p-3 rounded-xl border border-white/10 bg-white/[0.02]" data-loop-step="5"><div class="font-mono text-[9px] text-slate-500">06</div><div class="mt-2 text-xs font-semibold text-white">SURPLUS</div></div><div class="loop-step p-3 rounded-xl border border-white/10 bg-white/[0.02]" data-loop-step="6"><div class="font-mono text-[9px] text-slate-500">07</div><div class="mt-2 text-xs font-semibold text-white">NEXT MISSION</div></div></div>
+      <div class="mt-6 p-4 rounded-xl border border-blue-500/20 bg-blue-500/[0.06]"><div class="font-mono text-[10px] uppercase tracking-wider text-blue-300">What to watch</div><p class="mt-2 text-sm text-slate-300">An agent proposes. Policy decides. Execution happens only after authorization. Independent verification makes the resulting revenue authoritative.</p></div>
+      <div class="mt-6 flex justify-end gap-2"><button onclick="App.closeLoopGuide()" class="px-4 py-2 text-xs text-slate-400 hover:text-white">Close</button><button onclick="App.closeLoopGuide();App.setRoute('missions')" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium">Open Missions</button></div>
+    </section>
+  </div>
+
+  <div class="fixed right-4 bottom-4 z-40 flex items-center gap-2">
+    <button id="btnTour" type="button" onclick="App.startTour()" class="px-3 py-2 rounded-lg bg-[#0c1018]/90 border border-white/10 text-slate-300 hover:text-white shadow-lg backdrop-blur-xl text-xs font-mono">? Guide</button>
+    <button id="btnLoopGuide" type="button" onclick="App.startLoopGuide()" class="px-3 py-2 rounded-lg bg-blue-600/15 border border-blue-500/30 text-blue-300 hover:text-white shadow-lg backdrop-blur-xl text-xs font-mono">Follow the loop</button>
+  </div>
+
   <main class="w-full max-w-[1680px] mx-auto pt-24 pb-16 px-4 md:px-8 bg-[#07080b]">
     <div class="flex flex-col w-full">
 
@@ -178,7 +205,7 @@
 <div class="flex items-center gap-space-sm mb-1">
 <span class="font-label-sm text-label-sm uppercase tracking-wider text-slate-500 font-medium">Autonomous Org Telemetry</span>
 <span class="text-slate-700">•</span>
-<span class="font-label-sm text-label-sm text-blue-400 font-mono">Kalyx v4.12 Core</span>
+<span class="font-label-sm text-label-sm text-blue-400 font-mono">LIVE CONTROL PLANE</span>
 </div>
 <h1 class="font-headline-xl text-headline-xl tracking-tight text-white font-bold">System Overview</h1>
 <p class="font-body-md text-body-md text-slate-400">High-level telemetry, active mission trajectory, and required operator actions.</p>
@@ -224,9 +251,9 @@
 <span class="w-2 h-6 rounded-sm bg-blue-500/80 shadow-sm"></span>
 <span class="w-2 h-6 rounded-sm bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]"></span>
 </div>
-<span id="cardOrgConsensus" class="font-label-sm text-label-sm text-slate-400 font-medium">Fleet Consensus 99.98%</span>
+<span id="cardOrgConsensus" class="font-label-sm text-label-sm text-slate-400 font-medium">Live telemetry</span>
 </div>
-<span class="font-label-sm text-label-sm text-slate-500 font-mono">0 alerts</span>
+<span id="cardAlertCount" class="font-label-sm text-label-sm text-slate-500 font-mono">— alerts</span>
 </div>
 </div>
 <!-- Card 2: Compute & Treasury -->
@@ -234,23 +261,23 @@
 <div class="absolute -right-12 -top-12 w-36 h-36 bg-blue-500/10 rounded-full blur-3xl pointer-events-none group-hover:bg-blue-500/15 transition-all"></div>
 <div class="flex items-center justify-between gap-space-sm mb-space-md relative z-10">
 <span class="font-label-sm text-label-sm uppercase tracking-wider text-slate-500 font-medium">Available Credits</span>
-<span id="cardConservationBadge" class="font-label-sm text-label-sm text-slate-400 font-mono">$482.4k USD eq.</span>
+<span id="cardConservationBadge" class="font-label-sm text-label-sm text-slate-400 font-mono">Live ledger</span>
 </div>
 <div class="flex flex-col gap-space-xs my-space-sm relative z-10">
 <div class="flex items-baseline gap-2">
-<span id="cardTreasuryBalance" class="font-code-metric text-code-metric text-white font-bold tracking-tight">482,450</span>
+<span id="cardTreasuryBalance" class="font-code-metric text-code-metric text-white font-bold tracking-tight">—</span>
 <span class="font-label-md text-label-md text-slate-500 font-mono">CR</span>
 </div>
-<p id="cardTreasuryBreakdown" class="font-body-sm text-body-sm text-slate-400">Burn: 142.6 CR/hr • ~141 days runway remaining</p>
+<p id="cardTreasuryBreakdown" class="font-body-sm text-body-sm text-slate-400">Ledger-backed treasury state</p>
 </div>
 <!-- Capacity Bar -->
 <div class="pt-space-md mt-space-sm flex flex-col gap-1.5 border-t border-white/[0.06] relative z-10">
 <div class="flex justify-between items-center text-label-sm font-label-sm text-slate-400">
 <span>Budget Utilisation</span>
-<span class="text-white font-mono font-medium">64%</span>
+<span id="cardBudgetUtilisation" class="text-white font-mono font-medium">—</span>
 </div>
 <div class="w-full h-1.5 bg-white/[0.08] rounded-full overflow-hidden">
-<div class="h-full bg-blue-500 rounded-full shadow-[0_0_8px_rgba(59,130,246,0.6)]" style="width: 64%;"></div>
+<div class="h-full bg-blue-500 rounded-full shadow-[0_0_8px_rgba(59,130,246,0.6)]" id="cardBudgetBar" style="width: 0%;"></div>
 </div>
 </div>
 </div>
@@ -298,7 +325,7 @@
             </span>
 <span class="font-label-sm text-label-sm text-slate-500 font-mono">Submitted 36m ago</span>
 </div>
-<h2 id="attentionProposalTitle" class="font-headline-lg text-headline-lg tracking-tight text-white font-semibold">PROP-842: Autonomous Liquidity Rebalancing</h2>
+<h2 id="attentionProposalTitle" class="font-headline-lg text-headline-lg tracking-tight text-white font-semibold">Live proposal</h2>
 <div class="flex items-center gap-2">
 <span class="font-label-sm text-label-sm text-slate-500 font-medium">Initiated by:</span>
 <span id="attentionOriginAgent" class="font-label-sm text-label-sm text-blue-300 font-mono bg-white/[0.06] border border-white/[0.08] px-2 py-0.5 rounded">STRAT-ANALYST-02 (Strategy Lead)</span>
@@ -328,7 +355,7 @@
 <span class="material-symbols-outlined text-[18px]">verified</span>
 <span>Authorize Action</span>
 </button>
-<button class="w-full sm:w-auto lg:w-48 px-5 py-2.5 rounded-lg bg-white/10 hover:bg-white/15 text-white border border-white/10 font-label-md text-label-md transition-all duration-150 flex items-center justify-center gap-2 shadow-sm" id="reviewBtn" onclick="App.openProposalTrace('PROP-842')" type="button">
+<button class="w-full sm:w-auto lg:w-48 px-5 py-2.5 rounded-lg bg-white/10 hover:bg-white/15 text-white border border-white/10 font-label-md text-label-md transition-all duration-150 flex items-center justify-center gap-2 shadow-sm" id="reviewBtn" onclick="App.openProposalTrace()" type="button">
 <span class="material-symbols-outlined text-[18px]">account_tree</span>
 <span>Review Trace</span>
 </button>
@@ -356,8 +383,8 @@
 </div>
 <div class="flex flex-col min-w-0">
 <div class="flex items-center gap-2">
-<span class="font-label-md text-label-md text-white font-semibold truncate">CEO-Orchestrator</span>
-<span class="font-label-sm text-label-sm text-slate-500 font-mono">Claude 3.5 Sonnet</span>
+<span class="font-label-md text-label-md text-white font-semibold truncate">Live agent</span>
+<span class="font-label-sm text-label-sm text-slate-500 font-mono">API model</span>
 </div>
 <span class="font-body-sm text-body-sm text-slate-400 truncate">Global Task Topology &amp; Team Synthesis</span>
 </div>
@@ -525,7 +552,7 @@
 </div>
 <div class="flex flex-col pt-0.5">
 <span class="font-body-sm text-body-sm text-white font-medium leading-snug">Hourly compute reconciliation nominal</span>
-<span class="font-label-sm text-label-sm text-slate-400">142.6 CR consumption comfortably under 200 quota</span>
+<span class="font-label-sm text-label-sm text-slate-400">Live consumption telemetry</span>
 </div>
 </div>
 <!-- Timeline Item 5 -->
@@ -713,7 +740,7 @@
 <span class="material-symbols-outlined text-xs">radio_button_unchecked</span>
 <span class="truncate">Proof Verify</span>
 </div>
-<span class="text-on-surface-variant font-label-sm text-label-sm">Groth16 block</span>
+<span class="text-on-surface-variant font-label-sm text-label-sm">Verification evidence</span>
 </div>
 <!-- Step 5: Upcoming -->
 <div class="flex flex-col gap-1.5 opacity-40">
@@ -1003,7 +1030,7 @@
 <div class="p-space-md rounded-xl bg-surface-container-low/60 backdrop-blur-xl shadow-md flex items-center justify-between">
 <div>
 <span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider block">Consensus Health</span>
-<span class="font-headline-sm text-headline-sm text-on-surface font-semibold">99.98%</span>
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold">Live telemetry</span>
 </div>
 <div class="w-8 h-8 rounded-lg bg-surface-container flex items-center justify-center text-primary">
 <span class="material-symbols-outlined text-sm">network_check</span>
@@ -1250,11 +1277,11 @@
 <div class="p-space-md rounded-xl bg-surface-container hover:bg-surface-container-high transition-all shadow-md flex items-center justify-between gap-space-md group cursor-pointer">
 <div class="flex items-center gap-space-sm min-w-0">
 <div class="relative w-11 h-11 rounded-lg overflow-hidden flex-shrink-0 bg-surface-container-highest">
-<img class="w-full h-full object-cover" data-alt="Close-up professional portrait of Elena Vance, executive director, studio lighting, minimal architectural background, muted slate tones." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCFZoFrHdpoWfAnKbfA5G6ZPzcDNoZ2ivmftHfNn5w9TIA-ksr5DfpBt_wYm70figbgc8vawAXzg2BE5WOG38Cgw2yI9fxaSxlqyECLR297iwzjg0hsFYDnBNo181lxF3p5jDqeMVVie2U7iVm-mukh4G4m5KA1e6ObKCadIrzNcuGgbPDvXR7t6cvhLz0MmEs3g5EfQd6cCFlKiov8CHPgpbDaHPHCqgjkpITueOxSJtjU2O1S6tDG1Q"/>
+<img class="w-full h-full object-cover" data-alt="Close-up professional portrait of Workspace Operator, executive director, studio lighting, minimal architectural background, muted slate tones." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCFZoFrHdpoWfAnKbfA5G6ZPzcDNoZ2ivmftHfNn5w9TIA-ksr5DfpBt_wYm70figbgc8vawAXzg2BE5WOG38Cgw2yI9fxaSxlqyECLR297iwzjg0hsFYDnBNo181lxF3p5jDqeMVVie2U7iVm-mukh4G4m5KA1e6ObKCadIrzNcuGgbPDvXR7t6cvhLz0MmEs3g5EfQd6cCFlKiov8CHPgpbDaHPHCqgjkpITueOxSJtjU2O1S6tDG1Q"/>
 </div>
 <div class="flex flex-col min-w-0">
 <div class="flex items-center gap-space-xs">
-<span class="font-body-md text-body-md font-medium text-on-surface truncate">Elena Vance</span>
+<span class="font-body-md text-body-md font-medium text-on-surface truncate">Workspace Operator</span>
 <span class="px-1.5 py-0.5 rounded bg-surface-container-highest font-label-sm text-label-sm text-primary uppercase">Council Signer</span>
 </div>
 <span class="font-label-sm text-label-sm text-on-surface-variant truncate">Director of Autonomous Governance</span>
@@ -1279,7 +1306,7 @@
 </div>
 <div class="flex flex-col min-w-0">
 <div class="flex items-center gap-space-xs">
-<span class="font-headline-sm text-headline-sm font-semibold text-on-surface cursor-pointer hover:text-primary transition-colors" onclick="App.selectAgentForInspector('CEO-Orchestrator')">CEO-Orchestrator</span>
+<span class="font-headline-sm text-headline-sm font-semibold text-on-surface cursor-pointer hover:text-primary transition-colors" onclick="App.selectAgentForInspector('Live agent')">Live agent</span>
 <span class="font-label-sm text-label-sm uppercase px-1.5 py-0.5 rounded bg-surface-container-highest text-primary font-medium">Sonnet 3.5</span>
 </div>
 <span class="font-body-sm text-body-sm text-on-surface-variant truncate">Global Task Topology & Delegation</span>
@@ -1293,7 +1320,7 @@
 <div class="grid grid-cols-3 gap-space-xs pt-space-xs">
 <div class="p-2 rounded bg-surface-container-low flex flex-col">
 <span class="font-label-sm text-label-sm text-outline uppercase">Daily Limit</span>
-<span id="inspectorDailyLimit" class="font-label-md text-label-md text-on-surface font-medium">$50,000</span>
+<span id="inspectorDailyLimit" class="font-label-md text-label-md text-on-surface font-medium">Not recorded</span>
 </div>
 <div class="p-2 rounded bg-surface-container-low flex flex-col">
 <span class="font-label-sm text-label-sm text-outline uppercase">Compute Load</span>
@@ -1434,7 +1461,7 @@
 </div>
 <div class="flex flex-col">
 <div class="flex items-center gap-space-xs">
-<h2 id="inspectorAgentName" class="font-headline-sm text-headline-sm font-semibold text-on-surface">CEO-Orchestrator</h2>
+<h2 id="inspectorAgentName" class="font-headline-sm text-headline-sm font-semibold text-on-surface">Live agent</h2>
 </div>
 <span class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Autonomous Executive Mandate</span>
 <div class="flex items-center gap-space-xs mt-1">
@@ -1450,15 +1477,15 @@
 <div class="grid grid-cols-3 gap-space-xs p-space-sm rounded-xl bg-surface-container-low">
 <div class="flex flex-col">
 <span class="font-label-sm text-label-sm text-outline uppercase">Foundation</span>
-<span id="inspectorFoundation" class="font-body-sm text-body-sm font-medium text-on-surface">Claude 3.5</span>
+<span id="inspectorFoundation" class="font-body-sm text-body-sm font-medium text-on-surface">Not recorded</span>
 </div>
 <div class="flex flex-col">
 <span class="font-label-sm text-label-sm text-outline uppercase">Runtime</span>
-<span id="inspectorRuntime" class="font-body-sm text-body-sm font-medium text-on-surface">v4.12.0</span>
+<span id="inspectorRuntime" class="font-body-sm text-body-sm font-medium text-on-surface">API version</span>
 </div>
 <div class="flex flex-col">
 <span class="font-label-sm text-label-sm text-outline uppercase">Uptime</span>
-<span id="inspectorUptime" class="font-body-sm text-body-sm font-medium text-primary">99.98%</span>
+<span id="inspectorUptime" class="font-body-sm text-body-sm font-medium text-primary">Live telemetry</span>
 </div>
 </div>
 <!-- Delegation & Authority Scope -->
@@ -1583,11 +1610,11 @@
                 </tr>
               </thead>
               <tbody id="organisationAgentsTableBody" class="divide-y divide-white/[0.04]">
-                <tr class="hover:bg-white/[0.02] cursor-pointer" onclick="App.selectAgentForInspector('CEO-Orchestrator')">
-                  <td class="py-3 px-4 font-semibold text-white">CEO-Orchestrator</td>
+                <tr class="hover:bg-white/[0.02] cursor-pointer" onclick="App.selectAgentForInspector('Live agent')">
+                  <td class="py-3 px-4 font-semibold text-white">Live agent</td>
                   <td class="py-3 px-4 text-slate-300">Executive Decomposition</td>
                   <td class="py-3 px-4"><span class="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">ACTIVE</span></td>
-                  <td class="py-3 px-4 text-white">$50,000 / day</td>
+                  <td class="py-3 px-4 text-white">Not recorded / day</td>
                   <td class="py-3 px-4 text-primary font-bold">25,000 CR</td>
                   <td class="py-3 px-4 text-emerald-400 font-semibold">99.4%</td>
                   <td class="py-3 px-4 text-slate-300">100% (Nominal)</td>
@@ -1713,7 +1740,7 @@
       </div>
       <div class="space-y-space-xs">
         <div class="flex items-baseline gap-2">
-          <span id="treasuryAvailableBalance" class="font-display-lg text-display-lg font-bold text-white tracking-tight">482,450</span>
+          <span id="treasuryAvailableBalance" class="font-display-lg text-display-lg font-bold text-white tracking-tight">—</span>
           <span class="font-mono text-slate-500 text-sm">CR</span>
         </div>
         <p class="font-body-sm text-body-sm text-slate-400">Total unencumbered organisational balance</p>
@@ -1749,13 +1776,13 @@
       </div>
       <div class="space-y-space-xs">
         <div class="flex items-baseline gap-2">
-          <span id="treasuryBurnRate" class="font-display-lg text-display-lg font-bold text-white tracking-tight">142.6</span>
+          <span id="treasuryBurnRate" class="font-display-lg text-display-lg font-bold text-white tracking-tight">—</span>
           <span class="font-mono text-slate-500 text-sm">CR/h</span>
         </div>
-        <p class="font-body-sm text-body-sm text-slate-400">~141 days continuous operational runway</p>
+        <p class="font-body-sm text-body-sm text-slate-400">Runway calculated from live treasury state</p>
       </div>
       <div class="pt-space-xs border-t border-white/[0.06] text-xs font-mono text-slate-500">
-        Runway Target &gt; 90 Days
+        Runway target is policy-defined
       </div>
     </div>
 
@@ -1784,7 +1811,7 @@
         <h3 class="font-headline-sm text-headline-sm text-on-surface font-medium">Asset Allocation & Multi-Asset Reserves</h3>
         <p class="font-body-sm text-body-sm text-on-surface-variant">Real-time custody distribution across Ethereum and Arbitrum One</p>
       </div>
-      <span class="font-mono text-xs text-slate-400">Total Valuation: $482,450.00 USD</span>
+      <span class="font-mono text-xs text-slate-400">Total Valuation: $—.00 USD</span>
     </div>
     
     <!-- Multi-asset progress bar -->
@@ -1857,7 +1884,7 @@
             <td class="py-3 px-4 text-slate-300">Treasury Operating Reserve</td>
             <td class="py-3 px-4"><span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400">CREDIT</span></td>
             <td class="py-3 px-4 text-emerald-400 font-bold">+4,200 CR</td>
-            <td class="py-3 px-4 text-white">482,450 CR</td>
+            <td class="py-3 px-4 text-white">— CR</td>
             <td class="py-3 px-4 text-right text-primary">0x9f1a...c82d (Verified)</td>
           </tr>
           <tr class="hover:bg-white/[0.02]">
@@ -1984,13 +2011,13 @@
                 Spend Cap Ceiling
               </h2>
 <p class="font-body-md text-body-md text-on-surface-variant leading-relaxed">
-                Single transaction ceiling without explicit human authorization is locked at <span class="text-on-surface font-semibold">$50,000 USD</span> equivalent.
+                Single transaction ceiling without explicit human authorization is locked at <span class="text-on-surface font-semibold">Not recorded USD</span> equivalent.
               </p>
 <!-- Metric pill bar -->
 <div class="pt-space-xs flex flex-wrap items-center gap-space-sm">
 <div class="px-2.5 py-1 rounded-lg bg-surface-container-low text-on-surface font-label-md text-label-md flex items-center gap-1.5">
 <span class="text-on-surface-variant">Ceiling:</span>
-<span class="font-semibold text-primary">$50,000.00</span>
+<span class="font-semibold text-primary">Not recorded.00</span>
 </div>
 <div class="px-2.5 py-1 rounded-lg bg-surface-container-low text-on-surface-variant font-label-md text-label-md">
                   Scope: All Sub-Agents
@@ -2104,7 +2131,7 @@
 <div class="pt-space-xs flex items-center gap-space-sm">
 <div class="flex items-center gap-space-xs px-2.5 py-1 rounded-full bg-surface-container-lowest">
 <div class="w-4 h-4 rounded-full bg-primary/20 flex items-center justify-center text-primary font-label-sm text-label-sm font-bold">E</div>
-<span class="font-label-sm text-label-sm text-on-surface">Primary: Elena Vance (Director)</span>
+<span class="font-label-sm text-label-sm text-on-surface">Primary: Workspace Operator (Director)</span>
 </div>
 <span class="text-on-surface-variant font-label-sm text-label-sm">Timeout: 30 mins auto-reject</span>
 </div>
@@ -2245,7 +2272,7 @@
               </p>
 <div class="mt-2 p-2 rounded bg-surface-container-lowest/80 text-on-surface-variant font-label-sm text-label-sm flex items-start gap-1.5">
 <span class="material-symbols-outlined text-xs text-primary mt-0.5">check_circle</span>
-<span>Signed by Elena Vance within 14 minutes. Intent completed.</span>
+<span>Signed by Workspace Operator within 14 minutes. Intent completed.</span>
 </div>
 </div>
 </div>
@@ -2600,7 +2627,7 @@
 </div>
 <div class="space-y-space-xs">
 <div class="flex items-baseline gap-space-xs">
-<span class="font-headline-lg text-headline-lg text-on-surface font-semibold tracking-tight">99.98%</span>
+<span class="font-headline-lg text-headline-lg text-on-surface font-semibold tracking-tight">Live telemetry</span>
 <span class="font-label-sm text-label-sm text-primary font-medium">Nominal</span>
 </div>
 <p class="font-body-sm text-body-sm text-on-surface-variant">Fleet quorum agreement across 64 autonomous validator micro-agents.</p>
@@ -2750,7 +2777,7 @@
 <span class="text-on-surface font-medium">Auditor-Prime (14:35 UTC)</span>
 </div>
 </div>
-<!-- Merkle State Root -->
+<!-- Audit evidence -->
 <div class="relative overflow-hidden rounded-xl bg-surface-container-low p-space-lg shadow-sm flex flex-col justify-between">
 <div class="flex items-start justify-between">
 <div class="flex flex-col gap-space-xs">
@@ -3458,7 +3485,7 @@
 <div class="space-y-space-xs">
 <label class="font-label-sm text-label-sm uppercase text-on-surface-variant tracking-wider">Engine Kernel Version</label>
 <div class="bg-surface-container-lowest px-space-md py-2.5 rounded-lg flex items-center justify-between shadow-sm">
-<span class="font-label-md text-label-md text-on-surface font-semibold">v4.12.0</span>
+<span class="font-label-md text-label-md text-on-surface font-semibold">API version</span>
 <span class="px-2 py-0.5 rounded bg-surface-container-high text-primary font-label-sm text-label-sm uppercase">Latest Resilient</span>
 </div>
 </div>
@@ -3512,16 +3539,16 @@
 </div>
 <!-- Signers List -->
 <div class="space-y-space-sm">
-<!-- Elena Vance -->
+<!-- Workspace Operator -->
 <div class="bg-surface-container-lowest p-space-md rounded-lg flex items-center justify-between gap-space-md shadow-sm">
 <div class="flex items-center gap-space-md min-w-0">
-<img alt="Elena Vance" class="w-10 h-10 rounded-full object-cover shrink-0" src="https://lh3.googleusercontent.com/aida/AEtjO1URu4FeKft3v8sPA_HUN1HaNFL9fwcxeuik1VF76G_zEsLGRrDd-cfUOMbUN9jSb53Ybf9ZE1IOxa8WuIaYPgSWaGB_jEsoDfYmJcgaullJQHcdp9W5Eu6ZxJO4WkVLkyVNkNz0Clb1q8QD4wXq9V0508t1aaRULJ8_qCfPwm9J8PHSC3WpAAiqcm4xsXpg9qxg995VG5yZ4ykUQU5vymi4fzTmzJpcwMtGonRWrnIUMN9RwlA4M71VbJum"/>
+<img alt="Workspace Operator" class="w-10 h-10 rounded-full object-cover shrink-0" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64'%3E%3Crect width='64' height='64' rx='32' fill='%231e3a8a'/%3E%3Ctext x='32' y='39' text-anchor='middle' font-family='Arial' font-size='26' fill='white'%3EK%3C/text%3E%3C/svg%3E"/>
 <div class="min-w-0">
 <div class="flex items-center gap-space-xs flex-wrap">
-<span class="font-body-md text-body-md text-on-surface font-medium truncate">Elena Vance</span>
+<span class="font-body-md text-body-md text-on-surface font-medium truncate">Workspace Operator</span>
 <span class="px-space-xs py-0.5 rounded bg-surface-container text-primary font-label-sm text-label-sm uppercase">Full Executive</span>
 </div>
-<div class="font-label-sm text-label-sm text-on-surface-variant font-mono truncate">0x71C...a82F • Hardware Token YubiKey-5</div>
+<div class="font-label-sm text-label-sm text-on-surface-variant font-mono truncate">0x71C...a82F • Hardware Token Operator authorization</div>
 </div>
 </div>
 <div class="flex items-center gap-space-sm shrink-0">
@@ -3590,7 +3617,7 @@
 <div class="flex items-center gap-space-sm">
 <span class="w-2 h-2 rounded-full bg-primary"></span>
 <div>
-<div class="font-body-sm text-body-sm text-on-surface font-medium">Anthropic • Claude 3.5 Sonnet</div>
+<div class="font-body-sm text-body-sm text-on-surface font-medium">Anthropic • API model</div>
 <div class="font-label-sm text-label-sm text-on-surface-variant">Primary reasoning engine</div>
 </div>
 </div>
@@ -3700,7 +3727,7 @@
 <div class="w-full bg-surface-container-low rounded-xl p-space-md flex flex-col md:flex-row items-center justify-between gap-space-md shadow-sm">
 <div class="flex items-center gap-space-md">
 <div class="flex -space-x-2">
-<img alt="Signer 1" class="w-8 h-8 rounded-full border-2 border-surface-container-low object-cover" src="https://lh3.googleusercontent.com/aida/AEtjO1URu4FeKft3v8sPA_HUN1HaNFL9fwcxeuik1VF76G_zEsLGRrDd-cfUOMbUN9jSb53Ybf9ZE1IOxa8WuIaYPgSWaGB_jEsoDfYmJcgaullJQHcdp9W5Eu6ZxJO4WkVLkyVNkNz0Clb1q8QD4wXq9V0508t1aaRULJ8_qCfPwm9J8PHSC3WpAAiqcm4xsXpg9qxg995VG5yZ4ykUQU5vymi4fzTmzJpcwMtGonRWrnIUMN9RwlA4M71VbJum"/>
+<img alt="Signer 1" class="w-8 h-8 rounded-full border-2 border-surface-container-low object-cover" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64'%3E%3Crect width='64' height='64' rx='32' fill='%231e3a8a'/%3E%3Ctext x='32' y='39' text-anchor='middle' font-family='Arial' font-size='26' fill='white'%3EK%3C/text%3E%3C/svg%3E"/>
 <img class="w-8 h-8 rounded-full border-2 border-surface-container-low object-cover" data-alt="Marcus Brody Risk Officer avatar photo" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCRZ-GgXa7ajQXXHR_SYKxmT_xmx55sLbUZJncJ3AiaEmO25JW3LQMARtWGhrie8neZIsyU-zfXO2u5Imo8dA09NFWadzNPMm3iwnAbqhbMWxXSoD9psbi06MIRKZQnTJjoR7TAUAA18_0cX92tikbRHAjH4F_ENX9VRJhbHdaNKzq8Lu93OaoUJxcpnoJMPT6jgjaaLv3phXV6uNC8R9LRG5NCKlDdDyv8RlkSbl_ZPS5ROinYa8r5eQ"/>
 <div class="w-8 h-8 rounded-full border-2 border-surface-container-low bg-surface-container-high flex items-center justify-center font-label-sm text-label-sm text-on-surface font-bold">+1</div>
 </div>
@@ -3997,11 +4024,11 @@
             </div>
             <div class="flex items-center justify-between">
               <span class="text-slate-400">Constitutional Proof:</span>
-              <span class="text-primary font-semibold">Groth16 Validated (38ms)</span>
+              <span class="text-primary font-semibold">Verification evidence</span>
             </div>
             <div class="flex items-center justify-between">
               <span class="text-slate-400">Signer Quorum:</span>
-              <span class="text-white font-semibold">4 of 5 Consensus (99.98%)</span>
+              <span class="text-white font-semibold">Governance evidence (Live telemetry)</span>
             </div>
           </div>
 
@@ -4025,7 +4052,7 @@
               <div class="p-3 rounded-lg bg-surface-container border border-white/10 flex items-center justify-between">
                 <div>
                   <div class="text-white font-semibold">Node #03: Multi-Sig Gateway Authorization</div>
-                  <div class="text-slate-400">Pending Director human approval (Elena Vance).</div>
+                  <div class="text-slate-400">Pending Director human approval (Workspace Operator).</div>
                 </div>
                 <span class="px-2 py-0.5 rounded bg-amber-500/10 text-amber-400">PENDING</span>
               </div>
@@ -4057,7 +4084,7 @@
       <div class="p-4 rounded-xl bg-surface-container-lowest border border-white/10 text-xs font-mono space-y-2">
         <div class="flex justify-between text-slate-400">
           <span>TARGET OPERATION:</span>
-          <span class="text-white font-semibold">PROP-842: Arbitrum Rebalance</span>
+          <span class="text-white font-semibold">Live proposal</span>
         </div>
         <div class="flex justify-between text-slate-400">
           <span>ALLOCATED VOLUME:</span>
@@ -4065,11 +4092,11 @@
         </div>
         <div class="flex justify-between text-slate-400">
           <span>SIGNING AUTHORITY:</span>
-          <span class="text-emerald-400">Elena Vance (Director)</span>
+          <span class="text-emerald-400">Workspace Operator (Director)</span>
         </div>
         <div class="flex justify-between text-slate-400">
           <span>HARDWARE TOKEN:</span>
-          <span class="text-slate-300">YubiKey-5 (HMAC-SHA256)</span>
+          <span class="text-slate-300">Operator authorization (HMAC-SHA256)</span>
         </div>
       </div>
 
@@ -4103,11 +4130,11 @@
         <div class="grid grid-cols-3 gap-3 p-4 rounded-xl bg-surface-container-lowest border border-white/10">
           <div>
             <span class="text-slate-500 uppercase">Agent Identity</span>
-            <div class="text-white font-semibold text-sm mt-0.5">CEO-Orchestrator</div>
+            <div class="text-white font-semibold text-sm mt-0.5">Live agent</div>
           </div>
           <div>
             <span class="text-slate-500 uppercase">Foundation Model</span>
-            <div class="text-white font-semibold text-sm mt-0.5">Claude 3.5 Sonnet</div>
+            <div class="text-white font-semibold text-sm mt-0.5">API model</div>
           </div>
           <div>
             <span class="text-slate-500 uppercase">Current Reliability</span>
@@ -4120,7 +4147,7 @@
           <div class="p-4 rounded-xl bg-surface-container-lowest border border-white/10 space-y-2">
             <div class="flex justify-between">
               <span class="text-slate-400">Autonomous Daily Spend Ceiling:</span>
-              <span class="text-white font-bold">$50,000 USD / 24h</span>
+              <span class="text-white font-bold">Not recorded USD / 24h</span>
             </div>
             <div class="flex justify-between">
               <span class="text-slate-400">Max Sub-Agents Instantiation:</span>
@@ -4147,9 +4174,9 @@
     <div class="w-full max-w-[1680px] mx-auto px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2">
       <div class="flex items-center gap-2">
         <span class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
-        <span class="text-slate-400">Kalyx Autonomy Engine v4.12.0</span>
+        <span class="text-slate-400">Kalyx Autonomy Engine API version</span>
         <span class="text-slate-600">/</span>
-        <span>Consensus Finality 99.98%</span>
+        <span>Consensus Finality Live telemetry</span>
       </div>
       <div>
         &copy; 2025 Kalyx Protocol. All autonomous directives preserved.
