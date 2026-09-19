@@ -11,156 +11,9 @@ const App = (() => {
   let cachedLedgerData = null;
   let cachedAgents = [];
 
-  // Default agent directory for the interactive hierarchy & inspector
-  const AGENT_REGISTRY = {
-    'CEO-Orchestrator': {
-      name: 'CEO-Orchestrator',
-      role: 'Autonomous Executive Mandate',
-      nodeId: 'Node 0x8F9B',
-      status: 'OPERATIONAL / NOMINAL',
-      foundation: 'Claude 3.5 Sonnet',
-      runtime: 'v4.12.0',
-      uptime: '99.98%',
-      dailyLimit: '$50,000 / day',
-      reliabilityScore: '99.4',
-      load: '38% load',
-      domain: 'Global Task Topology & Team Synthesis',
-      authorityText: 'Can allocate up to 50,000 CR per 24h window autonomously without human intervention.',
-      subAgentText: 'Authorized to spawn specialized worker nodes within pre-approved parameter ranges.',
-      disallowedText: 'Cannot sign multisig treasury withdrawals or alter root constitutional governance rules.',
-      badgeClass: 'text-emerald-400',
-    },
-    'Strat-Analyst-02': {
-      name: 'Strat-Analyst-02',
-      role: 'Market Volatility Lead',
-      nodeId: 'Node 0x4C12',
-      status: 'PROPOSING / ACTIVE',
-      foundation: 'GPT-4o',
-      runtime: 'v4.12.0',
-      uptime: '99.85%',
-      dailyLimit: '$20,000 / day',
-      reliabilityScore: '98.1',
-      load: '82% load',
-      domain: 'Market Volatility & Rebalance Modeling',
-      authorityText: 'Formulates algorithmic pool equilibrium and submit parameterized proposals.',
-      subAgentText: 'Read access to all cross-chain telemetry feeds and external oracle sinks.',
-      disallowedText: 'Cannot execute transactions directly; requires policy authorization.',
-      badgeClass: 'text-amber-400',
-    },
-    'Risk-Assessor-01': {
-      name: 'Risk-Assessor-01',
-      role: 'Tail Risk & Liquidity Assessor',
-      nodeId: 'Node 0x1A09',
-      status: 'READ-ONLY GUARD',
-      foundation: 'Llama 3.3',
-      runtime: 'v4.12.0',
-      uptime: '99.90%',
-      dailyLimit: 'Read-Only Guard',
-      reliabilityScore: '99.2',
-      load: '45% load',
-      domain: 'Tail Risk & Liquidity Verification',
-      authorityText: 'Audits proposed parameter bounds before submitting to Policy Centre.',
-      subAgentText: 'Monitors liquidity curve slippage and flash loan vectors.',
-      disallowedText: 'Zero capital allocation authority.',
-      badgeClass: 'text-blue-400',
-    },
-    'Exec-Trader-01': {
-      name: 'Exec-Trader-01',
-      role: 'On-Chain Transaction Sequencer',
-      nodeId: 'Node 0x7E31',
-      status: 'STANDBY / ARMED',
-      foundation: 'EVM Worker v2',
-      runtime: 'v4.12.0',
-      uptime: '99.99%',
-      dailyLimit: '$100,000 / day',
-      reliabilityScore: '99.9',
-      load: '4% load',
-      domain: 'Transaction Sequencing & Mempool Execution',
-      authorityText: 'Executes verified bytecode on Sepolia/Arbitrum with signed intent binding.',
-      subAgentText: 'Direct boundary access to Consequential Execution Provider.',
-      disallowedText: 'Strictly prohibited from execution without valid policy HMAC token.',
-      badgeClass: 'text-slate-400',
-    },
-    'Gas-Optimizer-04': {
-      name: 'Gas-Optimizer-04',
-      role: 'Mempool Priority Routing',
-      nodeId: 'Node 0x9D55',
-      status: 'AUTOMATED RELAY',
-      foundation: 'Heuristic Engine',
-      runtime: 'v4.12.0',
-      uptime: '100.0%',
-      dailyLimit: 'Automated Relay',
-      reliabilityScore: '99.7',
-      load: '12% load',
-      domain: 'EIP-1559 Base Fee & Priority Fee Optimization',
-      authorityText: 'Adjusts max_fee_per_gas dynamically within 150% base fee envelope.',
-      subAgentText: 'Real-time mempool telemetry ingestion.',
-      disallowedText: 'Cannot redirect transaction recipient or alter intent payload.',
-      badgeClass: 'text-blue-400',
-    },
-    'Scraper-01': {
-      name: 'Scraper-01',
-      role: 'Telemetry & Oracle Ingestion',
-      nodeId: 'Node 0x3B88',
-      status: 'INGESTING / ACTIVE',
-      foundation: 'Mistral Large',
-      runtime: 'v4.12.0',
-      uptime: '99.76%',
-      dailyLimit: '$5,000 / day',
-      reliabilityScore: '97.8',
-      load: '51% load',
-      domain: 'Oracle Feeds & Telemetry Ingestion',
-      authorityText: 'Continuous ingestion of Pyth and Chainlink decentralized data streams.',
-      subAgentText: 'Publishes validated state updates to append-only event stream.',
-      disallowedText: 'No treasury debit or proposal creation authority.',
-      badgeClass: 'text-blue-400',
-    },
-    'Telemetry-Relay-02': {
-      name: 'Telemetry-Relay-02',
-      role: 'Cross-Chain Consensus Feeds',
-      nodeId: 'Node 0x22F4',
-      status: 'STREAM ACTIVE',
-      foundation: 'gRPC Worker',
-      runtime: 'v4.12.0',
-      uptime: '99.99%',
-      dailyLimit: 'Stream Active',
-      reliabilityScore: '99.9',
-      load: '28% load',
-      domain: 'Cross-Chain Block Header & Proof Relay',
-      authorityText: 'Validates Merkle leaf proofs against canonical block roots.',
-      subAgentText: 'Synchronizes multi-chain state trees.',
-      disallowedText: 'No financial or execution capabilities.',
-      badgeClass: 'text-slate-400',
-    },
-    'Auditor-Prime': {
-      name: 'Auditor-Prime',
-      role: 'Constitutional Engine & Zero-Knowledge Attestation',
-      nodeId: 'Node 0x00A1 (Immutable)',
-      status: '100% CRYPTOGRAPHICALLY VERIFIED',
-      foundation: 'Constitutional Engine',
-      runtime: 'v4.12.0',
-      uptime: '100.0%',
-      dailyLimit: 'Independent (Veto Only)',
-      reliabilityScore: '100.0',
-      load: '100% proof-checked',
-      domain: 'Constitutional Rule Engine • ZK-State Attestation • Veto Powers',
-      authorityText: 'Holds absolute cryptographic veto over state changes violating safety invariants.',
-      subAgentText: 'Signs Merkle state roots into append-only SHA-256 audit chain.',
-      disallowedText: 'Cannot propose actions or spend credits; strictly independent watchdog.',
-      badgeClass: 'text-primary',
-    }
-  };
+  // Agent inspector is always populated from the authoritative API. No fictional fallback registry.
+  const AGENT_REGISTRY = Object.freeze({});
 
-  // Safe DOM helpers
-  const $ = id => document.getElementById(id);
-  function setTxt(id, val) {
-    const el = $(id);
-    if (el) el.textContent = val ?? '—';
-  }
-  function setHtml(id, val) {
-    const el = $(id);
-    if (el) el.innerHTML = val ?? '';
-  }
   function esc(s) {
     return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
@@ -568,50 +421,19 @@ const App = (() => {
 
   // Interactive Selected Agent Inspector Panel update
   function selectAgentForInspector(agentId) {
-    let agent = AGENT_REGISTRY[agentId];
-    if (!agent) {
-      const found = cachedAgents.find(a => a.id === agentId);
-      if (found) {
-        agent = {
-          name: found.id,
-          role: found.role,
-          nodeId: `Node 0x${found.id.slice(0, 4).toUpperCase()}`,
-          status: found.status || 'ACTIVE',
-          foundation: found.model_name || 'Autonomous Engine',
-          runtime: 'v4.12.0',
-          uptime: '99.9%',
-          dailyLimit: `${fmtNum(found.authority_ceiling)} CR / day`,
-          reliabilityScore: Number(found.reliability_score || 99).toFixed(1),
-          authorityText: `Bound to ${fmtNum(found.authority_ceiling)} CR daily operational ceiling.`,
-          subAgentText: 'Specialized autonomous execution parameters enforced.',
-          disallowedText: 'Restricted from unverified multisig withdrawals.',
-        };
-      } else {
-        agent = {
-          name: agentId,
-          role: 'Autonomous Specialist',
-          nodeId: 'Node Dynamic',
-          status: 'ACTIVE / NOMINAL',
-          foundation: 'Autonomous Engine',
-          runtime: 'v4.12.0',
-          uptime: '99.9%',
-          dailyLimit: '$25,000 / day',
-          reliabilityScore: '99.0',
-          authorityText: 'Standard bounded execution limits apply.',
-          subAgentText: 'Spawns sub-routines with verified token binding.',
-          disallowedText: 'No root governance override permission.',
-        };
-      }
+    const found = cachedAgents.find(a => a.id === agentId);
+    if (!found) {
+      ['inspectorAgentName','inspectorNodeId','inspectorAgentStatus','inspectorFoundation','inspectorRuntime','inspectorUptime','inspectorDailyLimit','inspectorReliabilityScore'].forEach(id => setTxt(id, '—'));
+      return;
     }
-
-    setTxt('inspectorAgentName', agent.name);
-    setTxt('inspectorNodeId', agent.nodeId);
-    setTxt('inspectorAgentStatus', agent.status);
-    setTxt('inspectorFoundation', agent.foundation);
-    setTxt('inspectorRuntime', agent.runtime);
-    setTxt('inspectorUptime', agent.uptime);
-    setTxt('inspectorDailyLimit', agent.dailyLimit);
-    setTxt('inspectorReliabilityScore', agent.reliabilityScore);
+    setTxt('inspectorAgentName', found.id || 'Unnamed agent');
+    setTxt('inspectorNodeId', found.id || '—');
+    setTxt('inspectorAgentStatus', found.status || 'UNKNOWN');
+    setTxt('inspectorFoundation', found.model_name || 'Not recorded');
+    setTxt('inspectorRuntime', found.runtime || 'Not recorded');
+    setTxt('inspectorUptime', found.uptime || 'Not recorded');
+    setTxt('inspectorDailyLimit', found.authority_ceiling != null ? `${fmtNum(found.authority_ceiling)} CR` : 'Not recorded');
+    setTxt('inspectorReliabilityScore', found.reliability_score != null ? Number(found.reliability_score).toFixed(1) : 'Not recorded');
   }
 
   // ==================== VIEW 4: TREASURY ====================
