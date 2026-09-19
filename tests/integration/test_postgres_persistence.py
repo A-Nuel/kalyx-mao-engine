@@ -239,3 +239,113 @@ def test_sqlite_ledger_cursor_path_is_pg_compatible():
         assert ledger.verify_conservation() in (True, False)
     finally:
         db.close()
+
+
+@requires_postgres
+def test_save_proposal_policy_decision_execution_receipt_upsert_on_postgres():
+    """Regression test for a second production crash found after the
+    cursor fix: SqliteRepository.save_proposal / save_policy_decision /
+    save_execution_receipt used SQLite-only `INSERT OR REPLACE INTO ...`,
+    which Postgres has no equivalent for -- it raised
+    `SyntaxError: syntax error at or near "OR"` the moment run_mission()
+    (via the Auditor/executor flow the judge demo exercises) tried to
+    persist a proposal.
+
+    Fixed by rewriting all three as `INSERT INTO ... ON CONFLICT(id) DO
+    UPDATE SET <every non-key column> = excluded.<column>`, matching
+    REPLACE's whole-row-overwrite semantics exactly (not a partial upsert)
+    so behavior against SQLite is unchanged -- confirmed by the existing
+    619-test suite staying green, since SQLite itself has supported
+    ON CONFLICT since 3.24 and this is not Postgres-only syntax.
+
+    This test exercises both branches ON CONFLICT actually has to cover:
+    the initial INSERT (id not yet present) and the UPDATE-on-conflict
+    (same id, changed values) -- REPLACE historically silently allowed
+    both to work identically; ON CONFLICT DO UPDATE is not automatically
+    equivalent unless every non-key column is listed, which is exactly
+    the mistake that's easy to make when translating REPLACE by hand.
+    """
+    from src.domain.entities import ActionProposal, ExecutionReceipt, Organisation, PolicyDecision, Task
+    from src.domain.enums import ActionType, PolicyResult, TaskStatus
+    from src.persistence.repositories import SqliteRepository
+
+    db = create_database()
+    try:
+        repo = SqliteRepository(db)
+        prefix = f"pg-upsert-{os.getpid()}"
+        org_id = f"{prefix}-org"
+
+        # tasks.org_id has a real FK to organisations(id), enforced strictly
+        # by Postgres (unlike SQLite, which doesn't enforce FKs by default --
+        # this is exactly why this omission wouldn't have failed locally).
+        org = Organisation(id=org_id, tenant_id="tenant-demo", mission="test mission", treasury_balance=100)
+        repo.save_organisation(org)
+
+        # Tasks/proposals/policy_decisions/execution_receipts all carry FK
+        # references, so seed a task first the same way run_mission() does.
+        task = Task(
+            id=f"{prefix}-task",
+            mission_id=f"{prefix}-mission",
+            objective="test objective",
+            allocated_credits=10,
+            status=TaskStatus.PENDING,
+        )
+        repo.save_task(task, org_id)
+
+        proposal = ActionProposal(
+            id=f"{prefix}-proposal",
+            task_id=task.id,
+            proposing_agent_id=f"{prefix}-agent",
+            action_type=ActionType.INTERNAL_ANALYSIS,
+            target="sandbox://test",
+            parameters={"k": "v1"},
+            requested_credits=5,
+            expected_value_score=0.5,
+            risk_assessment="low",
+            rationale="initial",
+        )
+        repo.save_proposal(proposal)  # INSERT branch
+
+        # Same id, changed fields -> exercises the ON CONFLICT DO UPDATE
+        # branch, the one REPLACE-style upsert semantics require.
+        proposal.rationale = "updated rationale"
+        proposal.requested_credits = 9
+        repo.save_proposal(proposal)  # UPDATE-on-conflict branch
+
+        decision = PolicyDecision(
+            id=f"{prefix}-decision",
+            proposal_id=proposal.id,
+            result=PolicyResult.APPROVED,
+            evaluated_rules=["rule-1"],
+            authorization_token="tok-1",
+        )
+        repo.save_policy_decision(decision)  # INSERT branch
+        decision.result = PolicyResult.REJECTED
+        decision.violated_rule_id = "rule-1"
+        repo.save_policy_decision(decision)  # UPDATE-on-conflict branch
+
+        receipt = ExecutionReceipt(
+            id=f"{prefix}-receipt",
+            proposal_id=proposal.id,
+            authorization_token="tok-1",
+            action_type=ActionType.INTERNAL_ANALYSIS,
+            target="sandbox://test",
+            http_status=200,
+            raw_response_hash="hash-1",
+            raw_output={"status": "ok"},
+            cost_credits=5,
+        )
+        repo.save_execution_receipt(receipt)  # INSERT branch
+        receipt.http_status = 500
+        receipt.cost_credits = 7
+        repo.save_execution_receipt(receipt)  # UPDATE-on-conflict branch
+
+        # Confirm the UPDATE branch actually overwrote, not silently
+        # ignored (which a wrong ON CONFLICT DO NOTHING would produce).
+        cursor = db.conn.cursor()
+        cursor.execute("SELECT rationale, requested_credits FROM proposals WHERE id = ?", (proposal.id,))
+        row = cursor.fetchone()
+        assert row["rationale"] == "updated rationale"
+        assert row["requested_credits"] == 9
+    finally:
+        db.close()

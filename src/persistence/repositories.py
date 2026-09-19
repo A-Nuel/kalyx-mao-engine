@@ -343,9 +343,21 @@ class SqliteRepository:
         with self.db.conn:
             self.db.conn.execute(
                 """
-                INSERT OR REPLACE INTO proposals
+                INSERT INTO proposals
                 (id, task_id, proposing_agent_id, action_type, target, parameters, requested_credits, expected_value_score, risk_assessment, rationale, content_hash, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    task_id = excluded.task_id,
+                    proposing_agent_id = excluded.proposing_agent_id,
+                    action_type = excluded.action_type,
+                    target = excluded.target,
+                    parameters = excluded.parameters,
+                    requested_credits = excluded.requested_credits,
+                    expected_value_score = excluded.expected_value_score,
+                    risk_assessment = excluded.risk_assessment,
+                    rationale = excluded.rationale,
+                    content_hash = excluded.content_hash,
+                    created_at = excluded.created_at
                 """, (proposal.id, proposal.task_id, proposal.proposing_agent_id, proposal.action_type.value,
                        proposal.target, json.dumps(proposal.parameters), proposal.requested_credits,
                        proposal.expected_value_score, proposal.risk_assessment, proposal.rationale,
@@ -356,9 +368,17 @@ class SqliteRepository:
         with self.db.conn:
             self.db.conn.execute(
                 """
-                INSERT OR REPLACE INTO policy_decisions
+                INSERT INTO policy_decisions
                 (id, proposal_id, result, violated_rule_id, violated_rule_description, evaluated_rules, authorization_token, timestamp)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    proposal_id = excluded.proposal_id,
+                    result = excluded.result,
+                    violated_rule_id = excluded.violated_rule_id,
+                    violated_rule_description = excluded.violated_rule_description,
+                    evaluated_rules = excluded.evaluated_rules,
+                    authorization_token = excluded.authorization_token,
+                    timestamp = excluded.timestamp
                 """, (decision.id, decision.proposal_id, decision.result.value, decision.violated_rule_id,
                        decision.violated_rule_description, json.dumps(decision.evaluated_rules),
                        decision.authorization_token, decision.timestamp.isoformat())
@@ -368,9 +388,19 @@ class SqliteRepository:
         with self.db.conn:
             self.db.conn.execute(
                 """
-                INSERT OR REPLACE INTO execution_receipts
+                INSERT INTO execution_receipts
                 (id, proposal_id, authorization_token, action_type, target, http_status, raw_response_hash, raw_output, cost_credits, executed_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    proposal_id = excluded.proposal_id,
+                    authorization_token = excluded.authorization_token,
+                    action_type = excluded.action_type,
+                    target = excluded.target,
+                    http_status = excluded.http_status,
+                    raw_response_hash = excluded.raw_response_hash,
+                    raw_output = excluded.raw_output,
+                    cost_credits = excluded.cost_credits,
+                    executed_at = excluded.executed_at
                 """, (receipt.id, receipt.proposal_id, receipt.authorization_token, receipt.action_type.value,
                        receipt.target, receipt.http_status, receipt.raw_response_hash, json.dumps(receipt.raw_output),
                        receipt.cost_credits, receipt.executed_at.isoformat())
