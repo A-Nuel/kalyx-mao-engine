@@ -1,623 +1,200 @@
 <!DOCTYPE html>
 <html class="dark" lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta content="width=device-width, initial-scale=1.0" name="viewport" />
-  <title>Kalyx — Command Centre</title>
-  
-  <!-- Obsidian Translucence Typography Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
-
-  <!-- Tailwind Play CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            primary: { DEFAULT: '#2563eb', hover: '#1d4ed8', container: '#1e3a8a', on: '#ffffff' },
-            surface: {
-              lowest: '#030407',
-              DEFAULT: '#07080b',
-              container: '#0c0e14',
-              'container-low': '#0e111a',
-              'container-high': '#141824',
-              'container-highest': '#1b2030',
-              bright: '#242a3e',
-            },
-            outline: { DEFAULT: '#262d40', variant: '#1e2333' },
-            'on-surface': '#f1f5f9',
-            'on-surface-variant': '#94a3b8',
-          },
-          fontFamily: {
-            sans: ['Geist', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
-            mono: ['JetBrains Mono', 'Menlo', 'Monaco', 'Courier New', 'monospace'],
-          },
-          spacing: {
-            'space-xs': '0.375rem',
-            'space-sm': '0.75rem',
-            'space-md': '1.25rem',
-            'space-lg': '1.75rem',
-            'space-xl': '2.5rem',
-            gutter: '1.5rem',
-          }
-        }
-      }
-    };
-  </script>
-
-  <!-- Obsidian Translucence Stylesheet -->
-  <link rel="stylesheet" href="/assets/app.css" />
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kalyx — Command Centre</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans-serif'],mono:['JetBrains Mono','monospace']}}}};
+</script>
+<link rel="stylesheet" href="/assets/app.css">
 </head>
-<body class="bg-[#07080b] text-[#f1f5f9] font-sans antialiased selection:bg-blue-600 selection:text-white min-h-screen overflow-x-hidden">
+<body class="kalyx-shell">
+  <div class="kalyx-noise" aria-hidden="true"></div>
 
-  <!-- ========================================================================= -->
-  <!-- TOPBAR HEADER -->
-  <!-- ========================================================================= -->
-  <header class="fixed top-0 left-0 right-0 z-50 bg-[#07080b]/80 backdrop-blur-xl border-b border-white/[0.08] shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
-    <div class="h-16 w-full max-w-[1680px] mx-auto px-6 lg:px-8 flex items-center justify-between gap-4">
-      
-      <!-- Brand Logo + Autonomous Org Pill + Nav -->
-      <div class="flex items-center gap-6 shrink-0">
-        <div class="flex items-center gap-3 cursor-pointer" onclick="App.setRoute('overview')">
-          <div class="w-8 h-8 rounded-lg bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400 drop-shadow-[0_0_12px_rgba(59,130,246,0.4)]">
-            <span class="material-symbols-outlined text-[20px]">hub</span>
-          </div>
-          <div class="flex items-center gap-2">
-            <span class="text-lg font-semibold tracking-tight text-white">Kalyx</span>
-            <span class="font-mono text-[11px] uppercase px-2.5 py-0.5 rounded-full bg-white/[0.06] border border-white/[0.08] text-slate-300 font-medium">Autonomous Organization</span>
-          </div>
-        </div>
-
-        <!-- 9 Section Nav Tabs -->
-        <nav class="hidden 2xl:flex items-center gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/[0.06] shadow-inner text-xs font-mono" id="mainNav">
-          <a class="nav-tab active px-3 py-1.5 rounded-lg text-white bg-white/10 shadow-sm border border-white/10 transition-all cursor-pointer" data-nav="overview" onclick="App.setRoute('overview')">Overview</a>
-          <a class="nav-tab px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-all cursor-pointer" data-nav="missions" onclick="App.setRoute('missions')">Missions</a>
-          <a class="nav-tab px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-all cursor-pointer" data-nav="organisation" onclick="App.setRoute('organisation')">Organisation</a>
-          <a class="nav-tab px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-all cursor-pointer" data-nav="treasury" onclick="App.setRoute('treasury')">Treasury</a>
-          <a class="nav-tab px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-all cursor-pointer" data-nav="policies" onclick="App.setRoute('policies')">Policies</a>
-          <a class="nav-tab px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-all relative cursor-pointer" data-nav="operations" onclick="App.setRoute('operations')">
-            Operations
-            <span id="navOperationsBadge" class="hidden absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
-          </a>
-          <a class="nav-tab px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-all cursor-pointer flex items-center gap-1" data-nav="marketplace" onclick="App.setRoute('marketplace')">
-            <span>Marketplace</span>
-            <span class="px-1 py-0.2 rounded text-[9px] bg-blue-500/20 text-blue-300 font-mono">B2B</span>
-          </a>
-          <a class="nav-tab px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-all cursor-pointer" data-nav="collateral" onclick="App.setRoute('collateral')">CREDIT Collateral</a>
-          <a class="nav-tab px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-all cursor-pointer" data-nav="audit" onclick="App.setRoute('audit')">Audit</a>
-          <a class="nav-tab px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-all cursor-pointer" data-nav="experiments" onclick="App.setRoute('experiments')">Experiments</a>
-          <a class="nav-tab px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-all cursor-pointer" data-nav="settings" onclick="App.setRoute('settings')">Settings</a>
-        </nav>
-      </div>
-
-      <!-- Controls, Operational Indicator, Quick Actions & User Profile -->
-      <div class="flex items-center gap-3 shrink-0">
-        
-        <!-- Organisation Select -->
-        <div class="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/[0.04] border border-white/[0.08] text-xs font-mono">
-          <span class="text-slate-500">ORG:</span>
-          <select id="orgSelect" aria-label="Select Autonomous Organisation" class="bg-transparent text-white font-mono focus:outline-none cursor-pointer border-none py-0 pl-1 pr-6 text-xs" onchange="App.selectOrg(this.value)">
-            <option value="">Loading...</option>
-          </select>
-        </div>
-
-        <!-- 1-Click Demo Trigger -->
-        <button id="btnRunDemo" type="button" onclick="App.runDemo()" class="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-blue-600/15 hover:bg-blue-600/25 text-blue-300 hover:text-white border border-blue-500/30 text-xs font-mono transition-all" title="Run a deterministic simulated judge mission — no live funds">
-          <span class="material-symbols-outlined text-[15px]">play_circle</span>
-          <span>Run Simulated Demo</span>
-        </button>
-
-        <!-- New Mission Composer Button -->
-        <button id="btnOpenComposer" type="button" onclick="App.openDrawer('drawerNewMission')" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs shadow-md shadow-blue-600/20 active:scale-[0.98] transition-all">
-          <span class="material-symbols-outlined text-[15px]">rocket_launch</span>
-          <span class="hidden lg:inline">New Mission</span>
-        </button>
-
-        <!-- Circuit Breaker Kill Switch -->
-        <button id="btnCircuitBreaker" type="button" onclick="App.toggleCircuitBreaker()" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/25 border border-red-500/30 text-red-400 text-xs font-mono transition-all active:scale-[0.98]" title="Emergency Circuit Breaker">
-          <span class="material-symbols-outlined text-[15px]">power_settings_new</span>
-          <span id="circuitBreakerLabel" class="hidden sm:inline">PAUSE</span>
-        </button>
-
-        <!-- Operational Health Badge -->
-        <div class="hidden sm:flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 shadow-[0_0_12px_rgba(16,185,129,0.15)]">
-          <span id="engineStatusDot" class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]"></span>
-          <span id="engineStatusText" class="font-mono text-[11px] text-emerald-300 font-medium uppercase tracking-wider">CONNECTING</span>
-        </div>
-
-        <!-- Command Shortcut Button -->
-        <div class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/[0.05] hover:bg-white/[0.09] hover:text-white transition-colors cursor-pointer text-slate-400 border border-white/[0.08] shadow-sm text-xs">
-          <span class="material-symbols-outlined text-[16px]">search</span>
-          <span class="hidden xl:inline">Command</span>
-          <kbd class="px-1.5 py-0.5 rounded bg-white/10 text-slate-300 text-[10px] border border-white/10 font-mono">⌘K</kbd>
-        </div>
-
-        <!-- Director User Profile -->
-        <div class="flex items-center gap-2.5 pl-2 border-l border-white/[0.08]">
-          <div class="hidden lg:flex flex-col text-right">
-            <span class="text-xs text-white font-medium leading-none">Workspace Operator</span>
-            <span id="principalRoleDisplay" class="font-mono text-[10px] text-slate-500 leading-none mt-1 uppercase tracking-wider">Operator</span>
-          </div>
-          <img alt="Kalyx workspace operator" class="w-8 h-8 rounded-full object-cover ring-1 ring-white/20 shadow-md" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64'%3E%3Crect width='64' height='64' rx='32' fill='%231e3a8a'/%3E%3Ctext x='32' y='39' text-anchor='middle' font-family='Arial' font-size='26' fill='white'%3EK%3C/text%3E%3C/svg%3E" />
-        </div>
-      </div>
+  <header class="kalyx-topbar">
+    <a class="kalyx-brand" href="/" aria-label="Kalyx home">
+      <span class="kalyx-mark"><i></i><i></i></span>
+      <span>KALYX</span>
+    </a>
+    <div class="kalyx-top-context">
+      <span class="kalyx-context-dot"></span>
+      <span>COMMAND CENTRE</span>
+      <span class="kalyx-slash">/</span>
+      <span id="engineStatusText">CONNECTING</span>
     </div>
-
-    <!-- Responsive Navigation Bar for Viewports < 2xl -->
-    <div class="2xl:hidden flex items-center overflow-x-auto px-4 py-1.5 border-t border-white/[0.06] bg-[#07080b]/90 gap-1 text-xs font-mono">
-      <a class="nav-tab px-2.5 py-1 rounded text-slate-400 hover:text-white cursor-pointer" data-nav="overview" onclick="App.setRoute('overview')">Overview</a>
-      <a class="nav-tab px-2.5 py-1 rounded text-slate-400 hover:text-white cursor-pointer" data-nav="missions" onclick="App.setRoute('missions')">Missions</a>
-      <a class="nav-tab px-2.5 py-1 rounded text-slate-400 hover:text-white cursor-pointer" data-nav="organisation" onclick="App.setRoute('organisation')">Organisation</a>
-      <a class="nav-tab px-2.5 py-1 rounded text-slate-400 hover:text-white cursor-pointer" data-nav="treasury" onclick="App.setRoute('treasury')">Treasury</a>
-      <a class="nav-tab px-2.5 py-1 rounded text-slate-400 hover:text-white cursor-pointer" data-nav="policies" onclick="App.setRoute('policies')">Policies</a>
-      <a class="nav-tab px-2.5 py-1 rounded text-slate-400 hover:text-white cursor-pointer" data-nav="operations" onclick="App.setRoute('operations')">Operations</a>
-      <a class="nav-tab px-2.5 py-1 rounded text-slate-400 hover:text-white cursor-pointer" data-nav="marketplace" onclick="App.setRoute('marketplace')">Marketplace</a>
-      <a class="nav-tab px-2.5 py-1 rounded text-slate-400 hover:text-white cursor-pointer" data-nav="collateral" onclick="App.setRoute('collateral')">CREDIT</a>
-      <a class="nav-tab px-2.5 py-1 rounded text-slate-400 hover:text-white cursor-pointer" data-nav="audit" onclick="App.setRoute('audit')">Audit</a>
-      <a class="nav-tab px-2.5 py-1 rounded text-slate-400 hover:text-white cursor-pointer" data-nav="experiments" onclick="App.setRoute('experiments')">Experiments</a>
-      <a class="nav-tab px-2.5 py-1 rounded text-slate-400 hover:text-white cursor-pointer" data-nav="settings" onclick="App.setRoute('settings')">Settings</a>
+    <div class="kalyx-top-actions">
+      <button id="btnTour" type="button" class="kalyx-quiet-btn" onclick="App.startTour()">? Guide</button>
+      <button id="btnLoopGuide" type="button" class="kalyx-quiet-btn kalyx-quiet-accent" onclick="App.startLoopGuide()">Follow the loop</button>
+      <button id="circuitBreakerBtn" type="button" class="kalyx-status-btn" onclick="App.toggleCircuitBreaker()">
+        <span class="kalyx-live-dot"></span><span id="circuitBreakerLabel">PAUSE</span>
+      </button>
     </div>
   </header>
 
-  <!-- ========================================================================= -->
-  <!-- MAIN VIEWPORT CONTAINER -->
-  <!-- ========================================================================= -->
-  <!-- First-time fintech-style product walkthrough -->
-  <div id="kalyxTour" class="hidden fixed inset-0 z-[100]">
-    <div class="absolute inset-0 bg-black/75 backdrop-blur-sm" data-tour-dismiss></div>
-    <div id="tourSpotlight" class="tour-spotlight pointer-events-none"></div>
-    <section id="tourCard" class="fixed z-[102] w-[min(420px,calc(100vw-32px))] rounded-2xl border border-white/10 bg-[#0b0e15]/95 shadow-2xl backdrop-blur-xl p-5 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="tourTitle">
-      <div class="flex items-center justify-between gap-4 mb-4"><span id="tourKicker" class="font-mono text-[10px] uppercase tracking-[0.18em] text-blue-300">KALYX / ORIENTATION</span><button type="button" onclick="App.closeTour()" class="text-slate-500 hover:text-white" aria-label="Close tour">×</button></div>
-      <h2 id="tourTitle" class="text-xl font-semibold text-white tracking-tight">Welcome to Kalyx</h2>
-      <p id="tourBody" class="mt-2 text-sm leading-6 text-slate-300"></p>
-      <div class="mt-5 flex items-center justify-between gap-3"><span id="tourProgress" class="font-mono text-[10px] text-slate-500">1 / 7</span><div class="flex gap-2"><button type="button" onclick="App.skipTour()" class="px-3 py-2 text-xs text-slate-400 hover:text-white">Skip</button><button id="tourNext" type="button" onclick="App.nextTourStep()" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium">Start tour</button></div></div>
-    </section>
-  </div>
+  <aside id="mainNav" class="kalyx-sidebar">
+    <div class="kalyx-org-picker">
+      <span class="kalyx-overline">ORGANIZATION</span>
+      <select id="orgSelect" onchange="App.selectOrg(this.value)" aria-label="Select organization">
+        <option value="">Loading...</option>
+      </select>
+      <span class="kalyx-org-state"><span class="kalyx-live-dot"></span><span id="sidebarOrgState">CONTROL PLANE</span></span>
+    </div>
 
-  <div id="loopGuide" class="hidden fixed inset-0 z-[100]">
-    <div class="absolute inset-0 bg-black/80 backdrop-blur-sm"></div>
-    <section class="relative z-[101] mx-auto mt-[10vh] w-[min(760px,calc(100vw-32px))] rounded-2xl border border-white/10 bg-[#0b0e15]/98 shadow-2xl p-6 sm:p-8">
-      <div class="flex items-start justify-between gap-4"><div><div class="font-mono text-[10px] uppercase tracking-[0.18em] text-blue-300">KALYX / DEMO PATH</div><h2 class="mt-2 text-2xl font-semibold tracking-tight text-white">Follow one autonomous economic loop</h2><p class="mt-2 text-sm leading-6 text-slate-400">Every transition is governed; every economic outcome depends on verification.</p></div><button onclick="App.closeLoopGuide()" class="text-slate-500 hover:text-white text-xl">×</button></div>
-      <div class="mt-7 grid grid-cols-2 sm:grid-cols-4 gap-2"><div class="loop-step p-3 rounded-xl border border-white/10 bg-white/[0.02]" data-loop-step="0"><div class="font-mono text-[9px] text-slate-500">01</div><div class="mt-2 text-xs font-semibold text-white">PROPOSE</div></div><div class="loop-step p-3 rounded-xl border border-white/10 bg-white/[0.02]" data-loop-step="1"><div class="font-mono text-[9px] text-slate-500">02</div><div class="mt-2 text-xs font-semibold text-white">AUTHORIZE</div></div><div class="loop-step p-3 rounded-xl border border-white/10 bg-white/[0.02]" data-loop-step="2"><div class="font-mono text-[9px] text-slate-500">03</div><div class="mt-2 text-xs font-semibold text-white">EXECUTE</div></div><div class="loop-step p-3 rounded-xl border border-white/10 bg-white/[0.02]" data-loop-step="3"><div class="font-mono text-[9px] text-slate-500">04</div><div class="mt-2 text-xs font-semibold text-white">VERIFY</div></div><div class="loop-step p-3 rounded-xl border border-white/10 bg-white/[0.02]" data-loop-step="4"><div class="font-mono text-[9px] text-slate-500">05</div><div class="mt-2 text-xs font-semibold text-white">SETTLE</div></div><div class="loop-step p-3 rounded-xl border border-white/10 bg-white/[0.02]" data-loop-step="5"><div class="font-mono text-[9px] text-slate-500">06</div><div class="mt-2 text-xs font-semibold text-white">SURPLUS</div></div><div class="loop-step p-3 rounded-xl border border-white/10 bg-white/[0.02]" data-loop-step="6"><div class="font-mono text-[9px] text-slate-500">07</div><div class="mt-2 text-xs font-semibold text-white">NEXT MISSION</div></div></div>
-      <div class="mt-6 p-4 rounded-xl border border-blue-500/20 bg-blue-500/[0.06]"><div class="font-mono text-[10px] uppercase tracking-wider text-blue-300">What to watch</div><p class="mt-2 text-sm text-slate-300">An agent proposes. Policy decides. Execution happens only after authorization. Independent verification makes the resulting revenue authoritative.</p></div>
-      <div class="mt-6 flex justify-end gap-2"><button onclick="App.closeLoopGuide()" class="px-4 py-2 text-xs text-slate-400 hover:text-white">Close</button><button onclick="App.closeLoopGuide();App.setRoute('missions')" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium">Open Missions</button></div>
-    </section>
-  </div>
+    <nav class="kalyx-nav" aria-label="Command Centre">
+      <div class="kalyx-nav-label">OPERATE</div>
+      <button class="nav-tab active" data-nav="overview" onclick="App.setRoute('overview')"><span class="material-symbols-outlined">grid_view</span>Overview</button>
+      <button class="nav-tab" data-nav="missions" onclick="App.setRoute('missions')"><span class="material-symbols-outlined">route</span>Missions</button>
+      <button class="nav-tab" data-nav="organisation" onclick="App.setRoute('organisation')"><span class="material-symbols-outlined">hub</span>Organisation</button>
+      <button class="nav-tab" data-nav="treasury" onclick="App.setRoute('treasury')"><span class="material-symbols-outlined">account_balance_wallet</span>Treasury</button>
+      <button class="nav-tab" data-nav="policies" onclick="App.setRoute('policies')"><span class="material-symbols-outlined">policy</span>Policies</button>
+      <button class="nav-tab" data-nav="operations" onclick="App.setRoute('operations')"><span class="material-symbols-outlined">bolt</span>Operations <span id="navOperationsBadge" class="kalyx-nav-badge hidden">!</span></button>
+      <button class="nav-tab" data-nav="marketplace" onclick="App.setRoute('marketplace')"><span class="material-symbols-outlined">storefront</span>Marketplace</button>
+    <div class="kalyx-nav-label kalyx-nav-label-spaced">VERIFY</div>
+      <button class="nav-tab" data-nav="collateral" onclick="App.setRoute('collateral')"><span class="material-symbols-outlined">lock</span>CREDIT Collateral</button>
+      <button class="nav-tab" data-nav="audit" onclick="App.setRoute('audit')"><span class="material-symbols-outlined">verified</span>Audit</button>
+      <button class="nav-tab" data-nav="experiments" onclick="App.setRoute('experiments')"><span class="material-symbols-outlined">science</span>Experiments</button>
+    <div class="kalyx-nav-label kalyx-nav-label-spaced">SYSTEM</div>
+      <button class="nav-tab" data-nav="settings" onclick="App.setRoute('settings')"><span class="material-symbols-outlined">settings</span>Settings</button>
+    </nav>
 
-  <div class="fixed right-4 bottom-4 z-40 flex items-center gap-2">
-    <button id="btnTour" type="button" onclick="App.startTour()" class="px-3 py-2 rounded-lg bg-[#0c1018]/90 border border-white/10 text-slate-300 hover:text-white shadow-lg backdrop-blur-xl text-xs font-mono">? Guide</button>
-    <button id="btnLoopGuide" type="button" onclick="App.startLoopGuide()" class="px-3 py-2 rounded-lg bg-blue-600/15 border border-blue-500/30 text-blue-300 hover:text-white shadow-lg backdrop-blur-xl text-xs font-mono">Follow the loop</button>
-  </div>
+    <div class="kalyx-sidebar-bottom">
+      <div class="kalyx-mode-card">
+        <span class="kalyx-overline">EXECUTION MODE</span>
+        <strong>GOVERNED</strong>
+        <small>Agents propose. Policy authorizes.</small>
+      </div>
+      <a href="/" class="kalyx-back-link">← Kalyx system</a>
+    </div>
+  </aside>
 
-    <main class="w-full max-w-[1680px] mx-auto pt-24 pb-16 px-4 md:px-8 bg-[#07080b]">
-    <div class="flex flex-col w-full">
+  <main class="kalyx-main">
+    <section id="view-overview" class="view-panel">
+      <div class="kalyx-page">
+        <div class="kalyx-hero-row">
+          <div>
+            <div class="kalyx-eyebrow"><span>01</span> AUTONOMOUS ORGANIZATION</div>
+            <h1 class="kalyx-title">Command Centre</h1>
+            <p class="kalyx-lede">A live view into proposals, policy, execution, verification and the resources that keep the organization moving.</p>
+          </div>
+          <div class="kalyx-hero-meta">
+            <div><span>UTC</span><strong id="overviewClock">—</strong></div>
+            <div><span>ENVIRONMENT</span><strong>PRODUCTION</strong></div>
+          </div>
+        </div>
 
-      <!-- 1. OVERVIEW VIEW -->
-      <section id="view-overview" class="view-panel">
-        <div class="flex flex-col w-full">
-<div class="flex flex-col py-space-xl gap-space-xl">
-<!-- Top System Header Area -->
-<div class="flex flex-col md:flex-row md:items-end justify-between gap-space-md">
-<div class="flex flex-col gap-space-xs max-w-2xl">
-<div class="flex items-center gap-space-sm mb-1">
-<span class="font-label-sm text-label-sm uppercase tracking-wider text-slate-500 font-medium">Autonomous Org Telemetry</span>
-<span class="text-slate-700">•</span>
-<span class="font-label-sm text-label-sm text-blue-400 font-mono">LIVE CONTROL PLANE</span>
-</div>
-<h1 class="font-headline-xl text-headline-xl tracking-tight text-white font-bold">System Overview</h1>
-<p class="font-body-md text-body-md text-slate-400">High-level telemetry, active mission trajectory, and required operator actions.</p>
-</div>
-<!-- Header Minimalist Metadata & Status Filter -->
-<div class="flex items-center gap-space-sm self-start md:self-auto shrink-0">
-<div class="flex items-center gap-2.5 px-3 py-1.5 rounded-lg bg-zinc-900/60 backdrop-blur-md border border-white/10 shadow-sm">
-<span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse shadow-[0_0_8px_rgba(59,130,246,0.8)]"></span>
-<span class="font-label-sm text-label-sm text-white font-medium">Live System</span>
-<span id="overviewClock" class="font-label-sm text-label-sm text-slate-400 font-mono">--:--:-- UTC</span>
-</div>
-<button class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] border border-white/10 transition-colors text-slate-300 hover:text-white shadow-sm" type="button">
-<span class="material-symbols-outlined text-[16px]">tune</span>
-<span class="font-label-sm text-label-sm font-medium">Filters</span>
-</button>
-</div>
-</div>
-<!-- 3 Spaced Executive KPI Cards -->
-<div class="grid grid-cols-1 md:grid-cols-3 gap-gutter-lg">
-<!-- Card 1: Health -->
-<div class="flex flex-col justify-between p-space-lg rounded-xl bg-zinc-900/60 backdrop-blur-md border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.4)] hover:border-white/20 transition-all duration-300 relative overflow-hidden group">
-<div class="absolute -right-12 -top-12 w-36 h-36 bg-blue-500/10 rounded-full blur-3xl pointer-events-none group-hover:bg-blue-500/15 transition-all"></div>
-<div class="flex items-center justify-between gap-space-sm mb-space-md relative z-10">
-<span class="font-label-sm text-label-sm uppercase tracking-wider text-slate-500 font-medium">Organisation Status</span>
-<div class="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-medium shadow-sm">
-<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]"></span>
-<span id="cardOrgBadge" class="font-label-sm text-label-sm">Nominal</span>
-</div>
-</div>
-<div class="flex flex-col gap-space-xs my-space-sm relative z-10">
-<div class="flex items-center gap-2.5">
-<span id="cardOrgStateText" class="font-headline-md text-headline-md font-semibold text-white tracking-tight">All Systems Operational</span>
-</div>
-<p id="cardOrgSubtitle" class="font-body-sm text-body-sm text-slate-400">Awaiting live organisation telemetry</p>
-</div>
-<!-- Inline Visual Spark-Indicator -->
-<div class="pt-space-md mt-space-sm flex items-center justify-between border-t border-white/[0.06] relative z-10">
-<div class="flex items-center gap-2">
-<div class="flex -space-x-1">
-<span class="w-2 h-6 rounded-sm bg-blue-500/50 shadow-sm"></span>
-<span class="w-2 h-6 rounded-sm bg-blue-500/70 shadow-sm"></span>
-<span class="w-2 h-6 rounded-sm bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.4)]"></span>
-<span class="w-2 h-6 rounded-sm bg-blue-500/80 shadow-sm"></span>
-<span class="w-2 h-6 rounded-sm bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]"></span>
-</div>
-<span id="cardOrgConsensus" class="font-label-sm text-label-sm text-slate-400 font-medium">Live telemetry</span>
-</div>
-<span id="cardAlertCount" class="font-label-sm text-label-sm text-slate-500 font-mono">— alerts</span>
-</div>
-</div>
-<!-- Card 2: Compute & Treasury -->
-<div class="flex flex-col justify-between p-space-lg rounded-xl bg-zinc-900/60 backdrop-blur-md border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.4)] hover:border-white/20 transition-all duration-300 relative overflow-hidden group">
-<div class="absolute -right-12 -top-12 w-36 h-36 bg-blue-500/10 rounded-full blur-3xl pointer-events-none group-hover:bg-blue-500/15 transition-all"></div>
-<div class="flex items-center justify-between gap-space-sm mb-space-md relative z-10">
-<span class="font-label-sm text-label-sm uppercase tracking-wider text-slate-500 font-medium">Available Credits</span>
-<span id="cardConservationBadge" class="font-label-sm text-label-sm text-slate-400 font-mono">Live ledger</span>
-</div>
-<div class="flex flex-col gap-space-xs my-space-sm relative z-10">
-<div class="flex items-baseline gap-2">
-<span id="cardTreasuryBalance" class="font-code-metric text-code-metric text-white font-bold tracking-tight">—</span>
-<span class="font-label-md text-label-md text-slate-500 font-mono">CR</span>
-</div>
-<p id="cardTreasuryBreakdown" class="font-body-sm text-body-sm text-slate-400">Ledger-backed treasury state</p>
-</div>
-<!-- Capacity Bar -->
-<div class="pt-space-md mt-space-sm flex flex-col gap-1.5 border-t border-white/[0.06] relative z-10">
-<div class="flex justify-between items-center text-label-sm font-label-sm text-slate-400">
-<span>Budget Utilisation</span>
-<span id="cardBudgetUtilisation" class="text-white font-mono font-medium">—</span>
-</div>
-<div class="w-full h-1.5 bg-white/[0.08] rounded-full overflow-hidden">
-<div class="h-full bg-blue-500 rounded-full shadow-[0_0_8px_rgba(59,130,246,0.6)]" id="cardBudgetBar" style="width: 0%;"></div>
-</div>
-</div>
-</div>
-<!-- Card 3: Active Mission -->
-<div class="flex flex-col justify-between p-space-lg rounded-xl bg-zinc-900/60 backdrop-blur-md border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.4)] hover:border-white/20 transition-all duration-300 relative overflow-hidden group">
-<div class="absolute -right-12 -top-12 w-36 h-36 bg-blue-500/10 rounded-full blur-3xl pointer-events-none group-hover:bg-blue-500/15 transition-all"></div>
-<div class="flex items-center justify-between gap-space-sm mb-space-md relative z-10">
-<span class="font-label-sm text-label-sm uppercase tracking-wider text-slate-500 font-medium">Primary Expedition</span>
-<span class="px-2.5 py-0.5 rounded-full font-label-sm text-label-sm bg-blue-500/10 border border-blue-500/20 text-blue-400 font-medium">Active</span>
-</div>
-<div class="flex flex-col gap-space-xs my-space-sm relative z-10">
-<span id="cardActiveExpeditionTitle" class="font-headline-md text-headline-md font-semibold text-white tracking-tight">No active mission</span>
-<p id="cardActiveExpeditionPhase" class="font-body-sm text-body-sm text-slate-400">Awaiting live mission telemetry</p>
-</div>
-<!-- Stepped Segment Indicator -->
-<div class="pt-space-md mt-space-sm flex flex-col gap-2 border-t border-white/[0.06] relative z-10">
-<div class="grid grid-cols-5 gap-1.5 w-full">
-<div class="h-1.5 rounded-full bg-blue-500 shadow-[0_0_6px_rgba(59,130,246,0.4)]"></div>
-<div class="h-1.5 rounded-full bg-blue-500 shadow-[0_0_6px_rgba(59,130,246,0.4)]"></div>
-<div class="h-1.5 rounded-full bg-blue-500 relative overflow-hidden shadow-[0_0_8px_rgba(59,130,246,0.6)]">
-<div class="absolute inset-0 bg-white/40 animate-pulse"></div>
-</div>
-<div class="h-1.5 rounded-full bg-white/[0.08]"></div>
-<div class="h-1.5 rounded-full bg-white/[0.08]"></div>
-</div>
-<div class="flex justify-between items-center text-label-sm font-label-sm text-slate-400">
-<span>Milestone: —</span>
-<span class="text-blue-400 font-mono font-medium">Phase —</span>
-</div>
-</div>
-</div>
-</div>
-<!-- Human In The Loop: Decision Callout Focus Block -->
-<div class="flex flex-col p-space-lg md:p-space-xl rounded-xl bg-gradient-to-b from-[#10131d]/90 to-[#0c0e15]/95 backdrop-blur-md border border-white/[0.12] shadow-[0_12px_40px_rgba(0,0,0,0.6)] relative overflow-hidden" id="decisionCard">
-<div class="absolute top-0 right-0 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none"></div>
-<div class="flex flex-col lg:flex-row lg:items-center justify-between gap-space-lg relative z-10">
-<div class="flex flex-col gap-space-sm max-w-3xl">
-<div class="flex flex-wrap items-center gap-space-sm">
-<span class="flex items-center gap-1.5 font-label-sm text-label-sm text-amber-400 font-medium">
-<span class="material-symbols-outlined text-[16px]">priority_high</span>
-              Action Required • Operator Authorization
-            </span>
-<span class="px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20 font-label-sm text-label-sm font-medium">
-              Pending Approval
-            </span>
-<span class="font-label-sm text-label-sm text-slate-500 font-mono">Awaiting live proposal telemetry</span>
-</div>
-<h2 id="attentionProposalTitle" class="font-headline-lg text-headline-lg tracking-tight text-white font-semibold">Live proposal</h2>
-<div class="flex items-center gap-2">
-<span class="font-label-sm text-label-sm text-slate-500 font-medium">Initiated by:</span>
-<span id="attentionOriginAgent" class="font-label-sm text-label-sm text-blue-300 font-mono bg-white/[0.06] border border-white/[0.08] px-2 py-0.5 rounded">Live proposal actor</span>
-</div>
-<p class="font-body-md text-body-md text-slate-300 leading-relaxed">
-            Proposed allocation of <strong class="text-white font-semibold">Amount from live proposal</strong> to the external work allocation. Estimated yield performance is <span class="text-blue-400 font-semibold">Policy-bound outcome</span>. Fully validated within automated parameters (Risk index: <span class="text-white font-medium">0.12 Low</span>, Volatility tolerance: safe).
-          </p>
-<!-- Micro Parameter Breakdown -->
-<div class="grid grid-cols-2 sm:grid-cols-3 gap-space-sm pt-space-xs text-body-sm">
-<div class="flex flex-col p-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06]">
-<span class="text-label-sm font-label-sm text-slate-500">Target Protocol</span>
-<span id="attentionTargetProtocol" class="text-white font-medium mt-0.5">Execution venue —</span>
-</div>
-<div class="flex flex-col p-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06]">
-<span class="text-label-sm font-label-sm text-slate-500">Projected Delta</span>
-<span id="attentionProjectedDelta" class="text-emerald-400 font-mono font-medium mt-0.5">Projected outcome —</span>
-</div>
-<div class="flex flex-col p-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06] col-span-2 sm:col-span-1">
-<span class="text-label-sm font-label-sm text-slate-500">Execution Route</span>
-<span id="attentionExecutionRoute" class="text-white font-mono font-medium mt-0.5">Batch Multisig #04</span>
-</div>
-</div>
-</div>
-<!-- Elegant Apple/Linear Interactive Action Bar -->
-<div class="flex flex-row lg:flex-col items-center lg:items-end justify-start gap-space-sm shrink-0 pt-space-sm lg:pt-0">
-<button class="w-full sm:w-auto lg:w-48 px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 active:scale-[0.98] text-white font-label-md text-label-md font-semibold transition-all duration-150 flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(37,99,235,0.4)] border border-blue-400/30" id="authorizeBtn" onclick="App.openModal('modalConsequentialAuth')" type="button">
-<span class="material-symbols-outlined text-[18px]">verified</span>
-<span>Authorize Action</span>
-</button>
-<button class="w-full sm:w-auto lg:w-48 px-5 py-2.5 rounded-lg bg-white/10 hover:bg-white/15 text-white border border-white/10 font-label-md text-label-md transition-all duration-150 flex items-center justify-center gap-2 shadow-sm" id="reviewBtn" onclick="App.openProposalTrace()" type="button">
-<span class="material-symbols-outlined text-[18px]">account_tree</span>
-<span>Review Trace</span>
-</button>
-</div>
-</div>
-</div>
-<!-- 2-Column Operational Grid: Agent Roster & Chronology Activity -->
-<div class="grid grid-cols-1 lg:grid-cols-12 gap-gutter-lg">
-<!-- Left Column: Agent Workforce Roster (7 cols) -->
-<div class="lg:col-span-7 flex flex-col p-space-lg rounded-xl bg-zinc-900/60 backdrop-blur-md border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
-<div class="flex items-center justify-between mb-space-lg pb-space-sm border-b border-white/[0.06]">
-<div class="flex flex-col gap-0.5">
-<h3 class="font-headline-md text-headline-md text-white font-semibold tracking-tight">Active Agents</h3>
-<p class="font-body-sm text-body-sm text-slate-400">Autonomous specialists currently executing organizational tasks</p>
-</div>
-<span class="font-label-sm text-label-sm font-mono text-slate-300 px-2.5 py-1 rounded-md bg-white/[0.06] border border-white/[0.08]">5 Operational</span>
-</div>
-<!-- Linear Style Clean Agent List -->
-<div class="flex flex-col gap-1.5" id="activeAgentsContainer">
-<!-- Agent 1 -->
-<div class="flex items-center justify-between p-space-md rounded-lg bg-white/[0.02] hover:bg-white/[0.05] border border-transparent hover:border-white/10 transition-colors duration-150 group">
-<div class="flex items-center gap-space-md min-w-0">
-<div class="w-9 h-9 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 shrink-0 shadow-sm">
-<span class="material-symbols-outlined text-[20px]">smart_toy</span>
-</div>
-<div class="flex flex-col min-w-0">
-<div class="flex items-center gap-2">
-<span class="font-label-md text-label-md text-white font-semibold truncate">Live agent</span>
-<span class="font-label-sm text-label-sm text-slate-500 font-mono">API model</span>
-</div>
-<span class="font-body-sm text-body-sm text-slate-400 truncate">Global Task Topology &amp; Team Synthesis</span>
-</div>
-</div>
-<div class="flex items-center gap-space-md shrink-0">
-<div class="hidden sm:flex flex-col items-end">
-<span class="font-label-sm text-label-sm text-white font-mono">38% load</span>
-<span class="font-label-sm text-label-sm text-slate-500">Nominal</span>
-</div>
-<div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]"></span>
-<span class="font-label-sm text-label-sm text-emerald-400 font-medium">Active</span>
-</div>
-</div>
-</div>
-<!-- Agent 2 -->
-<div class="flex items-center justify-between p-space-md rounded-lg bg-white/[0.02] hover:bg-white/[0.05] border border-transparent hover:border-white/10 transition-colors duration-150 group">
-<div class="flex items-center gap-space-md min-w-0">
-<div class="w-9 h-9 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0 shadow-sm">
-<span class="material-symbols-outlined text-[20px]">monitoring</span>
-</div>
-<div class="flex flex-col min-w-0">
-<div class="flex items-center gap-2">
-<span class="font-label-md text-label-md text-white font-semibold truncate">Strat-Analyst-02</span>
-<span class="font-label-sm text-label-sm text-slate-500 font-mono">API model</span>
-</div>
-<span class="font-body-sm text-body-sm text-slate-400 truncate">Market Volatility &amp; Rebalance Modeling</span>
-</div>
-</div>
-<div class="flex items-center gap-space-md shrink-0">
-<div class="hidden sm:flex flex-col items-end">
-<span class="font-label-sm text-label-sm text-white font-mono">82% load</span>
-<span class="font-label-sm text-label-sm text-amber-400">Proposing</span>
-</div>
-<div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20">
-<span class="w-1.5 h-1.5 rounded-full bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.8)]"></span>
-<span class="font-label-sm text-label-sm text-amber-300 font-medium">Awaiting</span>
-</div>
-</div>
-</div>
-<!-- Agent 3 -->
-<div class="flex items-center justify-between p-space-md rounded-lg bg-white/[0.02] hover:bg-white/[0.05] border border-transparent hover:border-white/10 transition-colors duration-150 group">
-<div class="flex items-center gap-space-md min-w-0">
-<div class="w-9 h-9 rounded-lg bg-slate-500/10 border border-slate-500/20 flex items-center justify-center text-slate-300 shrink-0 shadow-sm">
-<span class="material-symbols-outlined text-[20px]">hub</span>
-</div>
-<div class="flex flex-col min-w-0">
-<div class="flex items-center gap-2">
-<span class="font-label-md text-label-md text-white font-semibold truncate">Scraper-01</span>
-<span class="font-label-sm text-label-sm text-slate-500 font-mono">Mistral Large</span>
-</div>
-<span class="font-body-sm text-body-sm text-slate-400 truncate">Telemetry Harvesting &amp; Oracle Sync</span>
-</div>
-</div>
-<div class="flex items-center gap-space-md shrink-0">
-<div class="hidden sm:flex flex-col items-end">
-<span class="font-label-sm text-label-sm text-white font-mono">51% load</span>
-<span class="font-label-sm text-label-sm text-slate-500">Continuous</span>
-</div>
-<div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.06] border border-white/[0.08]">
-<span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
-<span class="font-label-sm text-label-sm text-slate-300 font-medium">Ingesting</span>
-</div>
-</div>
-</div>
-<!-- Agent 4 -->
-<div class="flex items-center justify-between p-space-md rounded-lg bg-white/[0.02] hover:bg-white/[0.05] border border-transparent hover:border-white/10 transition-colors duration-150 group">
-<div class="flex items-center gap-space-md min-w-0">
-<div class="w-9 h-9 rounded-lg bg-slate-500/10 border border-slate-500/20 flex items-center justify-center text-slate-400 shrink-0 shadow-sm">
-<span class="material-symbols-outlined text-[20px]">currency_exchange</span>
-</div>
-<div class="flex flex-col min-w-0">
-<div class="flex items-center gap-2">
-<span class="font-label-md text-label-md text-white font-semibold truncate">Exec-Trader-01</span>
-<span class="font-label-sm text-label-sm text-slate-500 font-mono">EVM Worker v2</span>
-</div>
-<span class="font-body-sm text-body-sm text-slate-400 truncate">On-Chain Transaction Sequencing</span>
-</div>
-</div>
-<div class="flex items-center gap-space-md shrink-0">
-<div class="hidden sm:flex flex-col items-end">
-<span class="font-label-sm text-label-sm text-white font-mono">4% load</span>
-<span class="font-label-sm text-label-sm text-slate-500">Queue empty</span>
-</div>
-<div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.06] border border-white/[0.08]">
-<span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>
-<span class="font-label-sm text-label-sm text-slate-400 font-medium">Standby</span>
-</div>
-</div>
-</div>
-<!-- Agent 5 -->
-<div class="flex items-center justify-between p-space-md rounded-lg bg-white/[0.02] hover:bg-white/[0.05] border border-transparent hover:border-white/10 transition-colors duration-150 group">
-<div class="flex items-center gap-space-md min-w-0">
-<div class="w-9 h-9 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 shrink-0 shadow-sm">
-<span class="material-symbols-outlined text-[20px]">gavel</span>
-</div>
-<div class="flex flex-col min-w-0">
-<div class="flex items-center gap-2">
-<span class="font-label-md text-label-md text-white font-semibold truncate">Auditor-Prime</span>
-<span class="font-label-sm text-label-sm text-slate-500 font-mono">Immutable Ledger</span>
-</div>
-<span class="font-body-sm text-body-sm text-slate-400 truncate">Constitutional Rule Engine &amp; Cryptographic Proofs</span>
-</div>
-</div>
-<div class="flex items-center gap-space-md shrink-0">
-<div class="hidden sm:flex flex-col items-end">
-<span class="font-label-sm text-label-sm text-blue-400 font-mono font-medium">100% verified</span>
-<span class="font-label-sm text-label-sm text-slate-500">Block #19402</span>
-</div>
-<div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-500/10 border border-blue-500/20">
-<span class="w-1.5 h-1.5 rounded-full bg-blue-400 shadow-[0_0_6px_rgba(96,165,250,0.8)]"></span>
-<span class="font-label-sm text-label-sm text-blue-300 font-medium">Verified</span>
-</div>
-</div>
-</div>
-</div>
-</div>
-<!-- Right Column: Chronological Verifiable Activity (5 cols) -->
-<div class="lg:col-span-5 flex flex-col p-space-lg rounded-xl bg-zinc-900/60 backdrop-blur-md border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
-<div class="flex items-center justify-between mb-space-lg pb-space-sm border-b border-white/[0.06]">
-<div class="flex flex-col gap-0.5">
-<h3 class="font-headline-md text-headline-md text-white font-semibold tracking-tight">Recent Activity</h3>
-<p class="font-body-sm text-body-sm text-slate-400">Verifiable event chronology across agents</p>
-</div>
-<button class="text-slate-400 hover:text-white transition-colors" type="button">
-<span class="material-symbols-outlined text-[18px]">history</span>
-</button>
-</div>
-<!-- Clean Quiet Chronology List -->
-<div class="relative flex flex-col gap-space-md before:absolute before:top-2 before:bottom-2 before:left-[1.35rem] before:w-px before:bg-white/[0.08]" id="recentActivityContainer">
-<!-- Timeline Item 1 -->
-<div class="flex items-start gap-space-md relative group">
-<div class="w-11 h-8 rounded-md bg-white/[0.06] border border-white/[0.08] flex items-center justify-center shrink-0 z-10">
-<span class="font-label-sm text-label-sm font-mono text-blue-400 font-medium">14:35</span>
-</div>
-<div class="flex flex-col pt-0.5">
-<span class="font-body-sm text-body-sm text-white font-medium leading-snug">Liquidity reallocation audit sealed</span>
-<span class="font-label-sm text-label-sm text-slate-400">Auditor-Prime issued cryptographic state seal #782</span>
-</div>
-</div>
-<!-- Timeline Item 2 -->
-<div class="flex items-start gap-space-md relative group">
-<div class="w-11 h-8 rounded-md bg-white/[0.06] border border-white/[0.08] flex items-center justify-center shrink-0 z-10">
-<span class="font-label-sm text-label-sm font-mono text-slate-400 font-medium">14:32</span>
-</div>
-<div class="flex flex-col pt-0.5">
-<span class="font-body-sm text-body-sm text-white font-medium leading-snug">Escrow settlement of 4,200 CR completed</span>
-<span class="font-label-sm text-label-sm text-slate-400">Treasury node settled external data query budget</span>
-</div>
-</div>
-<!-- Timeline Item 3 -->
-<div class="flex items-start gap-space-md relative group">
-<div class="w-11 h-8 rounded-md bg-white/[0.06] border border-white/[0.08] flex items-center justify-center shrink-0 z-10">
-<span class="font-label-sm text-label-sm font-mono text-slate-400 font-medium">14:28</span>
-</div>
-<div class="flex flex-col pt-0.5">
-<span class="font-body-sm text-body-sm text-white font-medium leading-snug">Task DAG re-plan finalized</span>
-<span class="font-label-sm text-label-sm text-slate-400">Live mission state changed</span>
-</div>
-</div>
-<!-- Timeline Item 4 -->
-<div class="flex items-start gap-space-md relative group">
-<div class="w-11 h-8 rounded-md bg-white/[0.06] border border-white/[0.08] flex items-center justify-center shrink-0 z-10">
-<span class="font-label-sm text-label-sm font-mono text-slate-400 font-medium">14:15</span>
-</div>
-<div class="flex flex-col pt-0.5">
-<span class="font-body-sm text-body-sm text-white font-medium leading-snug">Hourly compute reconciliation nominal</span>
-<span class="font-label-sm text-label-sm text-slate-400">Live consumption telemetry</span>
-</div>
-</div>
-<!-- Timeline Item 5 -->
-<div class="flex items-start gap-space-md relative group">
-<div class="w-11 h-8 rounded-md bg-white/[0.06] border border-white/[0.08] flex items-center justify-center shrink-0 z-10">
-<span class="font-label-sm text-label-sm font-mono text-amber-400 font-medium">LIVE</span>
-</div>
-<div class="flex flex-col pt-0.5">
-<span class="font-body-sm text-body-sm text-white font-medium leading-snug">Strategy proposal submitted</span>
-<span class="font-label-sm text-label-sm text-slate-400">Operator sign-off requested by policy</span>
-</div>
-</div>
-</div>
-<!-- Ledger Integrity Banner -->
-<div class="mt-space-lg p-space-sm rounded-lg bg-white/[0.04] border border-white/[0.08] flex items-center justify-between shadow-sm">
-<div class="flex items-center gap-2">
-<span class="material-symbols-outlined text-[18px] text-blue-400">verified_user</span>
-<span class="font-label-sm text-label-sm text-white font-mono">Merkle Root: Live evidence hash</span>
-</div>
-<span class="font-label-sm text-label-sm text-emerald-400 font-medium">Synchronized</span>
-</div>
-</div>
-</div>
-</div>
-</div>
-<script>
-  (function() {
-    const authBtn = document.getElementById('authorizeBtn');
-    const decisionCard = document.getElementById('decisionCard');
+        <div class="kalyx-metrics">
+          <article class="kalyx-metric-card">
+            <span>ORGANIZATION</span>
+            <strong id="cardOrgStateText">CONNECTING</strong>
+            <small id="cardOrgSubtitle">Loading control-plane state…</small>
+            <em id="cardOrgBadge">—</em>
+          </article>
+          <article class="kalyx-metric-card">
+            <span>TREASURY</span>
+            <strong><b id="cardTreasuryBalance">—</b> <i>CR</i></strong>
+            <small id="cardTreasuryBreakdown">Awaiting ledger</small>
+            <em id="cardConservationBadge">—</em>
+          </article>
+          <article class="kalyx-metric-card">
+            <span>CURRENT MISSION</span>
+            <strong id="cardActiveExpeditionTitle">No active mission</strong>
+            <small id="cardActiveExpeditionPhase">Awaiting governed work</small>
+            <em>CONTROLLED</em>
+          </article>
+          <article class="kalyx-metric-card kalyx-metric-action">
+            <span>JUDGE PATH</span>
+            <strong>RUN THE LOOP</strong>
+            <small>Execute the public deterministic demo.</small>
+            <button id="btnRunDemo" type="button" onclick="App.runDemo()">Run simulated demo <span>→</span></button>
+          </article>
+        </div>
 
-    if (authBtn && decisionCard) {
-      authBtn.addEventListener('click', () => {
-        authBtn.innerHTML = `
-          <span class="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>
-          <span>Signing Action...</span>
-        `;
-        authBtn.disabled = true;
-
-        setTimeout(() => {
-          decisionCard.classList.remove('bg-gradient-to-b', 'from-[#10131d]/90', 'to-[#0c0e15]/95');
-          decisionCard.classList.add('bg-zinc-900/40', 'opacity-90');
-          decisionCard.innerHTML = `
-            <div class="flex items-center justify-between p-space-md w-full">
-              <div class="flex items-center gap-space-sm">
-                <div class="w-8 h-8 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 flex items-center justify-center">
-                  <span class="material-symbols-outlined text-[18px]">check</span>
-                </div>
-                <div class="flex flex-col">
-                  <span class="font-label-md text-label-md text-white font-medium">PROP-842 Authorized & Queued</span>
-                  <span class="font-label-sm text-label-sm text-slate-400">Dispatched to EVM Worker 01 for on-chain execution</span>
-                </div>
-              </div>
-              <span class="font-label-sm text-label-sm font-mono text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">Tx Pending</span>
+        <div class="kalyx-grid-main">
+          <section class="kalyx-panel kalyx-loop-panel">
+            <div class="kalyx-panel-head">
+              <div><span class="kalyx-panel-kicker">THE KALYX PRIMITIVE</span><h2>Control loop</h2></div>
+              <span class="kalyx-provenance">CONTROL PLANE</span>
             </div>
-          `;
-        }, 1200);
-      });
-    }
-  })();
-</script>
-      </section>
+            <div class="kalyx-loop">
+              <div class="kalyx-loop-line"></div>
+              <div class="kalyx-loop-node active"><span>01</span><b>PROPOSE</b><small>Agent intent</small></div>
+              <div class="kalyx-loop-node"><span>02</span><b>AUTHORIZE</b><small>Policy boundary</small></div>
+              <div class="kalyx-loop-node"><span>03</span><b>EXECUTE</b><small>Consequential work</small></div>
+              <div class="kalyx-loop-node"><span>04</span><b>VERIFY</b><small>Independent evidence</small></div>
+              <div class="kalyx-loop-node"><span>05</span><b>SETTLE</b><small>Ledger result</small></div>
+              <div class="kalyx-loop-node"><span>06</span><b>SURPLUS</b><small>Next mission</small></div>
+            </div>
+            <div class="kalyx-invariant"><span>AGENTS PROPOSE</span><b>→</b><span>POLICIES AUTHORIZE</span><b>→</b><span>EXECUTORS EXECUTE</span><b>→</b><span>AUDITORS VERIFY</span></div>
+          </section>
 
-      <!-- 2. MISSIONS VIEW -->
+          <aside class="kalyx-panel kalyx-system-panel">
+            <div class="kalyx-panel-head"><div><span class="kalyx-panel-kicker">SYSTEM</span><h2>Control state</h2></div><span class="kalyx-system-pulse">●</span></div>
+            <div class="kalyx-system-list">
+              <div><span>ENGINE</span><b id="systemEngineState">CHECKING</b></div>
+              <div><span>DATABASE</span><b id="systemDatabaseState">CHECKING</b></div>
+              <div><span>ORBIO</span><b>SIMULATED</b></div>
+              <div><span>CREDIT COLLATERAL</span><b>DISABLED</b></div>
+            </div>
+            <div class="kalyx-system-note">Simulation is explicit. No live external transaction is claimed by this dashboard.</div>
+          </aside>
+        </div>
+
+        <div class="kalyx-section-heading">
+          <div><span class="kalyx-eyebrow"><span>02</span> LIVE STATE</span><h2>What is happening now</h2></div>
+          <span id="liveStateLabel">REFRESHING · 4s</span>
+        </div>
+
+        <div class="kalyx-grid-work">
+          <section class="kalyx-panel">
+            <div class="kalyx-panel-head"><div><span class="kalyx-panel-kicker">WORKFORCE</span><h2>Active agents</h2></div><button class="kalyx-panel-link" onclick="App.setRoute('organisation')">View all →</button></div>
+            <div id="activeAgentsContainer" class="kalyx-agent-list">
+              <div class="kalyx-empty">Waiting for organization data…</div>
+            </div>
+          </section>
+
+          <section class="kalyx-panel">
+            <div class="kalyx-panel-head"><div><span class="kalyx-panel-kicker">CHRONOLOGY</span><h2>Recent activity</h2></div><button class="kalyx-panel-link" onclick="App.setRoute('audit')">Open audit →</button></div>
+            <div id="recentActivityContainer" class="kalyx-activity-list">
+              <div class="kalyx-empty">Waiting for events…</div>
+            </div>
+          </section>
+        </div>
+
+        <div class="kalyx-section-heading">
+          <div><span class="kalyx-eyebrow"><span>03</span> ECONOMIC STATE</span><h2>Capital becomes work</h2></div>
+          <button class="kalyx-panel-link" onclick="App.setRoute('treasury')">Open treasury →</button>
+        </div>
+
+        <div class="kalyx-economic-grid">
+          <article class="kalyx-economic-card"><span>CAPITAL</span><strong id="econTreasury">—</strong><small>Available treasury balance</small></article>
+          <article class="kalyx-economic-card"><span>ESCROW</span><strong id="econEscrow">—</strong><small>Committed before execution</small></article>
+          <article class="kalyx-economic-card"><span>EXTERNAL RESOURCE</span><strong id="econExternal">—</strong><small>Orbio / external sink</small></article>
+          <article class="kalyx-economic-card kalyx-economic-flow"><span>VALUE PATH</span><div>CAPITAL <b>→</b> WORK <b>→</b> VERIFIED VALUE <b>→</b> SURPLUS</div><small>Every consequential result remains governed and auditable.</small></article>
+        </div>
+
+        <div class="kalyx-final-row">
+          <section class="kalyx-panel kalyx-cred-panel">
+            <div class="kalyx-panel-head"><div><span class="kalyx-panel-kicker">COMPUTATIONAL RESOURCES</span><h2>Orbio / CREDIT</h2></div><button class="kalyx-panel-link" onclick="App.setRoute('collateral')">Inspect collateral →</button></div>
+            <div class="kalyx-resource-flow"><span>KALYX</span><b>→</b><span class="accent">CREDIT</span><b>→</b><span>INFERENCE</span><b>→</b><span class="verified">VERIFIED OUTCOME</span></div>
+            <p>$CREDIT is shown as an external resource layer. Current Command Centre mode is explicitly simulated/disabled.</p>
+          </section>
+          <section class="kalyx-panel kalyx-judge-panel">
+            <span class="kalyx-panel-kicker">DEMO SEQUENCE</span>
+            <h2>Show the machine, not the mockup.</h2>
+            <p>Run the deterministic public demo, then inspect Missions, Treasury and Audit as the state changes.</p>
+            <div class="kalyx-judge-actions"><button onclick="App.runDemo()" type="button">Run simulated demo →</button><button onclick="App.startLoopGuide()" type="button">Explain the loop</button></div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. MISSIONS VIEW -->
       <section id="view-missions" class="view-panel hidden">
         <div class="flex flex-col w-full">
 <!-- Subtle Ambient Glow Canvas -->
@@ -3941,6 +3518,7 @@
       </section>
 
     </div>
+  
   </main>
 
   <!-- ========================================================================= -->
@@ -4188,7 +3766,30 @@
     </div>
   </footer>
 
-  <!-- Application Scripts -->
+  <div id="kalyxTour" class="kalyx-overlay hidden">
+    <div id="tourSpotlight" class="kalyx-tour-spotlight"></div>
+    <div id="tourCard" class="kalyx-tour-card">
+      <span class="kalyx-panel-kicker">KALYX / ORIENTATION</span>
+      <strong id="tourTitle">Welcome to Kalyx</strong>
+      <p id="tourBody">This is the operating system for an autonomous organization.</p>
+      <div class="kalyx-tour-footer"><span id="tourProgress">1 / 7</span><button id="tourNext" onclick="App.nextTourStep()">Start tour</button><button onclick="App.skipTour()">Skip</button></div>
+    </div>
+  </div>
+
+  <div id="loopGuide" class="kalyx-overlay hidden">
+    <div class="kalyx-loop-guide">
+      <div class="kalyx-panel-head"><div><span class="kalyx-panel-kicker">FOLLOW THE LOOP</span><h2>How Kalyx turns intent into work</h2></div><button onclick="App.closeLoopGuide()">×</button></div>
+      <div class="kalyx-guide-steps">
+        <div><span>01</span><b>PROPOSE</b><small>Agent creates intent.</small></div>
+        <div><span>02</span><b>AUTHORIZE</b><small>Policy decides whether resources may move.</small></div>
+        <div><span>03</span><b>EXECUTE</b><small>Executor performs the authorized work.</small></div>
+        <div><span>04</span><b>VERIFY</b><small>Independent evidence establishes the result.</small></div>
+        <div><span>05</span><b>SETTLE</b><small>Ledger records the economic outcome.</small></div>
+        <div><span>06</span><b>NEXT MISSION</b><small>Verified surplus can fund what comes next.</small></div>
+      </div>
+      <div class="kalyx-guide-foot"><span>DEMO PROVENANCE</span><b>SIMULATED</b><button onclick="App.closeLoopGuide();App.runDemo()">Run the simulated path →</button></div>
+    </div>
+  </div>
   <script src="/assets/api.js"></script>
   <script src="/assets/app.js"></script>
 </body>
