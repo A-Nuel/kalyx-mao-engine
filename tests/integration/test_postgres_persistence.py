@@ -182,24 +182,60 @@ def test_pg_connection_proxy_supports_sqlite_style_cursor():
 
 @requires_postgres
 def test_sqlite_repository_and_event_store_work_against_postgres():
-    """End-to-end regression for the actual code paths that broke: this
-    exercises SqliteRepository (despite its name -- it's what run_mission()
-    actually uses via SqliteRepository(db)) and SqliteEventStore's startup
-    integrity verification, both against a real Postgres connection, the
-    same way the /api/demo/public-run endpoint does in production."""
-    from src.persistence.repositories import SqliteEventStore, SqliteRepository
+    """End-to-end regression for the actual code paths that broke in
+    production: run_mission() (which backs the /api/demo/public-run judge
+    demo) unconditionally constructs SqliteEventStore(db, verify_on_startup=True)
+    regardless of backend -- this is what raised TamperedAuditLogError when
+    on_startup_verify()'s call to verify_integrity() -> get_events() hit
+    _PgConnectionProxy via `self.db.conn.cursor()` before that method
+    existed. It also constructs EconomyRepository(db.conn) directly, whose
+    5 methods each do `cursor = self.conn.cursor() if hasattr(self.conn,
+    "cursor") else self.conn` -- before the fix, hasattr was False, so this
+    silently used the raw connection as a cursor instead of raising, which
+    is a *worse* failure mode (wrong behavior instead of a loud error).
+
+    NOTE: SqliteLedger.verify_conservation() (in this same module) is NOT
+    exercised here on purpose -- create_scoped_ledger() in
+    src/persistence/factory.py branches on isinstance(db, PostgresDatabase)
+    and uses PostgresLedger for the real Postgres path, so SqliteLedger is
+    never actually constructed against a Postgres connection in production.
+    Confirmed by reading src/persistence/factory.py:56-60 directly rather
+    than assumed.
+    """
+    from src.persistence.economy_repo import EconomyRepository
+    from src.persistence.repositories import SqliteEventStore
 
     db = create_database()
     try:
-        repo = SqliteRepository(db)
-        # verify_conservation() is the exact method that crashed via
-        # `cursor = self.db.conn.cursor()`.
-        assert repo.verify_conservation() in (True, False)  # must not raise
-
-        # SqliteEventStore.on_startup_verify() is what wrapped the
-        # AttributeError as TamperedAuditLogError in production.
+        # This line alone reproduces the original production crash: it
+        # calls on_startup_verify() -> verify_integrity() -> get_events(),
+        # and get_events() does `cursor = self.db.conn.cursor()`.
         store = SqliteEventStore(db, verify_on_startup=True)
         valid, err = store.verify_integrity()
         assert valid is True, f"unexpected integrity failure: {err}"
+
+        # This reproduces the EconomyRepository code path run_mission()
+        # exercises via economy_repo.list_performance_records(...).
+        econ = EconomyRepository(db.conn)
+        records = econ.list_performance_records("tenant-demo", "org-does-not-exist")
+        assert records == []  # must return cleanly, not raise or misbehave
+    finally:
+        db.close()
+
+
+@requires_postgres
+def test_sqlite_ledger_cursor_path_is_pg_compatible():
+    """SqliteLedger is not on the production Postgres path today (see note
+    in the test above), but its constructor and verify_conservation() both
+    use the same `self.db.conn.cursor()` idiom, so it would break
+    identically to the other two if anything ever routes a Postgres
+    connection to it. Covered as a safety net, not because it's currently
+    reachable in production."""
+    from src.persistence.repositories import SqliteLedger
+
+    db = create_database()
+    try:
+        ledger = SqliteLedger(db, initial_treasury=0)
+        assert ledger.verify_conservation() in (True, False)
     finally:
         db.close()
