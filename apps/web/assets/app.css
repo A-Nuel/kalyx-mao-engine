@@ -175,3 +175,5 @@ body {
 @media(max-width:640px){#tourCard{bottom:16px;left:16px;right:16px;width:auto}.tour-spotlight{display:none!important}}
 
 .loop-step{transition:all .2s ease}.loop-step-active{border-color:rgba(59,130,246,.55)!important;background:rgba(37,99,235,.10)!important;box-shadow:0 0 22px rgba(37,99,235,.10)}
+
+.tour-spotlight{position:fixed;z-index:101;border:1px solid rgba(96,165,250,.8);border-radius:14px;box-shadow:0 0 0 9999px rgba(0,0,0,.72),0 0 35px rgba(37,99,235,.25);transition:all .25s ease;display:none}.tour-target{position:relative!important;z-index:101!important}@media(max-width:640px){#tourCard{bottom:16px;left:16px;right:16px;width:auto}.tour-spotlight{display:none!important}}
