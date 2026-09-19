@@ -14,6 +14,30 @@ AGENTS PROPOSE → POLICIES AUTHORIZE → EXECUTORS EXECUTE → AUDITORS VERIFY
 
 Agents produce typed proposals with no direct execution authority. Deterministic policies authorize or reject them. Executors operate only within approved boundaries. Independent audit verifies the resulting receipt, ledger settlement, state and audit chain.
 
+## Current Status — 2026-09-19
+
+Kalyx has completed the **Phase 17 autonomous enterprise path** through the P0/P1 hardening gates and the M1–M4 integration work.
+
+### Completed
+
+- [x] **Phase 17 P0 — Autonomous Economic Loop:** governed B2B order publication, escrow, provider discovery/claim, capability evolution, Orbio work execution, independent verification, dual-sided settlement, surplus reconciliation, and next-mission chaining.
+- [x] **Phase 17 P1 — Production Hardening:** tenant isolation, public marketplace projection, strict idempotency/replay protection, persisted emergency circuit breaker, multi-signature admin governance, crash/restart recovery, Docker/PostgreSQL migration, and operational runbook.
+- [x] **Phase 17 M1 — Live Orbio Adapter:** official Orbio API base/model configuration, explicit live-vs-simulated provenance, fail-closed production behavior, and deterministic fallback for demo/test environments.
+- [x] **Phase 17 M2 — B2B Marketplace / Escrow:** cross-organisation work orders with tenant-scoped financial state and provider-side settlement visibility.
+- [x] **Phase 17 M3 — Capability Evolution:** autonomous capability discovery/proposal with deterministic policy authorization and performance thresholds.
+- [x] **Phase 17 M4 — Command Centre + Landing:** marketplace/capability/provenance telemetry in the Command Centre plus the public Kalyx landing experience.
+- [x] **CI:** latest verified landing integration run is green; production deployment configuration is being finalized separately from the application code.
+
+### Remaining before public production smoke test
+
+1. Merge the deployment configuration once its CI gate is green.
+2. Fill the deployment secrets in `.env` from `.env.example` — PostgreSQL, policy/operator/receipt secrets, Orbio API key, and the public CORS origin.
+3. Deploy with `KALYX_ENV=production`, PostgreSQL, operator authentication, and simulated Orbio fallback disabled.
+4. Run the controlled end-to-end smoke path and verify both the live path and fail-closed failure paths.
+5. Keep blockchain settlement disabled initially; enable Ethereum Sepolia only for the controlled testnet settlement milestone.
+
+**Important:** the repository contains deterministic simulated adapters for CI/demo continuity. They are explicitly marked as simulated and must not be presented as live execution. Production configuration is designed to fail closed when required live credentials are missing.
+
 ## Architecture
 
 ```text
