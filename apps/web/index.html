@@ -88,6 +88,7 @@
             <span>Marketplace</span>
             <span class="px-1 py-0.2 rounded text-[9px] bg-blue-500/20 text-blue-300 font-mono">B2B</span>
           </a>
+          <a class="nav-tab px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-all cursor-pointer" data-nav="collateral" onclick="App.setRoute('collateral')">CREDIT Collateral</a>
           <a class="nav-tab px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-all cursor-pointer" data-nav="audit" onclick="App.setRoute('audit')">Audit</a>
           <a class="nav-tab px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-all cursor-pointer" data-nav="experiments" onclick="App.setRoute('experiments')">Experiments</a>
           <a class="nav-tab px-3 py-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/[0.06] transition-all cursor-pointer" data-nav="settings" onclick="App.setRoute('settings')">Settings</a>
@@ -106,9 +107,9 @@
         </div>
 
         <!-- 1-Click Demo Trigger -->
-        <button id="btnRunDemo" type="button" onclick="App.runDemo()" class="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-blue-600/15 hover:bg-blue-600/25 text-blue-300 hover:text-white border border-blue-500/30 text-xs font-mono transition-all" title="Spawn simulated demo activity">
+        <button id="btnRunDemo" type="button" onclick="App.runDemo()" class="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-blue-600/15 hover:bg-blue-600/25 text-blue-300 hover:text-white border border-blue-500/30 text-xs font-mono transition-all" title="Run a deterministic simulated judge mission — no live funds">
           <span class="material-symbols-outlined text-[15px]">play_circle</span>
-          <span>1-Click Demo</span>
+          <span>Run Simulated Demo</span>
         </button>
 
         <!-- New Mission Composer Button -->
@@ -156,6 +157,7 @@
       <a class="nav-tab px-2.5 py-1 rounded text-slate-400 hover:text-white cursor-pointer" data-nav="policies" onclick="App.setRoute('policies')">Policies</a>
       <a class="nav-tab px-2.5 py-1 rounded text-slate-400 hover:text-white cursor-pointer" data-nav="operations" onclick="App.setRoute('operations')">Operations</a>
       <a class="nav-tab px-2.5 py-1 rounded text-slate-400 hover:text-white cursor-pointer" data-nav="marketplace" onclick="App.setRoute('marketplace')">Marketplace</a>
+      <a class="nav-tab px-2.5 py-1 rounded text-slate-400 hover:text-white cursor-pointer" data-nav="collateral" onclick="App.setRoute('collateral')">CREDIT</a>
       <a class="nav-tab px-2.5 py-1 rounded text-slate-400 hover:text-white cursor-pointer" data-nav="audit" onclick="App.setRoute('audit')">Audit</a>
       <a class="nav-tab px-2.5 py-1 rounded text-slate-400 hover:text-white cursor-pointer" data-nav="experiments" onclick="App.setRoute('experiments')">Experiments</a>
       <a class="nav-tab px-2.5 py-1 rounded text-slate-400 hover:text-white cursor-pointer" data-nav="settings" onclick="App.setRoute('settings')">Settings</a>
@@ -192,6 +194,10 @@
     <button id="btnLoopGuide" type="button" onclick="App.startLoopGuide()" class="px-3 py-2 rounded-lg bg-blue-600/15 border border-blue-500/30 text-blue-300 hover:text-white shadow-lg backdrop-blur-xl text-xs font-mono">Follow the loop</button>
   </div>
 
+    <div id="kalyxTour" class="hidden fixed inset-0 z-[100]"><div class="absolute inset-0 bg-black/75 backdrop-blur-sm"></div><div id="tourSpotlight" class="tour-spotlight pointer-events-none"></div><section id="tourCard" class="fixed z-[102] w-[min(420px,calc(100vw-32px))] rounded-2xl border border-white/10 bg-[#0b0e15]/95 shadow-2xl backdrop-blur-xl p-5 sm:p-6"><div class="flex items-center justify-between gap-4 mb-4"><span class="font-mono text-[10px] uppercase tracking-[0.18em] text-blue-300">KALYX / ORIENTATION</span><button type="button" onclick="App.closeTour()" class="text-slate-500 hover:text-white">×</button></div><h2 id="tourTitle" class="text-xl font-semibold text-white tracking-tight">Welcome to Kalyx</h2><p id="tourBody" class="mt-2 text-sm leading-6 text-slate-300"></p><div class="mt-5 flex items-center justify-between gap-3"><span id="tourProgress" class="font-mono text-[10px] text-slate-500">1 / 7</span><div class="flex gap-2"><button type="button" onclick="App.skipTour()" class="px-3 py-2 text-xs text-slate-400 hover:text-white">Skip</button><button id="tourNext" type="button" onclick="App.nextTourStep()" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium">Start tour</button></div></div></section></div>
+  <div id="loopGuide" class="hidden fixed inset-0 z-[100]"><div class="absolute inset-0 bg-black/80 backdrop-blur-sm"></div><section class="relative z-[101] mx-auto mt-[10vh] w-[min(760px,calc(100vw-32px))] rounded-2xl border border-white/10 bg-[#0b0e15]/98 shadow-2xl p-6 sm:p-8"><div class="flex items-start justify-between gap-4"><div><div class="font-mono text-[10px] uppercase tracking-[0.18em] text-blue-300">KALYX / DEMO PATH</div><h2 class="mt-2 text-2xl font-semibold text-white">Follow one autonomous economic loop</h2><p class="mt-2 text-sm leading-6 text-slate-400">Use this path to understand what the system is doing, not just what the dashboard displays.</p></div><button onclick="App.closeLoopGuide()" class="text-slate-500 hover:text-white text-xl">×</button></div><div class="mt-7 grid grid-cols-2 sm:grid-cols-4 gap-2"><div class="p-3 rounded-xl border border-white/10 bg-white/[0.02]"><div class="font-mono text-[9px] text-slate-500">01</div><div class="mt-2 text-xs font-semibold text-white">PROPOSE</div></div><div class="p-3 rounded-xl border border-white/10 bg-white/[0.02]"><div class="font-mono text-[9px] text-slate-500">02</div><div class="mt-2 text-xs font-semibold text-white">AUTHORIZE</div></div><div class="p-3 rounded-xl border border-white/10 bg-white/[0.02]"><div class="font-mono text-[9px] text-slate-500">03</div><div class="mt-2 text-xs font-semibold text-white">EXECUTE</div></div><div class="p-3 rounded-xl border border-white/10 bg-white/[0.02]"><div class="font-mono text-[9px] text-slate-500">04</div><div class="mt-2 text-xs font-semibold text-white">VERIFY</div></div><div class="p-3 rounded-xl border border-white/10 bg-white/[0.02]"><div class="font-mono text-[9px] text-slate-500">05</div><div class="mt-2 text-xs font-semibold text-white">SETTLE</div></div><div class="p-3 rounded-xl border border-white/10 bg-white/[0.02]"><div class="font-mono text-[9px] text-slate-500">06</div><div class="mt-2 text-xs font-semibold text-white">SURPLUS</div></div><div class="p-3 rounded-xl border border-white/10 bg-white/[0.02]"><div class="font-mono text-[9px] text-slate-500">07</div><div class="mt-2 text-xs font-semibold text-white">NEXT MISSION</div></div></div><div class="mt-6 p-4 rounded-xl border border-blue-500/20 bg-blue-500/[0.06]"><div class="font-mono text-[10px] uppercase tracking-wider text-blue-300">What to watch</div><p class="mt-2 text-sm text-slate-300">Agent proposal → policy authorization → resource acquisition → productive work → independent verification → revenue → surplus → next governed mission.</p></div><div class="mt-6 flex justify-end"><button onclick="App.closeLoopGuide()" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium">Close</button></div></section></div>
+  <div class="fixed right-4 bottom-4 z-40 flex items-center gap-2"><button id="btnTour" type="button" onclick="App.startTour()" class="px-3 py-2 rounded-lg bg-[#0c1018]/90 border border-white/10 text-slate-300 hover:text-white shadow-lg backdrop-blur-xl text-xs font-mono">? Guide</button><button id="btnLoopGuide" type="button" onclick="App.startLoopGuide()" class="px-3 py-2 rounded-lg bg-blue-600/15 border border-blue-500/30 text-blue-300 hover:text-white shadow-lg backdrop-blur-xl text-xs font-mono">Follow the loop</button></div>
+
   <main class="w-full max-w-[1680px] mx-auto pt-24 pb-16 px-4 md:px-8 bg-[#07080b]">
     <div class="flex flex-col w-full">
 
@@ -215,7 +221,7 @@
 <div class="flex items-center gap-2.5 px-3 py-1.5 rounded-lg bg-zinc-900/60 backdrop-blur-md border border-white/10 shadow-sm">
 <span class="w-2 h-2 rounded-full bg-blue-500 animate-pulse shadow-[0_0_8px_rgba(59,130,246,0.8)]"></span>
 <span class="font-label-sm text-label-sm text-white font-medium">Live System</span>
-<span class="font-label-sm text-label-sm text-slate-400 font-mono">14:38 UTC</span>
+<span id="overviewClock" class="font-label-sm text-label-sm text-slate-400 font-mono">--:--:-- UTC</span>
 </div>
 <button class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] border border-white/10 transition-colors text-slate-300 hover:text-white shadow-sm" type="button">
 <span class="material-symbols-outlined text-[16px]">tune</span>
@@ -239,7 +245,7 @@
 <div class="flex items-center gap-2.5">
 <span id="cardOrgStateText" class="font-headline-md text-headline-md font-semibold text-white tracking-tight">All Systems Operational</span>
 </div>
-<p id="cardOrgSubtitle" class="font-body-sm text-body-sm text-slate-400">16 autonomous agents active • 0 policy breaches</p>
+<p id="cardOrgSubtitle" class="font-body-sm text-body-sm text-slate-400">Awaiting live organisation telemetry</p>
 </div>
 <!-- Inline Visual Spark-Indicator -->
 <div class="pt-space-md mt-space-sm flex items-center justify-between border-t border-white/[0.06] relative z-10">
@@ -289,8 +295,8 @@
 <span class="px-2.5 py-0.5 rounded-full font-label-sm text-label-sm bg-blue-500/10 border border-blue-500/20 text-blue-400 font-medium">Active</span>
 </div>
 <div class="flex flex-col gap-space-xs my-space-sm relative z-10">
-<span id="cardActiveExpeditionTitle" class="font-headline-md text-headline-md font-semibold text-white tracking-tight">Expedition Alpha</span>
-<p id="cardActiveExpeditionPhase" class="font-body-sm text-body-sm text-slate-400">Phase 3 of 5: Liquidity Allocation • 68% complete</p>
+<span id="cardActiveExpeditionTitle" class="font-headline-md text-headline-md font-semibold text-white tracking-tight">No active mission</span>
+<p id="cardActiveExpeditionPhase" class="font-body-sm text-body-sm text-slate-400">Awaiting live mission telemetry</p>
 </div>
 <!-- Stepped Segment Indicator -->
 <div class="pt-space-md mt-space-sm flex flex-col gap-2 border-t border-white/[0.06] relative z-10">
@@ -304,8 +310,8 @@
 <div class="h-1.5 rounded-full bg-white/[0.08]"></div>
 </div>
 <div class="flex justify-between items-center text-label-sm font-label-sm text-slate-400">
-<span>Milestone: Arbitrum Pool</span>
-<span class="text-blue-400 font-mono font-medium">Phase 3</span>
+<span>Milestone: —</span>
+<span class="text-blue-400 font-mono font-medium">Phase —</span>
 </div>
 </div>
 </div>
@@ -323,25 +329,25 @@
 <span class="px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20 font-label-sm text-label-sm font-medium">
               Pending Approval
             </span>
-<span class="font-label-sm text-label-sm text-slate-500 font-mono">Submitted 36m ago</span>
+<span class="font-label-sm text-label-sm text-slate-500 font-mono">Awaiting live proposal telemetry</span>
 </div>
 <h2 id="attentionProposalTitle" class="font-headline-lg text-headline-lg tracking-tight text-white font-semibold">Live proposal</h2>
 <div class="flex items-center gap-2">
 <span class="font-label-sm text-label-sm text-slate-500 font-medium">Initiated by:</span>
-<span id="attentionOriginAgent" class="font-label-sm text-label-sm text-blue-300 font-mono bg-white/[0.06] border border-white/[0.08] px-2 py-0.5 rounded">STRAT-ANALYST-02 (Strategy Lead)</span>
+<span id="attentionOriginAgent" class="font-label-sm text-label-sm text-blue-300 font-mono bg-white/[0.06] border border-white/[0.08] px-2 py-0.5 rounded">Live proposal actor</span>
 </div>
 <p class="font-body-md text-body-md text-slate-300 leading-relaxed">
-            Proposed allocation of <strong class="text-white font-semibold">$45,000 USD</strong> to the Arbitrum USDC liquidity vault. Estimated yield performance is <span class="text-blue-400 font-semibold">+14.2% APY</span>. Fully validated within automated parameters (Risk index: <span class="text-white font-medium">0.12 Low</span>, Volatility tolerance: safe).
+            Proposed allocation of <strong class="text-white font-semibold">Amount from live proposal</strong> to the Arbitrum USDC liquidity vault. Estimated yield performance is <span class="text-blue-400 font-semibold">Policy-bound outcome</span>. Fully validated within automated parameters (Risk index: <span class="text-white font-medium">0.12 Low</span>, Volatility tolerance: safe).
           </p>
 <!-- Micro Parameter Breakdown -->
 <div class="grid grid-cols-2 sm:grid-cols-3 gap-space-sm pt-space-xs text-body-sm">
 <div class="flex flex-col p-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06]">
 <span class="text-label-sm font-label-sm text-slate-500">Target Protocol</span>
-<span id="attentionTargetProtocol" class="text-white font-medium mt-0.5">Camelot v3 / Arbitrum</span>
+<span id="attentionTargetProtocol" class="text-white font-medium mt-0.5">Execution venue —</span>
 </div>
 <div class="flex flex-col p-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06]">
 <span class="text-label-sm font-label-sm text-slate-500">Projected Delta</span>
-<span id="attentionProjectedDelta" class="text-emerald-400 font-mono font-medium mt-0.5">+6,390 CR / year</span>
+<span id="attentionProjectedDelta" class="text-emerald-400 font-mono font-medium mt-0.5">Projected outcome —</span>
 </div>
 <div class="flex flex-col p-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06] col-span-2 sm:col-span-1">
 <span class="text-label-sm font-label-sm text-slate-500">Execution Route</span>
@@ -570,7 +576,7 @@
 <div class="mt-space-lg p-space-sm rounded-lg bg-white/[0.04] border border-white/[0.08] flex items-center justify-between shadow-sm">
 <div class="flex items-center gap-2">
 <span class="material-symbols-outlined text-[18px] text-blue-400">verified_user</span>
-<span class="font-label-sm text-label-sm text-white font-mono">Merkle Root: 0x9f1a...c82d</span>
+<span class="font-label-sm text-label-sm text-white font-mono">Merkle Root: Live evidence hash</span>
 </div>
 <span class="font-label-sm text-label-sm text-emerald-400 font-medium">Synchronized</span>
 </div>
@@ -888,14 +894,14 @@
                   Expedition Delta
                 </h4>
 <p class="font-body-sm text-body-sm text-on-surface-variant mt-1 mb-space-md line-clamp-2">
-                  Reserve Collateral Hedging via delta-neutral basis options automated protocol.
+                  CREDIT collateral primitive / governed obligation.
                 </p>
 </div>
 <div class="space-y-space-sm pt-space-sm border-t border-outline-variant/10">
 <!-- Yield callout -->
 <div class="flex items-center justify-between font-label-sm text-label-sm">
 <span class="text-on-surface-variant">Performance Target</span>
-<span class="text-primary font-semibold font-label-md text-label-md">+14.2% Yield</span>
+<span class="text-primary font-semibold font-label-md text-label-md">Verified outcome</span>
 </div>
 <div class="h-1 bg-surface-container-highest rounded-full overflow-hidden">
 <div class="h-full bg-primary rounded-full" style="width: 100%"></div>
@@ -935,11 +941,11 @@
 </div>
 <div class="flex-1 p-space-sm rounded-lg bg-surface-container/70 group-hover:bg-surface-container transition-colors">
 <div class="flex items-center justify-between gap-2 mb-1">
-<span class="font-label-sm text-label-sm text-primary font-semibold">TASK #408</span>
+<span class="font-label-sm text-label-sm text-primary font-semibold">LIVE TASK</span>
 <span class="px-1.5 py-0.5 rounded bg-primary/20 text-primary font-label-sm text-label-sm">In Execution</span>
 </div>
 <div class="font-body-sm text-body-sm text-on-surface font-medium">
-                  Compute Uniswap v3 fee tiers
+                  Productive work task
                 </div>
 <div class="font-label-sm text-label-sm text-on-surface-variant mt-2 flex items-center justify-between">
 <span class="flex items-center gap-1">
@@ -1112,7 +1118,7 @@
                   <td class="py-3 px-4 text-slate-300">Autonomous Liquidity Rebalancing</td>
                   <td class="py-3 px-4 text-primary font-bold">25,000 CR</td>
                   <td class="py-3 px-4"><span class="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-medium">ACTIVE</span></td>
-                  <td class="py-3 px-4 text-slate-400">14:02:18 UTC</td>
+                  <td class="py-3 px-4 text-slate-400">Live event time</td>
                   <td class="py-3 px-4 text-right"><button class="px-2.5 py-1 rounded bg-white/5 hover:bg-white/10 text-primary">Inspect</button></td>
                 </tr>
               </tbody>
@@ -2720,6 +2726,8 @@
   </script>
 </div>
       </section>
+
+      <section id="view-collateral" class="view-panel hidden"><div class="w-full max-w-[1200px] mx-auto py-space-xl px-margin-mobile md:px-margin space-y-space-xl"><div><div class="font-label-sm uppercase tracking-wider text-slate-500">Phase 18 / Economic Commitment Layer</div><h1 class="mt-2 font-headline-lg text-white font-semibold">CREDIT Collateral</h1><p class="mt-2 max-w-3xl text-slate-400">Kalyx adds governed collateral semantics on top of Orbio CREDIT. CREDIT itself is transferable; Kalyx's vault adds the obligation state machine and settles only from independently verified work evidence.</p></div><div class="grid md:grid-cols-3 gap-4"><div class="p-5 rounded-xl bg-surface-container-low border border-white/10"><div class="text-xs font-mono text-slate-500 uppercase">Asset</div><div class="mt-2 text-xl font-semibold text-white">$CREDIT</div><div class="mt-1 text-sm text-slate-400">Orbio tokenized inference resource</div></div><div class="p-5 rounded-xl bg-surface-container-low border border-white/10"><div class="text-xs font-mono text-slate-500 uppercase">Network</div><div class="mt-2 text-xl font-semibold text-white">Robinhood Chain</div><div class="mt-1 text-sm text-slate-400">Chain ID 4663</div></div><div class="p-5 rounded-xl bg-surface-container-low border border-white/10"><div class="text-xs font-mono text-slate-500 uppercase">Deployment mode</div><div id="collateralMode" class="mt-2 text-xl font-semibold text-amber-300">SIMULATED / DISABLED</div><div class="mt-1 text-sm text-slate-400">No live collateral movement is claimed by this UI.</div></div></div><div class="p-6 rounded-xl bg-surface-container-low border border-white/10"><div class="flex items-center justify-between"><h2 class="text-lg font-semibold text-white">Governed state machine</h2><span class="px-2 py-1 rounded bg-blue-500/10 border border-blue-500/20 text-blue-300 text-xs font-mono">KALYX PRIMITIVE</span></div><div class="mt-6 grid grid-cols-2 md:grid-cols-7 gap-2"><div class="p-3 rounded-lg border border-white/10 bg-white/[0.02] text-center font-mono text-[10px] text-slate-400">PROPOSED</div><div class="p-3 rounded-lg border border-white/10 bg-white/[0.02] text-center font-mono text-[10px] text-slate-400">AUTHORIZED</div><div class="p-3 rounded-lg border border-white/10 bg-white/[0.02] text-center font-mono text-[10px] text-slate-400">LOCKED</div><div class="p-3 rounded-lg border border-white/10 bg-white/[0.02] text-center font-mono text-[10px] text-slate-400">OBLIGATION_ACTIVE</div><div class="p-3 rounded-lg border border-white/10 bg-white/[0.02] text-center font-mono text-[10px] text-slate-400">VERIFIED_SUCCESS</div><div class="p-3 rounded-lg border border-white/10 bg-white/[0.02] text-center font-mono text-[10px] text-slate-400">RELEASED</div><div class="p-3 rounded-lg border border-white/10 bg-white/[0.02] text-center font-mono text-[10px] text-slate-400">FORFEITED</div></div><div class="mt-5 grid md:grid-cols-2 gap-4 text-sm"><div class="p-4 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.05]"><strong class="text-emerald-300">Verified success → RELEASED</strong><p class="mt-1 text-slate-400">Collateral is released only after independent deliverable verification.</p></div><div class="p-4 rounded-lg border border-red-500/20 bg-red-500/[0.05]"><strong class="text-red-300">Verified failure → FORFEITED</strong><p class="mt-1 text-slate-400">The failure path is governed and cannot be bypassed by executor self-report.</p></div></div></div><div class="p-5 rounded-xl bg-surface-container-low border border-white/10"><div class="text-xs font-mono text-slate-500 uppercase">Official CREDIT contract</div><div class="mt-2 font-mono text-sm text-slate-300 break-all">0xe33322da1380e61e5ae5dfb21e7f62924c73004c</div><a class="inline-block mt-3 text-xs text-blue-300 hover:text-white" href="https://www.orbio.so/protocol" target="_blank" rel="noreferrer">Verify CREDIT on Orbio ↗</a></div></div></section>
 
       <!-- 7. AUDIT VIEW -->
       <section id="view-audit" class="view-panel hidden">
