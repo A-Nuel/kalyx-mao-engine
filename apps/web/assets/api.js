@@ -240,6 +240,9 @@ const API = (() => {
     async runDemo() {
       return request('/api/demo/run', { method: 'POST' });
     },
+    async runPublicDemo() {
+      return request('/api/demo/public-run', { method: 'POST' });
+    },
   };
 
 })();
