@@ -38,6 +38,13 @@ class _PgConnectionProxy:
             cur = self._raw.execute(converted, params)
         return _PgCursorProxy(cur)
 
+    def cursor(self):
+        # SQLite-style `conn.cursor()` idiom, used throughout
+        # src/persistence/repositories.py. Returns a fresh psycopg cursor
+        # wrapped so its own .execute() also gets ? -> %s translation and
+        # its .fetchone()/.fetchall() return SQLite-Row-compatible dicts.
+        return _PgCursorProxy(self._raw.cursor())
+
     def commit(self):
         self._raw.commit()
 
@@ -61,6 +68,18 @@ class _PgConnectionProxy:
 class _PgCursorProxy:
     def __init__(self, cur):
         self._cur = cur
+
+    def execute(self, sql: str, params: Any = None):
+        # Same ? -> %s translation as _PgConnectionProxy.execute, so code
+        # written as `cur = conn.cursor(); cur.execute(...)` (the SQLite
+        # idiom used throughout src/persistence/repositories.py) works
+        # unmodified against Postgres too.
+        converted = sql.replace("?", "%s")
+        if params is None:
+            self._cur.execute(converted)
+        else:
+            self._cur.execute(converted, params)
+        return self
 
     def fetchone(self):
         row = self._cur.fetchone()

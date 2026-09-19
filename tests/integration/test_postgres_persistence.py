@@ -150,3 +150,56 @@ def test_duplicate_transaction_id_rejected():
             led.transfer(treasury, other, 10, "second", transaction_id=f"{prefix}-same")
     finally:
         db.close()
+
+
+@requires_postgres
+def test_pg_connection_proxy_supports_sqlite_style_cursor():
+    """Regression test for the exact failure hit in production: run_mission()
+    hands a Postgres connection to SqliteRepository/SqliteEventStore, both
+    of which use the SQLite idiom `cursor = self.db.conn.cursor()` rather
+    than `self.db.conn.execute(...)`. _PgConnectionProxy previously had no
+    .cursor() method at all, so any code path exercising it (startup audit
+    integrity check, treasury conservation check) crashed with
+    AttributeError: '_PgConnectionProxy' object has no attribute 'cursor'
+    -- surfaced to users as TamperedAuditLogError since
+    SqliteEventStore.on_startup_verify() wraps any exception in that type.
+    """
+    db = create_database()
+    try:
+        cursor = db.conn.cursor()
+        cursor.execute("SELECT 1 AS one")
+        row = cursor.fetchone()
+        assert row["one"] == 1
+
+        # Confirm ? -> %s placeholder translation also works via the
+        # cursor path, not just the connection-level .execute() path.
+        cursor.execute("SELECT ? AS echoed", (42,))
+        row2 = cursor.fetchone()
+        assert row2["echoed"] == 42
+    finally:
+        db.close()
+
+
+@requires_postgres
+def test_sqlite_repository_and_event_store_work_against_postgres():
+    """End-to-end regression for the actual code paths that broke: this
+    exercises SqliteRepository (despite its name -- it's what run_mission()
+    actually uses via SqliteRepository(db)) and SqliteEventStore's startup
+    integrity verification, both against a real Postgres connection, the
+    same way the /api/demo/public-run endpoint does in production."""
+    from src.persistence.repositories import SqliteEventStore, SqliteRepository
+
+    db = create_database()
+    try:
+        repo = SqliteRepository(db)
+        # verify_conservation() is the exact method that crashed via
+        # `cursor = self.db.conn.cursor()`.
+        assert repo.verify_conservation() in (True, False)  # must not raise
+
+        # SqliteEventStore.on_startup_verify() is what wrapped the
+        # AttributeError as TamperedAuditLogError in production.
+        store = SqliteEventStore(db, verify_on_startup=True)
+        valid, err = store.verify_integrity()
+        assert valid is True, f"unexpected integrity failure: {err}"
+    finally:
+        db.close()
