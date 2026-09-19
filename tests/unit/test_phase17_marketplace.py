@@ -4,6 +4,7 @@ import pytest
 from src.domain.marketplace import MarketplaceOrder, MarketplaceOrderStatus, EscrowAgreement, EscrowStatus
 from src.persistence.database import Database
 from src.persistence.marketplace_repository import MarketplaceRepository
+from src.domain.work_order import WorkDeliverable
 
 
 def _init_test_db():
@@ -140,3 +141,140 @@ def test_escrow_repository_lifecycle():
     assert updated.status == EscrowStatus.RELEASED
     assert updated.provider_org_id == "org-beta"
     assert updated.released_at is not None
+
+
+def test_provider_scoped_escrow_lookup_resolves_claimed_client_escrow():
+    db = _init_test_db()
+    repo = MarketplaceRepository(db)
+
+    order = MarketplaceOrder.create(
+        tenant_id="tenant-demo",
+        organisation_id="org-alpha",
+        order_id="mkt-provider-scope",
+        title="Provider settlement",
+        description="Provider must resolve client-owned escrow",
+        required_capability="ADVANCED_ANALYTICS",
+        bounty_amount=200,
+    )
+    repo.create_order(order)
+    escrow = EscrowAgreement(
+        tenant_id="tenant-demo",
+        organisation_id="org-alpha",
+        escrow_id="escrow-provider-scope",
+        order_id=order.order_id,
+        client_tenant_id="tenant-demo",
+        client_org_id="org-alpha",
+        bounty_amount=200,
+        status=EscrowStatus.HELD,
+    )
+    repo.save_escrow(escrow)
+    assert repo.claim_order(
+        tenant_id="tenant-demo",
+        organisation_id="org-alpha",
+        order_id=order.order_id,
+        claimed_by_tenant_id="tenant-demo",
+        claimed_by_org_id="org-beta",
+        claimed_by_agent_id="agent-beta",
+        work_order_id="wo-provider-scope",
+    )
+
+    resolved = repo.get_escrow_by_order(order.order_id, "tenant-demo", "org-beta")
+    assert resolved is not None
+    assert resolved.escrow_id == "escrow-provider-scope"
+    assert resolved.client_org_id == "org-alpha"
+
+
+def test_provider_scoped_escrow_lookup_rejects_unrelated_provider():
+    db = _init_test_db()
+    repo = MarketplaceRepository(db)
+
+    order = MarketplaceOrder.create(
+        tenant_id="tenant-demo",
+        organisation_id="org-alpha",
+        order_id="mkt-provider-negative",
+        title="Provider settlement",
+        description="Unrelated provider must not resolve escrow",
+        required_capability="ADVANCED_ANALYTICS",
+        bounty_amount=200,
+    )
+    repo.create_order(order)
+    repo.save_escrow(EscrowAgreement(
+        tenant_id="tenant-demo",
+        organisation_id="org-alpha",
+        escrow_id="escrow-provider-negative",
+        order_id=order.order_id,
+        client_tenant_id="tenant-demo",
+        client_org_id="org-alpha",
+        bounty_amount=200,
+        status=EscrowStatus.HELD,
+    ))
+
+    assert repo.get_escrow_by_order(order.order_id, "tenant-demo", "org-beta") is None
+
+
+def test_public_projection_reads_completed_provenance_from_provider_scope():
+    db = _init_test_db()
+    repo = MarketplaceRepository(db)
+
+    order = MarketplaceOrder.create(
+        tenant_id="tenant-demo",
+        organisation_id="org-alpha",
+        order_id="mkt-provenance",
+        title="Provenance test",
+        description="Completed provider execution",
+        required_capability="ADVANCED_ANALYTICS",
+        bounty_amount=200,
+    )
+    repo.create_order(order)
+    repo.save_escrow(EscrowAgreement(
+        tenant_id="tenant-demo",
+        organisation_id="org-alpha",
+        escrow_id="escrow-provenance",
+        order_id=order.order_id,
+        client_tenant_id="tenant-demo",
+        client_org_id="org-alpha",
+        bounty_amount=200,
+        status=EscrowStatus.HELD,
+    ))
+    assert repo.claim_order(
+        tenant_id="tenant-demo",
+        organisation_id="org-alpha",
+        order_id=order.order_id,
+        claimed_by_tenant_id="tenant-demo",
+        claimed_by_org_id="org-beta",
+        claimed_by_agent_id="agent-beta",
+        work_order_id="wo-provenance",
+    )
+
+    deliverable = WorkDeliverable.create(
+        work_order_id="wo-provenance",
+        producer_agent_id="agent-beta",
+        content_payload={"result": "verified"},
+        orbio_credits_consumed=10,
+        execution_telemetry={"provenance": "SIMULATED", "is_simulated": True},
+        deliverable_id="deliv-provenance",
+    )
+    db.conn.execute(
+        """
+        INSERT INTO work_deliverables (
+            tenant_id, organisation_id, deliverable_id, work_order_id,
+            producer_agent_id, content_payload_json, content_hash,
+            orbio_credits_consumed, execution_telemetry_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "tenant-demo", "org-beta", deliverable.deliverable_id,
+            deliverable.work_order_id, deliverable.producer_agent_id,
+            __import__("json").dumps(deliverable.content_payload),
+            deliverable.content_hash, deliverable.orbio_credits_consumed,
+            __import__("json").dumps(deliverable.execution_telemetry),
+            deliverable.created_at.isoformat(),
+        ),
+    )
+    repo.update_order_status(
+        "tenant-demo", "org-alpha", order.order_id,
+        MarketplaceOrderStatus.COMPLETED, deliverable_id=deliverable.deliverable_id,
+    )
+
+    public = next(o for o in repo.list_public_orders(status="COMPLETED") if o.order_id == order.order_id)
+    assert public.provenance == "SIMULATED"

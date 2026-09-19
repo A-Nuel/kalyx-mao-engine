@@ -157,9 +157,10 @@ class PublicMarketplaceOrder:
     sla_timeout_seconds: int = 3600
     status: MarketplaceOrderStatus = MarketplaceOrderStatus.OPEN
     created_at: str = ""
+    provenance: str = "UNEXECUTED"
 
     @classmethod
-    def from_order(cls, order: MarketplaceOrder) -> PublicMarketplaceOrder:
+    def from_order(cls, order: MarketplaceOrder, provenance: str = "UNEXECUTED") -> PublicMarketplaceOrder:
         return cls(
             order_id=order.order_id,
             title=order.title,
@@ -170,6 +171,7 @@ class PublicMarketplaceOrder:
             sla_timeout_seconds=order.sla_timeout_seconds,
             status=order.status,
             created_at=order.created_at,
+            provenance=provenance,
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -183,4 +185,5 @@ class PublicMarketplaceOrder:
             "sla_timeout_seconds": self.sla_timeout_seconds,
             "status": self.status.value if isinstance(self.status, MarketplaceOrderStatus) else self.status,
             "created_at": self.created_at,
+            "provenance": self.provenance,
         }

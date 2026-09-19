@@ -21,8 +21,8 @@ from src.execution.work_executor import BaseWorkExecutor, SimulatedWorkExecutor
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_ORBIO_BASE_URL = "https://www.orbio.so/api/v1"
-DEFAULT_ORBIO_MODEL = "orbio-compute-v1"
+DEFAULT_ORBIO_BASE_URL = "https://api.orbio.so/api/v1"
+DEFAULT_ORBIO_MODEL = "anthropic/claude-fable-5.1"
 
 
 class OrbioGatewayAdapter(BaseWorkExecutor):
@@ -41,10 +41,18 @@ class OrbioGatewayAdapter(BaseWorkExecutor):
         http_client: Optional[httpx.Client] = None,
         transport: Optional[httpx.BaseTransport] = None,
         timeout_seconds: float = 30.0,
+        allow_simulated_fallback: Optional[bool] = None,
     ) -> None:
         self.base_url = (os.getenv("ORBIO_GATEWAY_BASE") or os.getenv("ORBIO_API_BASE_URL") or base_url).rstrip("/")
         self.api_key = api_key or os.getenv("ORBIO_API_KEY")
-        self.model = model
+        self.model = os.getenv("ORBIO_MODEL") or model
+        if allow_simulated_fallback is None:
+            configured = os.getenv("KALYX_ORBIO_ALLOW_SIMULATED_FALLBACK")
+            if configured is not None:
+                allow_simulated_fallback = configured.strip().lower() in {"1", "true", "yes", "on"}
+            else:
+                allow_simulated_fallback = os.getenv("KALYX_ENV", "demo").strip().lower() not in {"production", "prod"}
+        self.allow_simulated_fallback = bool(allow_simulated_fallback)
         self._credit_store = credit_store if credit_store is not None else {}
         self.fallback_executor = fallback_executor or SimulatedWorkExecutor(credit_store=self._credit_store)
         self.timeout_seconds = timeout_seconds
@@ -88,18 +96,18 @@ class OrbioGatewayAdapter(BaseWorkExecutor):
 
         effective_key = activated_api_key or self.api_key
 
-        # If no key available and not in testing with a custom client, fall back
-        if not effective_key and not hasattr(self._client, "_is_mock_injected"):
-            logger.info("No active Orbio API key; falling back to simulated executor")
-            deliv = self.fallback_executor.execute_work(
+        # Never silently simulate a production execution unless explicitly enabled.
+        if not effective_key:
+            if not self.allow_simulated_fallback:
+                raise RuntimeError("ORBIO_API_KEY is required when simulated fallback is disabled")
+            logger.info("No active Orbio API key; using explicit simulated fallback")
+            return self._execute_fallback(
                 work_order=work_order,
                 producer_agent_id=producer_agent_id,
                 organisation_id=organisation_id,
                 activated_api_key=activated_api_key,
+                reason="missing_api_key",
             )
-            if isinstance(deliv.execution_telemetry, dict):
-                deliv.execution_telemetry["is_simulated"] = True
-            return deliv
 
         # 2. Call Orbio /chat/completions endpoint
         endpoint = f"{self.base_url.rstrip('/')}/chat/completions"
@@ -130,18 +138,18 @@ class OrbioGatewayAdapter(BaseWorkExecutor):
             response = self._client.post(endpoint, json=payload, headers=headers)
             response.raise_for_status()
             res_data = response.json()
+            if not self._is_valid_chat_response(res_data):
+                raise ValueError("Orbio returned a malformed chat completion response")
         except Exception as e:
-            logger.warning(f"Orbio Gateway call failed ({e}); falling back to fallback executor")
-            if self.fallback_executor:
-                deliv = self.fallback_executor.execute_work(
+            logger.warning("Orbio Gateway call failed (%s)", e)
+            if self.allow_simulated_fallback and self.fallback_executor:
+                return self._execute_fallback(
                     work_order=work_order,
                     producer_agent_id=producer_agent_id,
                     organisation_id=organisation_id,
                     activated_api_key=activated_api_key,
+                    reason=f"gateway_error:{type(e).__name__}",
                 )
-                if isinstance(deliv.execution_telemetry, dict):
-                    deliv.execution_telemetry["is_simulated"] = True
-                return deliv
             raise
 
         latency_ms = int((time.perf_counter() - start_time) * 1000)
@@ -175,6 +183,7 @@ class OrbioGatewayAdapter(BaseWorkExecutor):
         # 5. Build telemetry
         telemetry = {
             "is_simulated": False,
+            "provenance": "LIVE_ORBIO",
             "executor": "OrbioGatewayAdapter",
             "model": self.model,
             "endpoint": endpoint,
@@ -192,6 +201,47 @@ class OrbioGatewayAdapter(BaseWorkExecutor):
             orbio_credits_consumed=required_credits,
             execution_telemetry=telemetry,
         )
+
+
+    @staticmethod
+    def _is_valid_chat_response(response: Any) -> bool:
+        if not isinstance(response, dict):
+            return False
+        choices = response.get("choices")
+        if not isinstance(choices, list) or not choices:
+            return False
+        first = choices[0]
+        if not isinstance(first, dict):
+            return False
+        message = first.get("message")
+        return isinstance(message, dict) and isinstance(message.get("content"), str) and bool(message.get("content").strip())
+
+    def _execute_fallback(
+        self,
+        *,
+        work_order: WorkOrder,
+        producer_agent_id: str,
+        organisation_id: str,
+        activated_api_key: Optional[str],
+        reason: str,
+    ) -> WorkDeliverable:
+        if self.fallback_executor is None:
+            raise RuntimeError("Simulated fallback is enabled but no fallback executor is configured")
+        deliv = self.fallback_executor.execute_work(
+            work_order=work_order,
+            producer_agent_id=producer_agent_id,
+            organisation_id=organisation_id,
+            activated_api_key=activated_api_key,
+        )
+        if isinstance(deliv.execution_telemetry, dict):
+            deliv.execution_telemetry.update({
+                "is_simulated": True,
+                "provenance": "SIMULATED",
+                "fallback_reason": reason,
+                "configured_gateway": self.base_url,
+                "configured_model": self.model,
+            })
+        return deliv
 
     def close(self) -> None:
         self._client.close()
