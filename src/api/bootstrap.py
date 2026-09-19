@@ -65,7 +65,7 @@ def validate_production_config() -> None:
         errors.append("KALYX_OPERATOR_KEY is required in production")
 
     identity = os.getenv("KALYX_IDENTITY_AUTH", "").strip().lower()
-    if identity not in {"1", "true", "yes", "on"}:
+    if identity not in {"1", "true", "yes", "on", "production"}:
         errors.append("KALYX_IDENTITY_AUTH must be enabled in production")
 
     if errors:
