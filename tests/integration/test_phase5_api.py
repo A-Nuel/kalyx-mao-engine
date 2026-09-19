@@ -19,7 +19,7 @@ def test_dashboard_is_served():
     landing = client.get("/")
     assert landing.status_code == 200
     assert "<title>Kalyx — Autonomous Organizations</title>" in landing.text
-    assert 'id="hero"' in landing.text
+    assert 'data-section="hero"' in landing.text
 
     command_centre = client.get("/command-centre")
     assert command_centre.status_code == 200
