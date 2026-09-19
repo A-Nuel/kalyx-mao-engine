@@ -12,7 +12,7 @@ contract CollateralVaultTest is Test {
     address owner = address(0xA11CE);
     address pledger = address(0xB0B);
     address beneficiary = address(0xCAFE);
-    address attacker = address(0xEVE);
+    address attacker = address(0xE0E);
 
     bytes32 constant POS_1 = keccak256("position-1");
     bytes32 constant POS_2 = keccak256("position-2");
