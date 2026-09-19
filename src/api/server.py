@@ -227,15 +227,26 @@ class IdentityAuthorizationMiddleware(BaseHTTPMiddleware):
         if "organisations" not in parts:
             return await call_next(request)
 
-        # Public demo mode exposes read-only telemetry for the demo tenant.
-        # It never bypasses authentication for mutations.
-        public_demo = os.getenv("KALYX_PUBLIC_DEMO", "false").strip().lower() == "true"
-        if public_demo and request.method == "GET" and request.headers.get("X-Tenant-ID") == "tenant-demo":
-            return await call_next(request)
-
         org_idx = parts.index("organisations")
         if org_idx == 0 or parts[0] != "api":
             return await call_next(request)
+
+        # Public demo mode exposes read-only telemetry only for resources that
+        # actually belong to the demo tenant. Mutations remain authenticated.
+        public_demo = os.getenv("KALYX_PUBLIC_DEMO", "false").strip().lower() == "true"
+        if public_demo and request.method == "GET" and request.headers.get("X-Tenant-ID") == "tenant-demo":
+            if len(parts) == org_idx + 1:
+                return await call_next(request)
+            target_org_id = parts[org_idx + 1]
+            demo_db = create_database()
+            try:
+                row = demo_db.conn.execute(
+                    "SELECT tenant_id FROM organisations WHERE id = ?", (target_org_id,)
+                ).fetchone()
+                if row and row["tenant_id"] == "tenant-demo":
+                    return await call_next(request)
+            finally:
+                demo_db.close()
 
         db = create_database()
         try:
