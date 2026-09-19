@@ -1,4 +1,4 @@
-﻿services:
+services:
   kalyx-api:
     build:
       context: .
@@ -7,14 +7,16 @@
     restart: unless-stopped
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
-      - KALYX_ENV=demo
-      - KALYX_DB=/app/data/kalyx.db
-      - KALYX_POLICY_SECRET=kalyx-phase17-production-hardening-secret-32-chars
-      - KALYX_IDENTITY_AUTH=demo
-      - KALYX_REQUIRE_OPERATOR_AUTH=false
-    volumes:
-      - kalyx-data:/app/data
+      KALYX_ENV: production
+      KALYX_DATABASE_URL: ${KALYX_DATABASE_URL:?KALYX_DATABASE_URL is required}
+      KALYX_POLICY_SECRET: ${KALYX_POLICY_SECRET:?KALYX_POLICY_SECRET is required}
+      KALYX_OPERATOR_KEY: ${KALYX_OPERATOR_KEY:?KALYX_OPERATOR_KEY is required}
+      KALYX_RECEIPT_SECRET_KEY: ${KALYX_RECEIPT_SECRET_KEY:?KALYX_RECEIPT_SECRET_KEY is required}
+      KALYX_IDENTITY_AUTH: production
+      KALYX_REQUIRE_OPERATOR_AUTH: "true"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
       interval: 30s
@@ -27,13 +29,14 @@
       context: .
       dockerfile: Dockerfile
     container_name: kalyx-demo
+    env_file:
+      - .env
     environment:
-      - KALYX_ENV=demo
-      - KALYX_DB=/app/data/kalyx.db
-      - KALYX_POLICY_SECRET=kalyx-phase17-production-hardening-secret-32-chars
-      - KALYX_IDENTITY_AUTH=demo
+      KALYX_ENV: demo
+      KALYX_DB: /app/data/kalyx.db
+      KALYX_IDENTITY_AUTH: demo
     volumes:
-      - kalyx-data:/app/data
+      - kalyx-demo-data:/app/data
     command: ["python", "scripts/run_phase17_demo.py"]
     profiles: ["demo"]
 
@@ -42,15 +45,17 @@
       context: .
       dockerfile: Dockerfile
     container_name: kalyx-test
+    env_file:
+      - .env
     environment:
-      - KALYX_ENV=demo
-      - KALYX_POLICY_SECRET=kalyx-phase17-production-hardening-secret-32-chars
-      - KALYX_IDENTITY_AUTH=demo
+      KALYX_ENV: demo
+      KALYX_DB: /app/data/kalyx-test.db
+      KALYX_IDENTITY_AUTH: demo
     volumes:
-      - kalyx-data:/app/data
+      - kalyx-test-data:/app/data
     command: ["python", "-m", "pytest", "tests/", "-v"]
     profiles: ["test"]
 
 volumes:
-  kalyx-data:
-    driver: local
+  kalyx-demo-data:
+  kalyx-test-data:
