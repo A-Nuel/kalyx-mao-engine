@@ -23,7 +23,7 @@ contract DeployTestnet is Script {
 }
 
 contract DeployMainnet is Script {
-    address constant ORBIO_CREDIT = 0xe33322Da1380e61E5AE5DFb21e7F62924c73004C;
+    address constant ORBIO_CREDIT = 0xE33322DA1380e61E5Ae5DfB21e7f62924c73004C;
 
     function run() external {
         uint256 deployerKey = vm.envUint("PRIVATE_KEY");
