@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import secrets
 import uuid
@@ -60,6 +61,8 @@ from src.settlement.orbio_purchase_reconciliation import OrbioPurchaseReconcilia
 # Fail closed at import time when KALYX_ENV=production.
 ensure_started()
 
+
+logger = logging.getLogger("kalyx.api")
 
 app = FastAPI(title="Kalyx Command Centre API", version="1.0.0-phase16")
 app.add_middleware(CORSMiddleware, allow_origins=cors_origins(), allow_credentials=False, allow_methods=["GET", "POST"], allow_headers=["*"])
@@ -1048,12 +1051,25 @@ def run_public_demo_endpoint(
     if os.getenv("KALYX_PUBLIC_DEMO", "false").strip().lower() != "true":
         raise HTTPException(status_code=404, detail="Public demo is disabled")
     tenant_id = x_tenant_id or "tenant-demo"
-    return run_mission(
-        mission="Kalyx Judge Demo — Governed Autonomous Economic Loop",
-        budget=100,
-        live=False,
-        tenant_id=tenant_id,
-    )
+    try:
+        return run_mission(
+            mission="Kalyx Judge Demo — Governed Autonomous Economic Loop",
+            budget=100,
+            live=False,
+            tenant_id=tenant_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:
+        # Surface the real cause instead of a bare 500 — this endpoint runs
+        # unauthenticated for judges, so a generic "internal server error"
+        # with no detail is undebuggable from the outside. Matches the
+        # error-shape convention already used by /api/missions above.
+        logger.exception("Public demo run failed")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Demo mission failed: {type(exc).__name__}: {exc}",
+        ) from exc
 
 
 @app.post("/api/demo/run")
@@ -1065,12 +1081,21 @@ def run_demo_endpoint(
     """Execute the deterministic scripted demo scenario."""
     _require_operator(x_api_key)
     tenant_id = x_tenant_id or "tenant-demo"
-    return run_mission(
-        mission="Autonomous Liquidity Rebalancing & Risk-Bounded Market Allocation",
-        budget=100,
-        live=False,
-        tenant_id=tenant_id,
-    )
+    try:
+        return run_mission(
+            mission="Autonomous Liquidity Rebalancing & Risk-Bounded Market Allocation",
+            budget=100,
+            live=False,
+            tenant_id=tenant_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Operator demo run failed")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Demo mission failed: {type(exc).__name__}: {exc}",
+        ) from exc
 
 
 # --------------------------------------------------------------------------
