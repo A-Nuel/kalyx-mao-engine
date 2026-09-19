@@ -1023,6 +1023,22 @@ def system_settings() -> Dict[str, Any]:
     }
 
 
+@app.post("/api/demo/public-run")
+def run_public_demo_endpoint(
+    x_tenant_id: str | None = Header(default=None, alias="X-Tenant-ID"),
+) -> Dict[str, Any]:
+    """Run only the deterministic, non-live judge demo when explicitly enabled."""
+    if os.getenv("KALYX_PUBLIC_DEMO", "false").strip().lower() != "true":
+        raise HTTPException(status_code=404, detail="Public demo is disabled")
+    tenant_id = x_tenant_id or "tenant-demo"
+    return run_mission(
+        mission="Kalyx Judge Demo — Governed Autonomous Economic Loop",
+        budget=100,
+        live=False,
+        tenant_id=tenant_id,
+    )
+
+
 @app.post("/api/demo/run")
 def run_demo_endpoint(
     x_api_key: str | None = Header(default=None, alias="X-API-Key"),
