@@ -112,3 +112,24 @@ def test_valid_live_response_is_marked_live():
     assert deliverable.execution_telemetry["provenance"] == "LIVE_ORBIO"
     assert deliverable.execution_telemetry["total_tokens"] == 5
     assert adapter.get_credit_balance("org-m1") == 90
+
+
+def test_simulated_telemetry_never_contains_api_key():
+    secret = "sk-super-secret-test-key"
+    executor = SimulatedWorkExecutor(credit_store={"org-m1": 100})
+    adapter = OrbioGatewayAdapter(
+        api_key=secret,
+        fallback_executor=executor,
+        credit_store={"org-m1": 100},
+        transport=__import__("httpx").MockTransport(
+            lambda request: __import__("httpx").Response(503, json={"error": "upstream"})
+        ),
+        allow_simulated_fallback=True,
+    )
+
+    deliverable = adapter.execute_work(_work_order(), "agent-m1", "org-m1")
+
+    telemetry = deliverable.execution_telemetry
+    assert telemetry["is_simulated"] is True
+    assert telemetry["activated_api_key_used"] is False
+    assert secret not in str(telemetry)
