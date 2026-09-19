@@ -468,7 +468,7 @@ const App = (() => {
       setTxt('treasuryCumulativeSurplus', `${fmtNum(breakdown.cumulative_net_surplus_usdg || 0)} USDG`);
       setTxt('treasuryRevenueEvents', breakdown.revenue_events_count || 0);
     } else {
-      setTxt('treasuryBurnRate', '142.6');
+      setTxt('treasuryBurnRate', 'Not recorded');
       setTxt('treasuryVelocity', ledger.conserved ? 'CONSERVED' : 'BREACH');
     }
 
@@ -663,7 +663,7 @@ const App = (() => {
   async function refreshSettings() {
     const s = await API.getSystemSettings().catch(() => null);
     if (!s) return;
-    setTxt('settingVersion', s.version || 'v4.12.0-core');
+    setTxt('settingVersion', s.version || 'Not recorded');
     if (s.policy_engine && s.policy_engine.version_hash) {
       setTxt('settingPolicyHash', s.policy_engine.version_hash);
     }
@@ -1159,7 +1159,7 @@ const App = (() => {
       setTxt('treasuryCumulativeSurplus', `${fmtNum(breakdown.cumulative_net_surplus_usdg || 0)} USDG`);
       setTxt('treasuryRevenueEvents', breakdown.revenue_events_count || 0);
     } else {
-      setTxt('treasuryBurnRate', '142.6');
+      setTxt('treasuryBurnRate', 'Not recorded');
       setTxt('treasuryVelocity', ledger.conserved ? 'CONSERVED' : 'BREACH');
     }
 
@@ -1354,7 +1354,7 @@ const App = (() => {
   async function refreshSettings() {
     const s = await API.getSystemSettings().catch(() => null);
     if (!s) return;
-    setTxt('settingVersion', s.version || 'v4.12.0-core');
+    setTxt('settingVersion', s.version || 'Not recorded');
     if (s.policy_engine && s.policy_engine.version_hash) {
       setTxt('settingPolicyHash', s.policy_engine.version_hash);
     }
@@ -1383,7 +1383,7 @@ const App = (() => {
   // ==================== DRAWERS & ACTIONS ====================
 
   function openProposalTrace(propId) {
-    setTxt('traceProposalTitle', `Proposal Verification Trace (${propId || 'PROP-842'})`);
+    setTxt('traceProposalTitle', `Proposal Verification Trace (${propId || 'live proposal'})`);
     openDrawer('drawerProposalTrace');
   }
 
@@ -1398,7 +1398,7 @@ const App = (() => {
 
     try {
       closeModals();
-      alert('AUTHORIZATION CONFIRMED\n\nHMAC Token Issued by Elena Vance (Director).\nBound to Consequential Execution Provider.');
+      alert('AUTHORIZATION CONFIRMED\n\nAuthorization token issued by the configured policy authority.\nBound to Consequential Execution Provider.');
       if (activeOrgId) {
         await refreshCurrentView();
       }
