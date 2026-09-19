@@ -27,7 +27,7 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans
       <span class="kalyx-context-dot"></span>
       <span>COMMAND CENTRE</span>
       <span class="kalyx-slash">/</span>
-      <span id="engineStatusText">CONNECTING</span>
+      <span id="engineStatusText">STARTING</span>
     </div>
     <div class="kalyx-top-actions">
       <button id="btnTour" type="button" class="kalyx-quiet-btn" onclick="App.startTour()">? Guide</button>
@@ -42,7 +42,7 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans
     <div class="kalyx-org-picker">
       <span class="kalyx-overline">ORGANIZATION</span>
       <select id="orgSelect" onchange="App.selectOrg(this.value)" aria-label="Select organization">
-        <option value="">Loading...</option>
+        <option value="">Select organization</option>
       </select>
       <span class="kalyx-org-state"><span class="kalyx-live-dot"></span><span id="sidebarOrgState">CONTROL PLANE</span></span>
     </div>
@@ -92,8 +92,8 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans
         <div class="kalyx-metrics">
           <article class="kalyx-metric-card">
             <span>ORGANIZATION</span>
-            <strong id="cardOrgStateText">CONNECTING</strong>
-            <small id="cardOrgSubtitle">Loading control-plane state…</small>
+            <strong id="cardOrgStateText">STARTING CONTROL PLANE</strong>
+            <small id="cardOrgSubtitle">Establishing control-plane state…</small>
             <em id="cardOrgBadge">—</em>
           </article>
           <article class="kalyx-metric-card">
