@@ -46,3 +46,14 @@ def test_production_ok_when_fully_configured(monkeypatch):
     monkeypatch.setenv("KALYX_OPERATOR_KEY", "op-key")
     monkeypatch.setenv("KALYX_IDENTITY_AUTH", "true")
     validate_production_config()
+
+
+
+def test_production_identity_auth_mode_is_accepted(monkeypatch):
+    monkeypatch.setenv("KALYX_ENV", "production")
+    monkeypatch.setenv("KALYX_POLICY_SECRET", "x" * 32)
+    monkeypatch.setenv("KALYX_OPERATOR_KEY", "operator-key")
+    monkeypatch.setenv("KALYX_IDENTITY_AUTH", "production")
+    monkeypatch.setenv("KALYX_DATABASE_URL", "postgresql://user:pass@localhost/db")
+    # production identity mode is a valid enabled configuration
+    validate_production_config()
