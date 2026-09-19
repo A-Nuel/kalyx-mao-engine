@@ -15,6 +15,12 @@ def test_command_centre_health_and_empty_orgs(tmp_path, monkeypatch):
 def test_dashboard_is_served():
     from src.api.server import app
     client = TestClient(app)
-    response = client.get("/")
-    assert response.status_code == 200
-    assert "<title>Kalyx — Command Centre</title>" in response.text
+
+    landing = client.get("/")
+    assert landing.status_code == 200
+    assert "<title>Kalyx — Autonomous Organizations</title>" in landing.text
+    assert 'data-section="hero"' in landing.text
+
+    command_centre = client.get("/command-centre")
+    assert command_centre.status_code == 200
+    assert "<title>Kalyx — Command Centre</title>" in command_centre.text

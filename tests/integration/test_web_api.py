@@ -112,8 +112,17 @@ def test_experiments_endpoint():
 def test_frontend_assets_served():
     client = TestClient(server.app)
 
-    # 1. HTML index
-    html_res = client.get("/")
+    # 1. Public landing page
+    landing_res = client.get("/")
+    assert landing_res.status_code == 200
+    assert "<title>Kalyx — Autonomous Organizations</title>" in landing_res.text
+    assert 'id="protocol"' in landing_res.text
+    assert 'id="economy"' in landing_res.text
+    assert 'id="marketplace"' in landing_res.text
+    assert 'id="trust"' in landing_res.text
+
+    # 2. Existing Command Centre remains explicitly reachable
+    html_res = client.get("/command-centre")
     assert html_res.status_code == 200
     assert "<title>Kalyx — Command Centre</title>" in html_res.text
     assert 'data-nav="overview"' in html_res.text
@@ -126,7 +135,7 @@ def test_frontend_assets_served():
     assert 'data-nav="experiments"' in html_res.text
     assert 'data-nav="settings"' in html_res.text
 
-    # 2. Assets
+    # 3. Assets
     js_res = client.get("/assets/app.js")
     assert js_res.status_code == 200
     assert "App = ((" in js_res.text
