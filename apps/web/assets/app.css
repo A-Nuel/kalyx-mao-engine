@@ -247,3 +247,23 @@ body {
   .kalyx-secondary-header h1{font-size:2rem}
   .kalyx-secondary-view .overflow-x-auto{border:1px solid rgba(255,255,255,.06)}
 }
+
+
+/* Tour responsive system: XS <480 | SM 480-767 | MD 768-1099 | LG 1100-1439 | XL 1440+ */
+.kalyx-overlay{padding:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));overflow:hidden}
+.kalyx-tour-card{position:relative;box-sizing:border-box;width:min(440px,calc(100vw - 32px));max-width:calc(100vw - 32px);max-height:calc(100dvh - 32px);margin:auto;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain}
+@media(max-width:767px){
+  .kalyx-overlay{padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
+  .kalyx-tour-card{width:calc(100vw - 32px)!important;max-width:none!important;max-height:calc(100dvh - 32px);margin:auto!important;padding:20px;border-radius:10px}
+  .kalyx-tour-card strong{font-size:20px;line-height:1.15}
+  .kalyx-tour-card p{font-size:12px;line-height:1.6}
+  .kalyx-tour-footer{flex-wrap:wrap}
+  .tour-spotlight,.kalyx-tour-spotlight{display:none!important}
+}
+@media(max-width:479px){
+  .kalyx-overlay{padding:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left))}
+  .kalyx-tour-card{width:calc(100vw - 24px)!important;max-height:calc(100dvh - 24px);padding:18px}
+  .kalyx-tour-footer{gap:7px}.kalyx-tour-footer button{padding:9px 10px}
+}
+@media(min-width:768px){.kalyx-tour-card{width:min(440px,calc(100vw - 48px));max-width:440px}}
+@media(min-width:1100px){.kalyx-tour-card{width:440px}}
