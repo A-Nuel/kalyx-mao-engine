@@ -20,3 +20,11 @@ __pycache__/
 # Virtual environments
 venv/
 .venv/
+
+# Foundry / contracts
+contracts/out/
+contracts/cache/
+contracts/lib/
+contracts/.env
+.env
+*.egg-info/

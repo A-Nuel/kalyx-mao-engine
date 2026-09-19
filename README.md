@@ -38,6 +38,16 @@ Kalyx has completed the **Phase 17 autonomous enterprise path** through the P0/P
 
 **Important:** the repository contains deterministic simulated adapters for CI/demo continuity. They are explicitly marked as simulated and must not be presented as live execution. Production configuration is designed to fail closed when required live credentials are missing.
 
+## Phase 18 — Credit Collateral (new)
+
+Orbio's `$CREDIT` is a standard transferable ERC-20 token on Robinhood Chain: you can hold it, transfer it, sell it on the order book, or activate it into non-transferable API balance. That's a real, useful primitive — but it's also all Orbio itself provides. There is no native `lock()` or collateral facility on the deployed CREDIT contract.
+
+**Orbio makes inference transferable capital. Kalyx adds the missing governance layer: a primitive for pledging that capital against an autonomous obligation.**
+
+`CreditCollateralPosition` (`src/domain/collateral.py`) is a state machine — `PROPOSED → AUTHORIZED → LOCKED → OBLIGATION_ACTIVE → VERIFIED_SUCCESS/VERIFIED_FAILURE → RELEASED/FORFEITED` — backed by a minimal on-chain `CollateralVault.sol` contract (`contracts/`) that actually holds transferred CREDIT (or a CREDIT-interface-compatible token during testnet rehearsal), and settled exclusively from `WorkDeliverableVerifier`'s independent evidence — never from an executor's self-reported outcome. See `contracts/README.md` for the deploy runbook and `src/agents/collateral_coordinator.py` for how it composes with the existing B2B marketplace flow without modifying it.
+
+This is a governance layer on top of CREDIT's transferability, not a claim that Orbio itself supports locking — that distinction matters and is stated plainly rather than blurred for effect.
+
 ## Architecture
 
 ```text
@@ -339,12 +349,12 @@ MISSION → PLAN → EXECUTE → AUDIT → MEASURE → ALLOCATE → NEXT MISSION
 
 ## Verification & Test Coverage
 
-The automated test suite contains **293 tests** spanning unit, integration, and security/isolation suites:
-- **288 passed** in offline/local execution.
+The automated test suite contains **622 tests** spanning unit, integration, and security/isolation suites:
+- **617 passed** in offline/local execution.
 - **5 skipped** (live PostgreSQL integration tests when `KALYX_DATABASE_URL` is unconfigured; verified in container and CI).
 
 ```bash
-================== 288 passed, 5 skipped in 63.67s ===================
+================== 617 passed, 5 skipped in 7.11s ===================
 ```
 
 - **Phase 13 Adaptive Economics**: `test_phase13_adaptive_economics.py`, `test_economic_experiment.py`, `test_agent_performance.py`, `test_agent_lifecycle.py`, `test_resource_allocator.py`, `test_economy_security_adversarial.py`.
