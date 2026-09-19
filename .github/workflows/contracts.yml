@@ -21,11 +21,9 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Install Foundry
-        shell: bash
-        run: |
-          curl -L https://foundry.paradigm.xyz | bash
-          echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"
-          "$HOME/.foundry/bin/foundryup"
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
 
       - name: Install forge-std
         run: forge install foundry-rs/forge-std --no-commit
