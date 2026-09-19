@@ -389,3 +389,451 @@ body {
     padding:15px;
   }
 }
+
+
+/* ==========================================================================
+   SECONDARY VIEWS — RESPONSIVE COMMAND CENTRE SYSTEM
+   Handles normal mobile, tablet and Android "Desktop site" viewports.
+   Breakpoints: XS <480 | SM 480-767 | MD 768-1099 | LG 1100+
+   ========================================================================== */
+
+.kalyx-secondary-view,
+.kalyx-secondary-view > .flex,
+.kalyx-secondary-view > .flex > *,
+.kalyx-secondary-view .relative {
+  min-width: 0;
+}
+
+.kalyx-secondary-view {
+  width: 100%;
+  overflow-x: clip;
+}
+
+.kalyx-secondary-view > .flex {
+  width: 100%;
+}
+
+.kalyx-secondary-view .overflow-x-auto {
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.kalyx-secondary-view table {
+  min-width: 760px;
+}
+
+.kalyx-secondary-view .kalyx-secondary-header > div:first-child {
+  min-width: 0;
+}
+
+.kalyx-secondary-view .kalyx-secondary-header p {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1099px) {
+  /* Treat narrow Android/Desktop-site viewports as compact layouts too. */
+  .kalyx-topbar {
+    height: 60px;
+    padding: 0 16px;
+  }
+
+  .kalyx-brand {
+    width: auto;
+    flex: 0 0 auto;
+  }
+
+  .kalyx-top-context {
+    display: none;
+  }
+
+  .kalyx-top-actions {
+    gap: 5px;
+  }
+
+  .kalyx-quiet-btn {
+    padding: 8px 9px;
+  }
+
+  .kalyx-sidebar {
+    position: sticky;
+    z-index: 50;
+    top: 60px;
+    left: auto;
+    bottom: auto;
+    width: 100%;
+    height: auto;
+    padding: 7px 10px;
+    border-right: 0;
+    border-bottom: 1px solid var(--kc-line);
+    overflow-x: auto;
+    overflow-y: hidden;
+    display: block;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .kalyx-org-picker,
+  .kalyx-sidebar-bottom,
+  .kalyx-nav-label {
+    display: none;
+  }
+
+  .kalyx-nav {
+    padding: 0;
+    display: flex;
+    flex-direction: row;
+    gap: 3px;
+    width: max-content;
+    min-width: 100%;
+  }
+
+  .kalyx-nav .nav-tab {
+    width: auto;
+    flex: 0 0 auto;
+    padding: 9px 11px;
+    white-space: nowrap;
+  }
+
+  .kalyx-nav .nav-tab.active:before {
+    left: 7px;
+    right: 7px;
+    top: auto;
+    bottom: 0;
+    width: auto;
+    height: 2px;
+  }
+
+  .kalyx-main {
+    margin-left: 0;
+    padding-top: 0;
+    width: 100%;
+  }
+
+  .kalyx-secondary-view > .flex {
+    width: 100%;
+  }
+
+  .kalyx-secondary-header {
+    width: 100%;
+    padding: 2rem 22px 1.25rem;
+  }
+
+  /* Collapse every XL two-column command surface before it gets cramped. */
+  .kalyx-secondary-view .xl\:grid-cols-12 {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .kalyx-secondary-view .xl\:col-span-4,
+  .kalyx-secondary-view .xl\:col-span-5,
+  .kalyx-secondary-view .xl\:col-span-7,
+  .kalyx-secondary-view .xl\:col-span-8 {
+    grid-column: 1 / -1 !important;
+  }
+
+  .kalyx-secondary-view .sticky {
+    position: relative !important;
+    top: auto !important;
+  }
+
+  /* Give command surfaces a consistent compact gutter. */
+  .kalyx-secondary-view > .flex > .relative > .w-full,
+  .kalyx-secondary-view > .flex > .space-y-space-xl,
+  .kalyx-secondary-view > .flex > .grid,
+  .kalyx-secondary-view > .flex > .mt-space-xl,
+  .kalyx-secondary-view > .flex > .mt-space-lg {
+    max-width: 100%;
+  }
+
+  /* Organisation / hierarchy */
+  #view-organisation .px-margin {
+    padding-left: 22px;
+    padding-right: 22px;
+  }
+
+  #view-organisation .grid.grid-cols-1.xl\:grid-cols-12 {
+    gap: 18px;
+  }
+
+  #view-organisation .grid.grid-cols-1.xl\:grid-cols-12 > .flex {
+    width: 100%;
+    min-width: 0;
+  }
+
+  #view-organisation .relative.p-space-md.rounded-2xl {
+    overflow-x: auto;
+    align-items: stretch;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  #view-organisation .relative.p-space-md.rounded-2xl > .w-full {
+    max-width: 100%;
+  }
+
+  #view-organisation #orchestratorNode {
+    width: 100%;
+  }
+
+  #view-organisation .relative.p-space-md.rounded-2xl svg {
+    max-width: 100%;
+  }
+
+  #view-organisation .grid.grid-cols-1.md\:grid-cols-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #view-organisation .grid.grid-cols-3 {
+    min-width: 0;
+  }
+
+  #view-organisation .grid.grid-cols-3 > div {
+    min-width: 0;
+  }
+
+  #view-organisation .grid.grid-cols-3 > div > span {
+    overflow-wrap: anywhere;
+  }
+
+  #view-organisation .flex.flex-col.sm\:flex-row {
+    align-items: flex-start;
+  }
+
+  #view-organisation .flex.flex-col.sm\:flex-row > .flex-shrink-0 {
+    align-self: flex-start;
+  }
+
+  /* Missions */
+  #view-missions > .flex,
+  #view-treasury > .flex,
+  #view-policies > .flex,
+  #view-operations > .flex,
+  #view-marketplace > .flex,
+  #view-collateral > .flex,
+  #view-audit > .flex,
+  #view-experiments > .flex,
+  #view-settings > .flex {
+    padding-left: 22px;
+    padding-right: 22px;
+  }
+
+  #view-missions .grid.grid-cols-1.xl\:grid-cols-12 {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  #view-missions .xl\:col-span-4,
+  #view-missions .xl\:col-span-8 {
+    grid-column: 1 / -1 !important;
+  }
+
+  #view-missions .grid.grid-cols-5 {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  /* Keep action rows from creating accidental horizontal overflow. */
+  .kalyx-secondary-view .flex.items-center.gap-space-sm,
+  .kalyx-secondary-view .flex.items-center.gap-space-md {
+    min-width: 0;
+  }
+
+  .kalyx-secondary-view h1,
+  .kalyx-secondary-view h2,
+  .kalyx-secondary-view h3,
+  .kalyx-secondary-view h4,
+  .kalyx-secondary-view p,
+  .kalyx-secondary-view span {
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (max-width: 767px) {
+  .kalyx-topbar {
+    height: 56px;
+    padding: 0 12px;
+  }
+
+  .kalyx-status-btn {
+    padding: 8px 9px;
+  }
+
+  .kalyx-sidebar {
+    top: 56px;
+    padding: 6px 8px;
+  }
+
+  .kalyx-nav .nav-tab {
+    padding: 8px 10px;
+    font-size: 10px;
+  }
+
+  .kalyx-main {
+    width: 100%;
+  }
+
+  .kalyx-secondary-header {
+    align-items: flex-start;
+    padding: 1.5rem 14px 1rem;
+    gap: .85rem;
+  }
+
+  .kalyx-secondary-header h1 {
+    font-size: clamp(1.75rem, 8vw, 2.35rem);
+    line-height: 1;
+  }
+
+  .kalyx-secondary-header p {
+    font-size: .78rem;
+    line-height: 1.55;
+  }
+
+  .kalyx-secondary-status {
+    max-width: 100%;
+    white-space: normal;
+    line-height: 1.35;
+  }
+
+  #view-missions > .flex,
+  #view-treasury > .flex,
+  #view-policies > .flex,
+  #view-operations > .flex,
+  #view-marketplace > .flex,
+  #view-collateral > .flex,
+  #view-audit > .flex,
+  #view-experiments > .flex,
+  #view-settings > .flex {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  #view-organisation .px-margin {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  /* Compact telemetry strip */
+  #view-organisation .flex.flex-wrap.items-center.gap-space-xs.p-1\.5 {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 4px;
+  }
+
+  #view-organisation .flex.flex-wrap.items-center.gap-space-xs.p-1\.5 > div {
+    min-width: 0;
+    justify-content: space-between;
+  }
+
+  #view-organisation .relative.p-space-md.rounded-2xl {
+    padding: 12px;
+  }
+
+  #view-organisation .relative.p-space-md.rounded-2xl > .w-full.max-w-md,
+  #view-organisation .relative.p-space-md.rounded-2xl > .w-full.max-w-lg {
+    max-width: 100%;
+  }
+
+  #view-organisation .grid.grid-cols-1.md\:grid-cols-3 {
+    grid-template-columns: 1fr;
+  }
+
+  #view-organisation #orchestratorNode .grid.grid-cols-3 {
+    grid-template-columns: 1fr;
+  }
+
+  #view-organisation #orchestratorNode .grid.grid-cols-3 > div {
+    padding: 9px;
+  }
+
+  #view-organisation .relative.p-space-md.rounded-2xl svg {
+    height: 22px;
+  }
+
+  #view-organisation .sticky.top-20 {
+    padding: 14px;
+  }
+
+  #view-organisation .sticky.top-20 .grid.grid-cols-3 {
+    grid-template-columns: 1fr;
+  }
+
+  #view-organisation .sticky.top-20 .flex.items-start.justify-between {
+    align-items: flex-start;
+  }
+
+  #view-organisation .sticky.top-20 .flex.items-start.justify-between > .flex {
+    min-width: 0;
+  }
+
+  #view-organisation .sticky.top-20 .grid.grid-cols-2 {
+    grid-template-columns: 1fr;
+  }
+
+  /* Mobile tables remain readable through horizontal scrolling, never compression. */
+  .kalyx-secondary-view .overflow-x-auto {
+    border-radius: 4px;
+  }
+
+  .kalyx-secondary-view table {
+    min-width: 820px;
+  }
+
+  /* Cards and action groups stack instead of squeezing labels together. */
+  .kalyx-secondary-view .flex.flex-col.lg\:flex-row {
+    align-items: flex-start;
+  }
+
+  .kalyx-secondary-view .flex.items-center.gap-space-sm,
+  .kalyx-secondary-view .flex.items-center.gap-space-md {
+    flex-wrap: wrap;
+  }
+
+  #view-missions .grid.grid-cols-5 {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  #view-missions .grid.grid-cols-5 > div:last-child {
+    grid-column: 1 / -1;
+  }
+
+  #view-missions .grid.grid-cols-2.md\:grid-cols-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 479px) {
+  .kalyx-brand {
+    font-size: 12px;
+  }
+
+  .kalyx-nav .nav-tab {
+    padding: 8px 9px;
+    font-size: 9px;
+  }
+
+  .kalyx-secondary-header {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  #view-missions > .flex,
+  #view-treasury > .flex,
+  #view-policies > .flex,
+  #view-operations > .flex,
+  #view-marketplace > .flex,
+  #view-collateral > .flex,
+  #view-audit > .flex,
+  #view-experiments > .flex,
+  #view-settings > .flex {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  #view-organisation .px-margin {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  #view-organisation .flex.flex-wrap.items-center.gap-space-xs.p-1\.5 {
+    grid-template-columns: 1fr;
+  }
+}
