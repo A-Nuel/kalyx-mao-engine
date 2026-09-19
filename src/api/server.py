@@ -227,6 +227,12 @@ class IdentityAuthorizationMiddleware(BaseHTTPMiddleware):
         if "organisations" not in parts:
             return await call_next(request)
 
+        # Public demo mode exposes read-only telemetry for the demo tenant.
+        # It never bypasses authentication for mutations.
+        public_demo = os.getenv("KALYX_PUBLIC_DEMO", "false").strip().lower() == "true"
+        if public_demo and request.method == "GET" and request.headers.get("X-Tenant-ID") == "tenant-demo":
+            return await call_next(request)
+
         org_idx = parts.index("organisations")
         if org_idx == 0 or parts[0] != "api":
             return await call_next(request)
