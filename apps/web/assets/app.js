@@ -729,12 +729,45 @@ const App = (() => {
     {title:'You now know the machine', body:'Use Follow the loop to walk through the judge path: proposal → policy → resource acquisition → productive work → independent verification → revenue → surplus → next mission.', target:null, button:'Finish'}
   ];
   let tourIndex=0;
-  function positionTourTarget(target){const s=$('tourSpotlight'); if(!s)return; document.querySelectorAll('.tour-target').forEach(e=>e.classList.remove('tour-target')); if(!target){s.style.display='none';return;} const el=document.querySelector(target); if(!el){s.style.display='none';return;} el.classList.add('tour-target'); const r=el.getBoundingClientRect(); s.style.display='block'; s.style.top=Math.max(8,r.top-6)+'px'; s.style.left=Math.max(8,r.left-6)+'px'; s.style.width=(r.width+12)+'px'; s.style.height=(r.height+12)+'px'; }
-  function renderTourStep(){const st=TOUR_STEPS[tourIndex]; setTxt('tourTitle',st.title); setTxt('tourBody',st.body); setTxt('tourProgress',(tourIndex+1)+' / '+TOUR_STEPS.length); setTxt('tourNext',st.button); positionTourTarget(st.target); const card=$('tourCard'); if(card){card.style.top='';card.style.left='';card.style.transform=''; if(st.target && window.innerWidth>640){const el=document.querySelector(st.target); if(el){const r=el.getBoundingClientRect(); card.style.top=Math.min(window.innerHeight-260,Math.max(76,r.bottom+16))+'px'; card.style.left=Math.min(window.innerWidth-440,Math.max(16,r.left))+'px';}} else {card.style.top='50%';card.style.left='50%';card.style.transform='translate(-50%,-50%)';}} }
-  function startTour(){tourIndex=0; $('kalyxTour')?.classList.remove('hidden'); document.body.classList.add('overflow-hidden'); renderTourStep();}
-  function nextTourStep(){if(tourIndex>=TOUR_STEPS.length-1){closeTour();return;} tourIndex++; renderTourStep();}
-  function closeTour(){ $('kalyxTour')?.classList.add('hidden'); document.body.classList.remove('overflow-hidden'); document.querySelectorAll('.tour-target').forEach(e=>e.classList.remove('tour-target')); }
+  const TOUR_DESKTOP_BREAKPOINT=768;
+  const TOUR_WIDE_BREAKPOINT=1100;
+  function isTourDesktop(){return window.matchMedia('(min-width:'+TOUR_DESKTOP_BREAKPOINT+'px)').matches;}
+  function resetTourCardPosition(card){if(!card)return;card.style.top='';card.style.left='';card.style.right='';card.style.bottom='';card.style.transform='';card.style.width='';}
+  function positionTourTarget(target){
+    const s=$('tourSpotlight');
+    document.querySelectorAll('.tour-target').forEach(e=>e.classList.remove('tour-target'));
+    if(!s)return;
+    if(!target||!isTourDesktop()){s.style.display='none';return;}
+    const el=document.querySelector(target);
+    if(!el){s.style.display='none';return;}
+    el.classList.add('tour-target');
+    const r=el.getBoundingClientRect();
+    s.style.display='block';s.style.top=Math.max(8,r.top-6)+'px';s.style.left=Math.max(8,r.left-6)+'px';s.style.width=(r.width+12)+'px';s.style.height=(r.height+12)+'px';
+  }
+  function positionTourCard(target){
+    const card=$('tourCard');if(!card)return;
+    resetTourCardPosition(card);
+    if(!isTourDesktop())return;
+    const margin=window.innerWidth>=TOUR_WIDE_BREAKPOINT?24:16;
+    const cardWidth=Math.min(440,window.innerWidth-(margin*2));card.style.width=cardWidth+'px';
+    if(!target){card.style.top='50%';card.style.left='50%';card.style.transform='translate(-50%,-50%)';return;}
+    const el=document.querySelector(target);
+    if(!el){card.style.top='50%';card.style.left='50%';card.style.transform='translate(-50%,-50%)';return;}
+    const r=el.getBoundingClientRect(),cardHeight=Math.min(card.scrollHeight,window.innerHeight-(margin*2));
+    let left=Math.max(margin,Math.min(r.left,window.innerWidth-cardWidth-margin)),top=r.bottom+16;
+    if(top+cardHeight>window.innerHeight-margin)top=r.top-cardHeight-16;
+    top=Math.max(margin,Math.min(top,window.innerHeight-cardHeight-margin));
+    card.style.left=left+'px';card.style.top=top+'px';
+  }
+  function renderTourStep(){const st=TOUR_STEPS[tourIndex];setTxt('tourTitle',st.title);setTxt('tourBody',st.body);setTxt('tourProgress',(tourIndex+1)+' / '+TOUR_STEPS.length);setTxt('tourNext',st.button);positionTourTarget(st.target);positionTourCard(st.target);}
+  function startTour(){tourIndex=0;$('kalyxTour')?.classList.remove('hidden');document.body.classList.add('overflow-hidden');requestAnimationFrame(renderTourStep);}
+  function nextTourStep(){if(tourIndex>=TOUR_STEPS.length-1){closeTour();return;}tourIndex++;renderTourStep();}
+  function closeTour(){$('kalyxTour')?.classList.add('hidden');document.body.classList.remove('overflow-hidden');document.querySelectorAll('.tour-target').forEach(e=>e.classList.remove('tour-target'));}
   function skipTour(){closeTour();localStorage.setItem('kalyx-tour-seen','1');}
+  let tourResizeTimer;
+  function handleTourResize(){clearTimeout(tourResizeTimer);tourResizeTimer=setTimeout(()=>{const tour=$('kalyxTour');if(!tour||tour.classList.contains('hidden'))return;renderTourStep();},50);}
+  window.addEventListener('resize',handleTourResize);
+  window.addEventListener('orientationchange',()=>setTimeout(handleTourResize,100));
   function startLoopGuide(){ $('loopGuide')?.classList.remove('hidden'); }
   function closeLoopGuide(){ $('loopGuide')?.classList.add('hidden'); }
   function updateLiveClock(){const el=$('overviewClock'); if(el) el.textContent=new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})+' UTC';}
