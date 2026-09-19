@@ -49,6 +49,9 @@ jobs:
       - name: Verify dependency consistency
         run: python -m pip check
 
+      - name: Check Command Centre JavaScript syntax
+        run: node --check apps/web/assets/app.js
+
       - name: Compile Python sources
         run: python -m compileall -q src tests
 
