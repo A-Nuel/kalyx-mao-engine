@@ -227,6 +227,18 @@ const App = (() => {
       setTxt('cardActiveExpeditionPhase', `Autonomous Expedition • ${orgData.tasks.length} tasks delegated`);
     }
 
+    // Command Centre system state
+    setTxt('sidebarOrgState', isPaused ? 'PAUSED / GOVERNED' : 'CONTROL PLANE');
+    setTxt('systemEngineState', 'OPERATIONAL');
+    setTxt('systemDatabaseState', 'CONNECTED');
+    setTxt('liveStateLabel', 'REFRESHING · 4s');
+
+    if (ledgerData) {
+      setTxt('econTreasury', fmtNum(ledgerData.treasury) + ' CR');
+      setTxt('econEscrow', fmtNum(ledgerData.escrow) + ' CR');
+      setTxt('econExternal', fmtNum(ledgerData.external_sink) + ' CR');
+    }
+
     // Operations Badge
     const navOpsBadge = $('navOperationsBadge');
     if (navOpsBadge) {
