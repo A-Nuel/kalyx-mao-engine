@@ -124,7 +124,38 @@ const App = (() => {
       await refreshCurrentView();
     } catch (err) {
       console.warn('Failed to load organisations:', err);
+      activeOrgId = null;
+      select.innerHTML = '<option value="">Unavailable</option>';
+      setTxt('sidebarOrgState', 'UNAVAILABLE');
+      setTxt('cardOrgStateText', 'CONTROL PLANE UNAVAILABLE');
+      setTxt('cardOrgSubtitle', err?.message || 'Unable to read organisation state');
+      setTxt('engineStatusText', 'DEGRADED');
     }
+  }
+
+  function enhanceSecondaryViews() {
+    const meta = {
+      missions: ['02', 'MISSIONS', 'Autonomous work, mission lineage and deliverables.'],
+      organisation: ['03', 'ORGANISATION', 'Agents, authority envelopes and workforce state.'],
+      treasury: ['04', 'TREASURY', 'Capital, escrow, conservation and economic movement.'],
+      policies: ['05', 'POLICIES', 'The rules that authorize consequential action.'],
+      operations: ['06', 'OPERATIONS', 'Execution state, evidence and reconciliation.'],
+      marketplace: ['07', 'MARKETPLACE', 'Organizations discovering, claiming and settling work.'],
+      collateral: ['08', 'CREDIT COLLATERAL', 'Governed resource locking and settlement semantics.'],
+      audit: ['09', 'AUDIT', 'Independent evidence, chronology and verification.'],
+      experiments: ['10', 'EXPERIMENTS', 'Controlled economic experiments and observed outcomes.'],
+      settings: ['11', 'SYSTEM', 'Runtime configuration and operating boundaries.'],
+    };
+    Object.entries(meta).forEach(([route, values]) => {
+      const [index, title, description] = values;
+      const view = document.getElementById('view-' + route);
+      if (!view || view.querySelector('.kalyx-secondary-header')) return;
+      view.classList.add('kalyx-secondary-view');
+      const header = document.createElement('div');
+      header.className = 'kalyx-secondary-header';
+      header.innerHTML = '<div><span class="kalyx-eyebrow"><span>' + index + '</span> ' + title + '</span><h1>' + (title === 'SYSTEM' ? 'System' : title.charAt(0) + title.slice(1).toLowerCase()) + '</h1><p>' + description + '</p></div><span class="kalyx-secondary-status">GOVERNED · LIVE STATE</span>';
+      view.prepend(header);
+    });
   }
 
   // Refresh current view based on activeRoute
@@ -851,9 +882,12 @@ const App = (() => {
     try {
       await API.getHealth();
       setTxt('engineStatusText', 'OPERATIONAL');
-    } catch {
-      setTxt('engineStatusText', 'STANDALONE');
+    } catch (err) {
+      console.warn('Health check failed:', err);
+      setTxt('engineStatusText', 'DEGRADED');
     }
+
+    enhanceSecondaryViews();
 
     // 2. Hash routing listener
     window.addEventListener('hashchange', () => {
