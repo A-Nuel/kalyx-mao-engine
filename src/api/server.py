@@ -132,6 +132,18 @@ def _live_demo_json(value: Any) -> Any:
         return str(value)
 
 
+def _redact_live_demo(value: Any) -> Any:
+    """Remove authorization material before exposing demo evidence publicly."""
+    if isinstance(value, dict):
+        return {
+            key: ("[REDACTED]" if key.lower() in {"authorization_token", "token", "secret", "private_key"} else _redact_live_demo(item))
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_live_demo(item) for item in value]
+    return value
+
+
 def _record_live_demo_stage(session_id: str, stage: str, evidence: Dict[str, Any]) -> None:
     stage_meta = {
         "MISSION_STARTED": ("INITIALIZE", "Control plane started", "The orchestrator accepted the mission and established the organisation state."),
@@ -149,7 +161,7 @@ def _record_live_demo_stage(session_id: str, stage: str, evidence: Dict[str, Any
         "source_event": stage,
         "title": title,
         "description": description,
-        "evidence": _live_demo_json(evidence),
+        "evidence": _live_demo_json(_redact_live_demo(evidence)),
         "timestamp": datetime.utcnow().isoformat() + "Z",
     }
     with _live_demo_lock:
@@ -181,7 +193,7 @@ def _run_live_demo_session(session_id: str, tenant_id: str) -> None:
                 session["current_stage"] = "COMPLETE"
                 session["current_title"] = "Governance loop complete"
                 session["current_description"] = "Every demonstrated boundary has real persisted evidence behind it."
-                session["result"] = _live_demo_json(result)
+                session["result"] = _live_demo_json(_redact_live_demo(result))
                 session["updated_at"] = datetime.utcnow().isoformat() + "Z"
     except Exception as exc:
         logger.exception("Live judge demo failed")
