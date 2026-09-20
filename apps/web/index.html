@@ -1518,7 +1518,7 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans
 <!-- Emergency Circuit Breaker Trigger Button -->
 <div class="flex items-center gap-space-md self-start xl:self-end">
 <div class="relative group">
-<button class="flex items-center gap-space-sm px-space-lg py-3 rounded-xl bg-error-container/20 text-error hover:bg-error-container/40 transition-all duration-200 shadow-md backdrop-blur-md active:scale-95 cursor-pointer" id="circuit-breaker-btn">
+<button class="flex items-center gap-space-sm px-space-lg py-3 rounded-xl bg-error-container/20 text-error hover:bg-error-container/40 transition-all duration-200 shadow-md backdrop-blur-md active:scale-95 cursor-pointer" id="circuit-breaker-btn" onclick="App.toggleCircuitBreakerPopover(event)">
 <span class="material-symbols-outlined text-lg" style="font-variation-settings: 'FILL' 1;">power_settings_new</span>
 <span class="font-headline-sm text-headline-sm font-medium">Circuit Breaker</span>
 <span class="font-label-sm text-label-sm px-2 py-0.5 rounded bg-error-container text-on-error-container tracking-wider">ARMED</span>
@@ -1533,8 +1533,8 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans
 </div>
 </div>
 <div class="flex justify-end gap-space-xs mt-space-sm">
-<button class="px-space-sm py-1.5 rounded bg-surface-container text-on-surface-variant font-label-md text-label-md hover:bg-surface-container-highest transition-colors" id="breaker-cancel-btn">Abort</button>
-<button class="px-space-sm py-1.5 rounded bg-error text-on-error font-label-md text-label-md hover:opacity-90 transition-opacity" id="breaker-confirm-btn">Confirm Halt</button>
+<button class="px-space-sm py-1.5 rounded bg-surface-container text-on-surface-variant font-label-md text-label-md hover:bg-surface-container-highest transition-colors" id="breaker-cancel-btn" onclick="App.toggleCircuitBreakerPopover(event)">Abort</button>
+<button class="px-space-sm py-1.5 rounded bg-error text-on-error font-label-md text-label-md hover:opacity-90 transition-opacity" id="breaker-confirm-btn" onclick="App.toggleCircuitBreaker()">Confirm Halt</button>
 </div>
 </div>
 </div>
@@ -1880,44 +1880,20 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans
 </div>
 </div>
 <script>
-    // Simple micro-interactions for toggles and circuit breaker prompt
+    // The circuit breaker button/popover on this page now calls the real
+    // App.toggleCircuitBreakerPopover() / App.toggleCircuitBreaker()
+    // (see onclick attributes above), which hit the real
+    // pause/resume API — this inline handler previously duplicated that
+    // wiring with a fake alert() and has been removed.
+    //
+    // The 5 policy toggles below (spend-cap, compute-quota, whitelist,
+    // hitl, volatility-stop) have no backend write endpoint yet, so they
+    // are marked disabled+read-only rather than left clickable with no
+    // real effect.
     (function() {
-      const breakerBtn = document.getElementById('circuit-breaker-btn');
-      const confirmPopover = document.getElementById('breaker-confirm-popover');
-      const cancelBtn = document.getElementById('breaker-cancel-btn');
-      const confirmBtn = document.getElementById('breaker-confirm-btn');
-
-      if (breakerBtn && confirmPopover) {
-        breakerBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          confirmPopover.classList.toggle('hidden');
-        });
-
-        cancelBtn?.addEventListener('click', (e) => {
-          e.stopPropagation();
-          confirmPopover.classList.add('hidden');
-        });
-
-        confirmBtn?.addEventListener('click', (e) => {
-          e.stopPropagation();
-          alert('Emergency Circuit Breaker Triggered: All autonomous keys locked.');
-          confirmPopover.classList.add('hidden');
-        });
-
-        document.addEventListener('click', (e) => {
-          if (!confirmPopover.contains(e.target) && e.target !== breakerBtn) {
-            confirmPopover.classList.add('hidden');
-          }
-        });
-      }
-
-      // Track toggle switches
-      const toggles = document.querySelectorAll('input[data-policy]');
-      toggles.forEach(toggle => {
-        toggle.addEventListener('change', (e) => {
-          const policyId = e.target.getAttribute('data-policy');
-          console.log(`Policy ${policyId} toggled to:`, e.target.checked);
-        });
+      document.querySelectorAll('input[data-policy]').forEach((toggle) => {
+        toggle.disabled = true;
+        toggle.closest('label')?.classList.add('cursor-not-allowed', 'opacity-70');
       });
     })();
   </script>
@@ -1963,133 +1939,22 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans
 </div>
 </div>
 </div>
-<!-- Section 1: Executive Action Queue (Pending Human Approvals) -->
+<!-- Section 1: Executive Approval Queue (real data via refreshOperations()) -->
 <div class="flex flex-col gap-space-md">
 <div class="flex items-center justify-between">
 <div class="flex items-center gap-space-sm">
 <span class="material-symbols-outlined text-primary text-xl">gavel</span>
 <h2 class="font-headline-sm text-headline-sm text-on-surface font-medium">Executive Approval Queue</h2>
-<span class="px-space-xs py-0.5 rounded bg-surface-container font-label-sm text-label-sm text-on-surface-variant">2 High Value</span>
+<span id="operationsPendingCountBadge" class="px-space-xs py-0.5 rounded bg-surface-container font-label-sm text-label-sm text-on-surface-variant">0 pending</span>
 </div>
 <div class="font-label-sm text-label-sm text-on-surface-variant flex items-center gap-space-xs">
 <span class="material-symbols-outlined text-sm">shield</span>
-<span>Dual-Custody Multisig Required</span>
+<span>Consequential actions require operator authorization</span>
 </div>
 </div>
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-gutter">
-<!-- Proposal 842: Liquidity Rebalance Card -->
-<div class="group relative rounded-xl bg-surface-container/70 backdrop-blur-2xl p-space-lg shadow-xl flex flex-col justify-between hover:bg-surface-container/90 transition-all duration-300">
-<div class="space-y-space-md">
-<div class="flex items-start justify-between gap-space-sm">
-<div class="space-y-space-xs">
-<div class="flex items-center gap-space-xs">
-<span class="font-label-sm text-label-sm text-primary uppercase font-semibold">PROP-842</span>
-<span class="font-label-sm text-label-sm text-on-surface-variant">•</span>
-<span class="font-label-sm text-label-sm text-on-surface-variant">DeFi Allocation</span>
-</div>
-<h3 class="font-headline-sm text-headline-sm text-on-surface font-semibold">Autonomous Liquidity Rebalancing</h3>
-</div>
-<span class="px-space-sm py-1 rounded bg-secondary-container/50 text-secondary font-label-sm text-label-sm uppercase">Low Risk • 0.12</span>
-</div>
-<!-- Action Metrics Panel -->
-<div class="rounded-lg bg-surface-container-lowest/80 p-space-md space-y-space-sm">
-<div class="flex items-center justify-between">
-<span class="font-body-sm text-body-sm text-on-surface-variant">Proposed Relocation</span>
-<span class="font-label-lg text-label-lg text-on-surface font-bold">$45,000.00 USD</span>
-</div>
-<div class="flex items-center justify-between text-on-surface-variant font-body-sm text-body-sm">
-<span>Destination Pool</span>
-<div class="flex items-center gap-space-xs text-on-surface font-medium">
-<span class="w-2 h-2 rounded-full bg-primary-container"></span>
-<span>Arbitrum USDC Vault (<span class="text-primary">+14.2% APY</span>)</span>
-</div>
-</div>
-<div class="flex items-center justify-between text-on-surface-variant font-body-sm text-body-sm pt-1">
-<span>Policy Invariant Suite</span>
-<div class="flex items-center gap-space-xs text-primary font-label-sm text-label-sm">
-<span class="material-symbols-outlined text-sm">check_circle</span>
-<span>Passed 14/14 Automated Invariants</span>
-</div>
-</div>
-</div>
-<!-- Context Metadata -->
-<div class="flex items-center justify-between font-label-sm text-label-sm text-on-surface-variant">
-<div class="flex items-center gap-space-xs">
-<span>Origin Agent:</span>
-<span class="text-on-surface bg-surface-container-high px-space-xs py-0.5 rounded font-mono">Live agent</span>
-</div>
-<div class="flex items-center gap-space-xs">
-<span>Time-to-Execution:</span>
-<span class="text-on-surface font-medium">08:14 UTC</span>
-</div>
-</div>
-</div>
-<!-- Buttons Row -->
-<div class="pt-space-lg mt-space-md flex items-center gap-space-sm">
-<button class="flex-1 bg-primary-container hover:bg-inverse-primary active:scale-[0.98] text-on-primary font-body-md text-body-md font-medium py-2.5 px-space-md rounded-lg transition-all flex items-center justify-center gap-space-xs shadow-md" id="auth-btn-842" onclick="App.openModal('modalConsequentialAuth')">
-<span class="material-symbols-outlined text-base">verified</span>
-<span>Authorize Action</span>
-</button>
-<button class="bg-surface-container-high hover:bg-surface-bright text-on-surface font-body-md text-body-md py-2.5 px-space-md rounded-lg transition-all flex items-center justify-center gap-space-xs">
-<span class="material-symbols-outlined text-base">account_tree</span>
-<span>Inspect DAG Proof</span>
-</button>
-</div>
-</div>
-<!-- Proposal 843: Oracle Data Quota Expansion -->
-<div class="group relative rounded-xl bg-surface-container/70 backdrop-blur-2xl p-space-lg shadow-xl flex flex-col justify-between hover:bg-surface-container/90 transition-all duration-300">
-<div class="space-y-space-md">
-<div class="flex items-start justify-between gap-space-sm">
-<div class="space-y-space-xs">
-<div class="flex items-center gap-space-xs">
-<span class="font-label-sm text-label-sm text-tertiary-container uppercase font-semibold">PROP-843</span>
-<span class="font-label-sm text-label-sm text-on-surface-variant">•</span>
-<span class="font-label-sm text-label-sm text-on-surface-variant">Compute & Feeds</span>
-</div>
-<h3 class="font-headline-sm text-headline-sm text-on-surface font-semibold">Oracle Data Quota Expansion</h3>
-</div>
-<span class="px-space-sm py-1 rounded bg-surface-container-high text-on-surface-variant font-label-sm text-label-sm uppercase">Urgency: Medium</span>
-</div>
-<!-- Action Metrics Panel -->
-<div class="rounded-lg bg-surface-container-lowest/80 p-space-md space-y-space-sm">
-<div class="flex items-center justify-between">
-<span class="font-body-sm text-body-sm text-on-surface-variant">Requested Allowance</span>
-<span class="font-label-lg text-label-lg text-on-surface font-bold">10,000 CR Compute Credits</span>
-</div>
-<div class="flex items-center justify-between text-on-surface-variant font-body-sm text-body-sm">
-<span>Allocation Objective</span>
-<span class="text-on-surface font-medium">Continuous MEV & Mempool Sensor</span>
-</div>
-<div class="flex items-center justify-between text-on-surface-variant font-body-sm text-body-sm pt-1">
-<span>Threshold Consumption</span>
-<div class="w-40 bg-surface-container-high rounded-full h-1.5 overflow-hidden">
-<div class="bg-primary h-full rounded-full w-[82%]"></div>
-</div>
-</div>
-</div>
-<!-- Context Metadata -->
-<div class="flex items-center justify-between font-label-sm text-label-sm text-on-surface-variant">
-<div class="flex items-center gap-space-xs">
-<span>Origin Agent:</span>
-<span class="text-on-surface bg-surface-container-high px-space-xs py-0.5 rounded font-mono">SCRAPER-01</span>
-</div>
-<div class="flex items-center gap-space-xs">
-<span>Impact Target:</span>
-<span class="text-on-surface font-medium">RPC Stream Quota</span>
-</div>
-</div>
-</div>
-<!-- Buttons Row -->
-<div class="pt-space-lg mt-space-md flex items-center gap-space-sm">
-<button class="flex-1 bg-primary-container hover:bg-inverse-primary active:scale-[0.98] text-on-primary font-body-md text-body-md font-medium py-2.5 px-space-md rounded-lg transition-all flex items-center justify-center gap-space-xs shadow-md" id="auth-btn-843" onclick="App.openModal('modalConsequentialAuth')">
-<span class="material-symbols-outlined text-base">check</span>
-<span>Authorize</span>
-</button>
-<button class="bg-surface-container-high hover:bg-surface-bright text-on-surface-variant hover:text-on-surface font-body-md text-body-md py-2.5 px-space-md rounded-lg transition-all flex items-center justify-center gap-space-xs">
-<span class="material-symbols-outlined text-base">close</span>
-<span>Decline</span>
-</button>
-</div>
+<div id="operationsQueueContainer" class="grid grid-cols-1 lg:grid-cols-2 gap-gutter">
+<div class="col-span-full text-center py-space-xl text-on-surface-variant font-body-sm text-body-sm">
+Waiting for organisation data&hellip;
 </div>
 </div>
 </div>
@@ -2276,28 +2141,7 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans
 </div>
 </div>
 </div>
-<script>
-    // Executive Quick Interaction handlers for immediate feedback
-    const btn842 = document.getElementById('auth-btn-842');
-    if (btn842) {
-      btn842.addEventListener('click', function() {
-        this.innerHTML = '<span class="material-symbols-outlined text-base">done</span> <span>Authorized • Sent to Multisig</span>';
-        this.classList.remove('bg-primary-container', 'hover:bg-inverse-primary');
-        this.classList.add('bg-surface-container-high', 'text-on-surface', 'cursor-default');
-        this.disabled = true;
-      });
-    }
 
-    const btn843 = document.getElementById('auth-btn-843');
-    if (btn843) {
-      btn843.addEventListener('click', function() {
-        this.innerHTML = '<span class="material-symbols-outlined text-base">done</span> <span>Quota Extended</span>';
-        this.classList.remove('bg-primary-container', 'hover:bg-inverse-primary');
-        this.classList.add('bg-surface-container-high', 'text-on-surface', 'cursor-default');
-        this.disabled = true;
-      });
-    }
-  </script>
 </div>
       </section>
 

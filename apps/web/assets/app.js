@@ -588,6 +588,97 @@ const App = (() => {
         alertBox.innerHTML = '';
       }
     }
+
+    const container = $('operationsQueueContainer');
+    const badge = $('operationsPendingCountBadge');
+    if (!container) return;
+
+    const ops = await API.getOperations(activeOrgId).catch(() => ({ operations: [] }));
+    const operations = (ops && ops.operations) || [];
+    // "Pending" here means states that genuinely require or are awaiting
+    // action, not every historical operation.
+    const actionableStates = new Set(['created', 'unknown']);
+    const pending = operations.filter((o) => actionableStates.has(o.state));
+
+    if (badge) badge.textContent = `${pending.length} pending`;
+
+    if (operations.length === 0) {
+      container.innerHTML = `
+        <div class="col-span-full text-center py-space-xl text-on-surface-variant font-body-sm text-body-sm">
+          No consequential operations yet — run the demo to generate one.
+        </div>`;
+      return;
+    }
+
+    const stateBadge = (state) => {
+      const map = {
+        created: ['bg-secondary-container/50 text-secondary', 'Awaiting Authorization'],
+        authorized: ['bg-blue-500/10 text-blue-300', 'Authorized'],
+        escrowed: ['bg-blue-500/10 text-blue-300', 'Escrowed'],
+        submitted: ['bg-amber-500/10 text-amber-300', 'Submitted'],
+        succeeded: ['bg-emerald-500/10 text-emerald-300', 'Succeeded'],
+        failed: ['bg-red-500/10 text-red-300', 'Failed'],
+        unknown: ['bg-amber-500/20 text-amber-300', 'Unknown — Reconciliation Required'],
+        reconciling: ['bg-amber-500/10 text-amber-300', 'Reconciling'],
+        reconciled: ['bg-emerald-500/10 text-emerald-300', 'Reconciled'],
+      };
+      const [cls, label] = map[state] || ['bg-surface-container text-on-surface-variant', state];
+      return `<span class="px-space-sm py-1 rounded ${cls} font-label-sm text-label-sm uppercase">${esc(label)}</span>`;
+    };
+
+    container.innerHTML = operations.slice(0, 12).map((op) => `
+      <div class="group relative rounded-xl bg-surface-container/70 backdrop-blur-2xl p-space-lg shadow-xl flex flex-col justify-between">
+        <div class="space-y-space-md">
+          <div class="flex items-start justify-between gap-space-sm">
+            <div class="space-y-space-xs">
+              <div class="flex items-center gap-space-xs">
+                <span class="font-label-sm text-label-sm text-primary uppercase font-semibold font-mono">${esc(op.id.slice(0, 12))}</span>
+                <span class="font-label-sm text-label-sm text-on-surface-variant">&bull;</span>
+                <span class="font-label-sm text-label-sm text-on-surface-variant">${esc(op.action_type)}</span>
+              </div>
+              <h3 class="font-headline-sm text-headline-sm text-on-surface font-semibold">${esc(op.target)}</h3>
+            </div>
+            ${stateBadge(op.state)}
+          </div>
+          <div class="rounded-lg bg-surface-container-lowest/80 p-space-md space-y-space-sm">
+            <div class="flex items-center justify-between">
+              <span class="font-body-sm text-body-sm text-on-surface-variant">Amount</span>
+              <span class="font-label-lg text-label-lg text-on-surface font-bold">${op.amount} CR</span>
+            </div>
+            <div class="flex items-center justify-between text-on-surface-variant font-body-sm text-body-sm">
+              <span>Provider</span>
+              <span class="text-on-surface font-medium">${esc(op.provider_name)}</span>
+            </div>
+            ${op.error_message ? `
+            <div class="flex items-start justify-between text-on-surface-variant font-body-sm text-body-sm pt-1 gap-2">
+              <span>Error</span>
+              <span class="text-red-300 font-medium text-right">${esc(op.error_message)}</span>
+            </div>` : ''}
+          </div>
+          <div class="flex items-center justify-between font-label-sm text-label-sm text-on-surface-variant">
+            <span>Proposal: <span class="text-on-surface font-mono">${esc(op.proposal_id.slice(0, 12))}</span></span>
+            <span>${fmtTime(op.updated_at)}</span>
+          </div>
+        </div>
+        ${op.state === 'unknown' ? `
+        <div class="pt-space-lg mt-space-md">
+          <button type="button" onclick="App.reconcileOp('${esc(op.id)}')" class="w-full bg-amber-500 hover:bg-amber-400 text-black font-body-md text-body-md font-medium py-2.5 px-space-md rounded-lg transition-all flex items-center justify-center gap-space-xs">
+            <span class="material-symbols-outlined text-base">sync_problem</span>
+            <span>Reconcile Now</span>
+          </button>
+        </div>` : ''}
+      </div>
+    `).join('');
+  }
+
+  async function reconcileOp(opId) {
+    if (!activeOrgId) return;
+    try {
+      await API.reconcileOperation(activeOrgId, opId);
+      await refreshOperations();
+    } catch (err) {
+      alert(`Reconciliation failed: ${err.message}`);
+    }
   }
 
   // ==================== VIEW 7: AUDIT ====================
@@ -1115,6 +1206,7 @@ return {
     verifyAuditChain,
     runBenchmark,
     reconcileLatest,
+    reconcileOp,
     selectOrg,
     stepDaemon,
     refreshCurrentView,
