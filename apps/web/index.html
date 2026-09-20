@@ -13,7 +13,7 @@
 <script>
 tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans-serif'],mono:['JetBrains Mono','monospace']}}}};
 </script>
-<link rel="stylesheet" href="/assets/app.css?v=20260920-2">
+<link rel="stylesheet" href="/assets/app.css?v=20260920-3">
 </head>
 <body class="kalyx-shell">
   <div class="kalyx-noise" aria-hidden="true"></div>
@@ -23,6 +23,9 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans
       <span class="kalyx-mark"><i></i><i></i></span>
       <span>KALYX</span>
     </a>
+    <button id="navToggle" type="button" class="kalyx-nav-toggle" onclick="App.toggleNavigation()" aria-label="Open navigation" aria-expanded="false">
+      <span class="material-symbols-outlined">menu</span>
+    </button>
     <div class="kalyx-top-context">
       <span class="kalyx-context-dot"></span>
       <span>COMMAND CENTRE</span>
@@ -75,6 +78,7 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans
       <a href="/" class="kalyx-back-link">← Kalyx system</a>
     </div>
   </aside>
+  <button id="navScrim" class="kalyx-nav-scrim" type="button" aria-label="Close navigation" onclick="App.closeNavigation()"></button>
 
   <main class="kalyx-main">
     <section id="view-overview" class="view-panel">
@@ -536,7 +540,7 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans
         <span>Consensus Finality Live telemetry</span>
       </div>
       <div>
-        &copy; 2025 Kalyx Protocol. All autonomous directives preserved.
+        &copy; 2026 Kalyx Protocol. All autonomous directives preserved.
       </div>
     </div>
   </footer>
@@ -566,6 +570,6 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans
     </div>
   </div>
   <script src="/assets/api.js?v=20260920-1"></script>
-  <script src="/assets/app.js?v=20260920-1"></script>
+  <script src="/assets/app.js?v=20260920-2"></script>
 </body>
 </html>
