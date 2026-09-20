@@ -173,6 +173,8 @@ def _record_live_demo_stage(session_id: str, stage: str, evidence: Dict[str, Any
         "evidence": _live_demo_json(_redact_live_demo(evidence)),
         "timestamp": datetime.utcnow().isoformat() + "Z",
     }
+    checkpoint = 0
+    auto_seconds = 0.0
     with _live_demo_lock:
         session = _live_demo_sessions.get(session_id)
         if not session:
@@ -183,33 +185,36 @@ def _record_live_demo_stage(session_id: str, stage: str, evidence: Dict[str, Any
         session["updated_at"] = item["timestamp"]
         session["history"].append(item)
         mode = session.get("mode", "guided")
-        advance_event = session.get("advance_event")
-
-    if mode == "judge" and advance_event and key in {"PROPOSE", "AUTHORIZE", "EXECUTE", "VERIFY", "SETTLE", "AUDIT"}:
-        advance_event.clear()
-        auto_seconds = 0.0
-        if key == "PROPOSE":
-            auto_seconds = max(
-                0.0,
-                min(60.0, float(os.getenv("KALYX_JUDGE_PROPOSAL_AUTO_SECONDS", "15"))),
+        if mode == "judge" and key in {"PROPOSE", "AUTHORIZE", "EXECUTE", "VERIFY", "SETTLE", "AUDIT"}:
+            session["checkpoint_counter"] = int(session.get("checkpoint_counter", 0)) + 1
+            checkpoint = session["checkpoint_counter"]
+            session["active_checkpoint"] = checkpoint
+            auto_seconds = (
+                max(0.0, min(60.0, float(os.getenv("KALYX_JUDGE_PROPOSAL_AUTO_SECONDS", "15"))))
+                if key == "PROPOSE"
+                else 0.0
             )
-        with _live_demo_lock:
-            session = _live_demo_sessions.get(session_id)
-            if session:
-                session["waiting_for_judge"] = True
-                session["can_continue"] = True
-                session["auto_advance_seconds"] = auto_seconds
-                session["auto_advance_at"] = time.time() + auto_seconds if auto_seconds > 0 else None
-                session["control_message"] = (
-                    f"Agent proposal submitted. Automatically advancing to policy review in {int(auto_seconds)}s."
-                    if key == "PROPOSE" and auto_seconds > 0
-                    else "Judge checkpoint reached. Continue when ready."
-                )
-        # A zero-second proposal window is used by tests and means the
-        # agent-owned submission releases immediately. Other stages remain
-        # genuinely judge-gated when auto_seconds is zero.
-        if key != "PROPOSE" or auto_seconds > 0:
-            advance_event.wait(timeout=auto_seconds if auto_seconds > 0 else None)
+            session["waiting_for_judge"] = True
+            session["can_continue"] = True
+            session["auto_advance_seconds"] = auto_seconds
+            session["auto_advance_at"] = time.time() + auto_seconds if auto_seconds > 0 else None
+            session["control_message"] = (
+                f"Agent proposal submitted. Automatically advancing to policy review in {int(auto_seconds)}s."
+                if key == "PROPOSE" and auto_seconds > 0
+                else "Judge checkpoint reached. Continue when ready."
+            )
+
+    if checkpoint:
+        deadline = time.time() + auto_seconds if auto_seconds > 0 else None
+        while True:
+            with _live_demo_lock:
+                session = _live_demo_sessions.get(session_id)
+                if not session:
+                    return
+                released = int(session.get("released_checkpoint", 0)) >= checkpoint
+            if released or (deadline is not None and time.time() >= deadline):
+                break
+            time.sleep(0.025)
         with _live_demo_lock:
             session = _live_demo_sessions.get(session_id)
             if session:
@@ -1224,7 +1229,9 @@ def start_live_demo(
             "auto_advance_seconds": 0,
             "auto_advance_at": None,
             "control_message": "",
-            "advance_event": threading.Event() if mode == "judge" else None,
+            "checkpoint_counter": 0,
+            "active_checkpoint": 0,
+            "released_checkpoint": 0,
             "updated_at": datetime.utcnow().isoformat() + "Z",
         }
 
@@ -1269,10 +1276,10 @@ def continue_live_demo(session_id: str) -> Dict[str, Any]:
             raise HTTPException(status_code=409, detail="Session is not running in Judge Mode")
         if not session.get("waiting_for_judge"):
             return _live_demo_json(session)
-        advance_event = session.get("advance_event")
-        if not advance_event:
+        checkpoint = int(session.get("active_checkpoint", 0))
+        if checkpoint <= 0:
             raise HTTPException(status_code=409, detail="Judge checkpoint is unavailable")
-        advance_event.set()
+        session["released_checkpoint"] = checkpoint
         session["control_message"] = "Judge released the checkpoint. Advancing to the next real engine boundary."
         return _live_demo_json(session)
 
