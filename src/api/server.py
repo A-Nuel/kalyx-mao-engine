@@ -205,7 +205,11 @@ def _record_live_demo_stage(session_id: str, stage: str, evidence: Dict[str, Any
                     if key == "PROPOSE" and auto_seconds > 0
                     else "Judge checkpoint reached. Continue when ready."
                 )
-        advance_event.wait(timeout=auto_seconds if auto_seconds > 0 else None)
+        # A zero-second proposal window is used by tests and means the
+        # agent-owned submission releases immediately. Other stages remain
+        # genuinely judge-gated when auto_seconds is zero.
+        if key != "PROPOSE" or auto_seconds > 0:
+            advance_event.wait(timeout=auto_seconds if auto_seconds > 0 else None)
         with _live_demo_lock:
             session = _live_demo_sessions.get(session_id)
             if session:
