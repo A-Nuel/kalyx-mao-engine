@@ -58,6 +58,14 @@ const App = (() => {
     const target = validRoutes.includes(route) ? route : 'overview';
     currentRoute = target;
 
+    // Route changes must never inherit a stale document scroll lock. If the
+    // tour itself is still visible it retains the lock until it closes.
+    const tourOverlay = $('kalyxTour');
+    if (!tourOverlay || tourOverlay.classList.contains('hidden')) {
+      document.documentElement.classList.remove('overflow-hidden');
+      document.body.classList.remove('overflow-hidden');
+    }
+
     // Update URL hash
     if (window.location.hash !== `#${target}`) {
       window.location.hash = `#${target}`;
@@ -87,21 +95,47 @@ const App = (() => {
   }
 
   // Drawers Controller
+  const drawerCloseTimers = new Map();
+
   function openDrawer(id) {
-    closeDrawers();
     const el = $(id);
-    if (el) {
-      el.classList.remove('hidden');
-      requestAnimationFrame(() => el.classList.add('drawer-open'));
+    if (!el) return;
+
+    // Cancel any delayed close for the drawer being opened. The previous
+    // controller scheduled a hide for every drawer, including the drawer
+    // that was about to open, which caused the New Mission composer to
+    // flash open and then disappear ~200ms later.
+    const pending = drawerCloseTimers.get(id);
+    if (pending) {
+      clearTimeout(pending);
+      drawerCloseTimers.delete(id);
     }
+
+    closeDrawers(id);
+    el.classList.remove('hidden');
+    requestAnimationFrame(() => el.classList.add('drawer-open'));
   }
 
-  function closeDrawers() {
+  function closeDrawers(exceptId = null) {
     document.querySelectorAll('.fixed.z-50').forEach(el => {
-      if (el.id && el.id.startsWith('drawer')) {
-        el.classList.remove('drawer-open');
-        setTimeout(() => el.classList.add('hidden'), 200);
+      if (!el.id || !el.id.startsWith('drawer') || el.id === exceptId) return;
+
+      const pending = drawerCloseTimers.get(el.id);
+      if (pending) clearTimeout(pending);
+
+      // Hidden drawers do not need a delayed hide. Avoid creating timers
+      // that can race with a subsequent openDrawer() call.
+      if (el.classList.contains('hidden')) {
+        drawerCloseTimers.delete(el.id);
+        return;
       }
+
+      el.classList.remove('drawer-open');
+      const timer = setTimeout(() => {
+        el.classList.add('hidden');
+        drawerCloseTimers.delete(el.id);
+      }, 200);
+      drawerCloseTimers.set(el.id, timer);
     });
   }
 
@@ -938,14 +972,28 @@ const App = (() => {
     try{renderTourStep();}
     catch(err){console.error('Tour step failed, closing tour safely:',err);closeTour();}
   }
-  function closeTour(){$('kalyxTour')?.classList.add('hidden');document.body.classList.remove('overflow-hidden');document.querySelectorAll('.tour-target').forEach(e=>e.classList.remove('tour-target'));}
+  function closeTour(){
+    $('kalyxTour')?.classList.add('hidden');
+    document.documentElement.classList.remove('overflow-hidden');
+    document.body.classList.remove('overflow-hidden');
+    document.querySelectorAll('.tour-target').forEach(e=>e.classList.remove('tour-target'));
+  }
   function skipTour(){closeTour();localStorage.setItem('kalyx-tour-seen','1');}
   let tourResizeTimer;
   function handleTourResize(){clearTimeout(tourResizeTimer);tourResizeTimer=setTimeout(()=>{const tour=$('kalyxTour');if(!tour||tour.classList.contains('hidden'))return;try{renderTourStep();}catch(err){console.error('Tour resize re-render failed, closing tour safely:',err);closeTour();}},50);}
   window.addEventListener('resize',handleTourResize);
   window.addEventListener('orientationchange',()=>setTimeout(handleTourResize,100));
   function startLoopGuide(){ $('loopGuide')?.classList.remove('hidden'); }
-  function closeLoopGuide(){ $('loopGuide')?.classList.add('hidden'); }
+  function closeLoopGuide(){
+    $('loopGuide')?.classList.add('hidden');
+    // Keep the document scroll state authoritative even if another overlay
+    // was dismissed by navigation or an exception.
+    const tour = $('kalyxTour');
+    if (!tour || tour.classList.contains('hidden')) {
+      document.documentElement.classList.remove('overflow-hidden');
+      document.body.classList.remove('overflow-hidden');
+    }
+  }
   // Universal safety net for both full-screen overlays (tour + loop
   // guide): Escape always closes whichever is open, and clicking the
   // dimmed backdrop (not the card inside it) closes it too. Without
@@ -1192,11 +1240,10 @@ const App = (() => {
 
   // Initialize application
   async function init() {
-    // Defensive cleanup: overflow-hidden is only ever meant to be applied
-    // while the tour overlay is open (see startTour/closeTour above). A
-    // fresh page load should never start with it already present, but if
-    // a prior session somehow left it stuck, clear it now rather than let
-    // the whole page silently start non-scrollable.
+    // Defensive cleanup: the tour is the only component allowed to lock
+    // document scrolling. Clear both roots on boot so a stale class from a
+    // previous overlay state can never make the command centre start frozen.
+    document.documentElement.classList.remove('overflow-hidden');
     document.body.classList.remove('overflow-hidden');
 
     // 1. Health check
