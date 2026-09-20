@@ -902,16 +902,55 @@ const App = (() => {
     if(st.route && st.route!==currentRoute){setRoute(st.route);}
     positionTourTarget(st.target);positionTourCard(st.target);
   }
-  function startTour(){tourIndex=0;$('kalyxTour')?.classList.remove('hidden');document.body.classList.add('overflow-hidden');requestAnimationFrame(renderTourStep);}
-  function nextTourStep(){if(tourIndex>=TOUR_STEPS.length-1){closeTour();return;}tourIndex++;renderTourStep();}
+  function startTour(){
+    tourIndex=0;$('kalyxTour')?.classList.remove('hidden');document.body.classList.add('overflow-hidden');
+    // requestAnimationFrame runs renderTourStep() outside the normal call
+    // stack, so an uncaught exception in it (e.g. setRoute() throwing on
+    // an unexpected route, or a target element genuinely missing) would
+    // otherwise never reach a catch block anywhere -- the tour overlay
+    // (position:fixed, inset:0, see .kalyx-overlay in app.css) would stay
+    // visible over the whole page forever, and since it sits on top of
+    // everything it blocks scroll and clicks alike even with no explicit
+    // overflow:hidden anywhere. Wrapping this call is the fix for anyone
+    // reporting the page "won't scroll" after opening the walkthrough.
+    requestAnimationFrame(()=>{
+      try{renderTourStep();}
+      catch(err){console.error('Tour step failed, closing tour safely:',err);closeTour();}
+    });
+  }
+  function nextTourStep(){
+    if(tourIndex>=TOUR_STEPS.length-1){closeTour();return;}
+    tourIndex++;
+    try{renderTourStep();}
+    catch(err){console.error('Tour step failed, closing tour safely:',err);closeTour();}
+  }
   function closeTour(){$('kalyxTour')?.classList.add('hidden');document.body.classList.remove('overflow-hidden');document.querySelectorAll('.tour-target').forEach(e=>e.classList.remove('tour-target'));}
   function skipTour(){closeTour();localStorage.setItem('kalyx-tour-seen','1');}
   let tourResizeTimer;
-  function handleTourResize(){clearTimeout(tourResizeTimer);tourResizeTimer=setTimeout(()=>{const tour=$('kalyxTour');if(!tour||tour.classList.contains('hidden'))return;renderTourStep();},50);}
+  function handleTourResize(){clearTimeout(tourResizeTimer);tourResizeTimer=setTimeout(()=>{const tour=$('kalyxTour');if(!tour||tour.classList.contains('hidden'))return;try{renderTourStep();}catch(err){console.error('Tour resize re-render failed, closing tour safely:',err);closeTour();}},50);}
   window.addEventListener('resize',handleTourResize);
   window.addEventListener('orientationchange',()=>setTimeout(handleTourResize,100));
   function startLoopGuide(){ $('loopGuide')?.classList.remove('hidden'); }
   function closeLoopGuide(){ $('loopGuide')?.classList.add('hidden'); }
+  // Universal safety net for both full-screen overlays (tour + loop
+  // guide): Escape always closes whichever is open, and clicking the
+  // dimmed backdrop (not the card inside it) closes it too. Without
+  // this, the only way out of a stuck overlay was the in-card buttons --
+  // if those never rendered (see the try/catch above) or someone
+  // navigated away and back, there was no escape hatch at all, and a
+  // position:fixed;inset:0 overlay left open blocks scroll/clicks on
+  // the whole page indefinitely.
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const tour = $('kalyxTour');
+    if (tour && !tour.classList.contains('hidden')) { closeTour(); return; }
+    const guide = $('loopGuide');
+    if (guide && !guide.classList.contains('hidden')) { closeLoopGuide(); }
+  });
+  document.addEventListener('click', (e) => {
+    if (e.target && e.target.id === 'kalyxTour') closeTour();
+    if (e.target && e.target.id === 'loopGuide') closeLoopGuide();
+  });
   function updateLiveClock(){const el=$('overviewClock'); if(el) el.textContent=new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})+' UTC';}
   // ==================== DRAWERS & ACTIONS ====================
 
@@ -1034,6 +1073,13 @@ const App = (() => {
 
   // Initialize application
   async function init() {
+    // Defensive cleanup: overflow-hidden is only ever meant to be applied
+    // while the tour overlay is open (see startTour/closeTour above). A
+    // fresh page load should never start with it already present, but if
+    // a prior session somehow left it stuck, clear it now rather than let
+    // the whole page silently start non-scrollable.
+    document.body.classList.remove('overflow-hidden');
+
     // 1. Health check
     try {
       await API.getHealth();
