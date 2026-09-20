@@ -54,7 +54,7 @@ def test_judge_mode_pauses_at_real_boundaries_and_auto_advances_proposal(tmp_pat
     monkeypatch.setenv("KALYX_DB", str(tmp_path / "judge_demo.db"))
     monkeypatch.setenv("KALYX_PUBLIC_DEMO", "true")
     monkeypatch.setenv("KALYX_LIVE_DEMO_STAGE_DELAY", "0")
-    monkeypatch.setenv("KALYX_JUDGE_PROPOSAL_AUTO_SECONDS", "0")
+    monkeypatch.setenv("KALYX_JUDGE_PROPOSAL_AUTO_SECONDS", "1")
 
     client = TestClient(server.app)
     started = client.post("/api/demo/live/start?mode=judge")
