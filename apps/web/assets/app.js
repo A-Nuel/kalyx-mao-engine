@@ -9,7 +9,6 @@ const App = (() => {
   let liveDemoSessionId = null;
   let liveDemoPollTimer = null;
   let navigationCollapsed = true;
-  let navigationCollapsed = true;
   const LIVE_DEMO_STAGES = [
     ['INITIALIZE', 'Initialize', 'Mission accepted by the control plane'],
     ['PLAN', 'Plan', 'Agents decompose the objective'],
