@@ -1,7 +1,7 @@
 import os
 import uuid
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, Callable
 
 from src.agents.mock_adapter import MockAgentAdapter
 from src.agents.openrouter_adapter import OpenRouterAgentAdapter
@@ -41,6 +41,7 @@ def run_mission(
     tenant_id: str = "tenant-demo",
     strategy: str = "PERFORMANCE",
     organisation_id: str | None = None,
+    stage_callback: Callable[[str, Dict[str, Any]], None] | None = None,
 ) -> Dict[str, Any]:
     """Run one bounded MAO mission with organisation-scoped resources."""
     if not mission.strip():
@@ -150,6 +151,7 @@ def run_mission(
             human_gate=HumanGate(), ceo=CEOAgent(ids["ceo"], adapter), researcher=ResearcherAgent(ids["research"], adapter),
             strategist=StrategistAgent(ids["strategy"], adapter), financial_analyst=FinancialAnalystAgent(ids["finance"], adapter),
             auditor=auditor, repository=repo, max_replan_attempts=3,
+            stage_callback=stage_callback,
         )
         engine.start_mission()
         tasks = engine.decompose_and_plan()
