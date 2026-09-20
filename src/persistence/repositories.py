@@ -14,7 +14,7 @@ from src.domain.entities import (
     LedgerEntry
 )
 from src.domain.enums import OrgState, AgentRole, AgentStatus, TaskStatus, ActionType, PolicyResult
-from src.domain.events import AuditEvent, compute_payload_hash, compute_event_hash, canonical_json
+from src.domain.events import AuditEvent, compute_payload_hash, compute_event_hash, canonical_json, canonical_timestamp_iso
 from src.domain.exceptions import InsufficientCreditsError, TamperedAuditLogError
 
 SYSTEM_MINT = "SYSTEM_MINT"
@@ -179,7 +179,7 @@ class SqliteEventStore:
             sequence_id = 1
             previous_event_hash = GENESIS_PREVIOUS_HASH
         timestamp = datetime.utcnow()
-        timestamp_iso = timestamp.isoformat()
+        timestamp_iso = canonical_timestamp_iso(timestamp)
         payload_hash = compute_payload_hash(payload)
         event_hash = compute_event_hash(sequence_id=sequence_id, timestamp_iso=timestamp_iso,
                                         actor_id=actor_id, event_type=event_type, entity_id=entity_id,
@@ -248,7 +248,7 @@ class SqliteEventStore:
             if event.payload_hash != compute_payload_hash(event.payload):
                 return False, f"Payload hash corrupted at sequence {event.sequence_id}"
             recomputed_event_hash = compute_event_hash(sequence_id=event.sequence_id,
-                                                       timestamp_iso=event.timestamp.isoformat(),
+                                                       timestamp_iso=canonical_timestamp_iso(event.timestamp),
                                                        actor_id=event.actor_id, event_type=event.event_type,
                                                        entity_id=event.entity_id, payload_hash=event.payload_hash,
                                                        previous_event_hash=event.previous_event_hash)
