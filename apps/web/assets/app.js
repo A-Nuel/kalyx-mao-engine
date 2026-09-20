@@ -200,7 +200,6 @@ const App = (() => {
           await refreshOverview();
           break;
         case 'demo':
-          renderLiveDemoSnapshot(null);
           break;
         case 'missions':
           await refreshMissions();
