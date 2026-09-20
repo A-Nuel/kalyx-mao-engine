@@ -1063,7 +1063,7 @@ const App = (() => {
           rows = [['DECISION', d.result], ['RULE', d.violated_rule_id || d.rule_id || 'policy evaluation'], ['DECISION ID', d.id], ['PROPOSAL', evidence.proposal_id]];
         } else if (latest.key === 'EXECUTE') {
           const r = evidence.receipt || {};
-          rows = [['RECEIPT', r.id], ['HTTP STATUS', r.http_status], ['COST', r.cost_credits], ['TARGET', r.target], ['AUTH TOKEN', r.authorization_token ? r.authorization_token.slice(0, 18) + '…' : '—']];
+          rows = [['RECEIPT', r.id], ['HTTP STATUS', r.http_status], ['COST', r.cost_credits], ['TARGET', r.target], ['AUTHORIZATION', r.authorization_token ? 'BOUND / CONSUMED' : 'NOT PRESENT']];
         } else if (latest.key === 'VERIFY') {
           const v = evidence.verification || {};
           rows = [['VERIFICATION', v.id || v.status || 'PASSED'], ['RECEIPT', evidence.receipt_id], ['EVIDENCE HASH', v.evidence_hash || v.hash || 'recorded']];
