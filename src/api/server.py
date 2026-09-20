@@ -184,7 +184,9 @@ def _run_live_demo_session(session_id: str, tenant_id: str) -> None:
             budget=100,
             live=False,
             tenant_id=tenant_id,
-            stage_callback=lambda stage, evidence: _record_live_demo_stage(session_id, stage, evidence),
+            stage_callback=lambda stage, evidence=None, **kwargs: _record_live_demo_stage(
+                session_id, stage, {**(evidence or {}), **kwargs}
+            ),
         )
         with _live_demo_lock:
             session = _live_demo_sessions.get(session_id)
