@@ -1180,8 +1180,9 @@ const App = (() => {
 
     // 1. Health check
     try {
-      await API.getHealth();
+      const health = await API.getHealth();
       setTxt('engineStatusText', 'OPERATIONAL');
+      setTxt('overviewEnvironment', String(health.environment || 'unknown').toUpperCase());
     } catch (err) {
       console.warn('Health check failed:', err);
       setTxt('engineStatusText', 'DEGRADED');
