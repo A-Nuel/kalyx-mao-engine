@@ -18,6 +18,7 @@ from src.api.identity_auth import require_identity_for_org, require_identity_for
 from src.api.mission_service import run_mission
 from src.api.security_middleware import CorrelationIdMiddleware, RateLimitMiddleware, RequestBodyLimitMiddleware
 from src.persistence.factory import create_database, create_scoped_ledger
+from src.persistence.database import parse_db_timestamp
 from src.domain.entities import Organisation
 from src.domain.enums import OrgState
 from src.domain.events import AuditEvent
@@ -499,7 +500,7 @@ def events(org_id: str, limit: int = Query(default=200, ge=1, le=1000)) -> list[
         scoped = [
             AuditEvent(
                 sequence_id=r["sequence_id"],
-                timestamp=datetime.fromisoformat(r["timestamp"]),
+                timestamp=parse_db_timestamp(r["timestamp"]),
                 actor_id=r["actor_id"],
                 event_type=r["event_type"],
                 entity_id=r["entity_id"],

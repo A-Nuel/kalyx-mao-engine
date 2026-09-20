@@ -40,6 +40,7 @@ from src.domain.entities import (
 )
 from src.domain.enums import ActionType, OperationState, PolicyResult, ProviderOutcome
 from src.domain.events import canonical_json
+from src.persistence.database import parse_db_timestamp
 from src.domain.exceptions import (
     ExternalExecutionError,
     IdempotencyConflict,
@@ -168,8 +169,8 @@ class ConsequentialOperationRepository:
             provider_reference=row["provider_reference"],
             state=OperationState(row["state"]),
             error_message=row["error_message"],
-            created_at=datetime.fromisoformat(row["created_at"]),
-            updated_at=datetime.fromisoformat(row["updated_at"]),
+            created_at=parse_db_timestamp(row["created_at"]),
+            updated_at=parse_db_timestamp(row["updated_at"]),
         )
 
 

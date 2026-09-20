@@ -6,6 +6,8 @@ import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+from src.persistence.database import parse_db_timestamp
+
 from src.domain.economy import (
     AgentPerformanceRecord,
     AllocationStrategy,
@@ -162,9 +164,9 @@ class EconomyRepository:
                 previous_score=r["previous_score"],
                 new_score=r["new_score"],
                 score_delta=r["score_delta"],
+                created_at=parse_db_timestamp(r["created_at"]),
                 trigger_event=r["trigger_event"],
                 evidence_hash=r["evidence_hash"],
-                created_at=datetime.fromisoformat(r["created_at"]),
             )
             for r in rows
         ]
@@ -217,7 +219,7 @@ class EconomyRepository:
                 allocations=json.loads(r["allocations"]) if isinstance(r["allocations"], str) else r["allocations"],
                 authority_limits=json.loads(r["authority_limits"]) if isinstance(r["authority_limits"], str) else r["authority_limits"],
                 rationale=r["rationale"],
-                created_at=datetime.fromisoformat(r["created_at"]),
+                created_at=parse_db_timestamp(r["created_at"]),
             )
             for r in rows
         ]
@@ -279,8 +281,8 @@ class EconomyRepository:
         ]
 
     def _row_to_perf_record(self, row: Any) -> AgentPerformanceRecord:
-        last_eval = datetime.fromisoformat(row["last_evaluated_at"]) if row["last_evaluated_at"] else None
-        created = datetime.fromisoformat(row["created_at"]) if row["created_at"] else datetime.utcnow()
+        last_eval = parse_db_timestamp(row["last_evaluated_at"]) if row["last_evaluated_at"] else None
+        created = parse_db_timestamp(row["created_at"]) if row["created_at"] else datetime.utcnow()
         return AgentPerformanceRecord(
             agent_id=row["agent_id"],
             organisation_id=row["organisation_id"],

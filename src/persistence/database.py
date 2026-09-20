@@ -1,5 +1,32 @@
 import sqlite3
 import os
+from datetime import datetime
+from typing import Optional, Union
+
+
+def parse_db_timestamp(value: Union[str, datetime, None]) -> Optional[datetime]:
+    """Normalize a timestamp column value read back from either backend.
+
+    SQLite stores timestamps as TEXT, so a row's value is always a str and
+    datetime.fromisoformat(value) is required. Postgres columns declared
+    TIMESTAMPTZ (used throughout migrations/postgres/*.sql) are returned
+    by psycopg as real datetime objects already -- calling
+    datetime.fromisoformat() on one of those raises exactly
+    "TypeError: fromisoformat: argument must be str", which is what
+    reached production as TamperedAuditLogError (get_events() ->
+    verify_integrity() -> on_startup_verify() wraps any exception in that
+    type) the moment a real Postgres deployment tried to read audit events
+    back. This helper is the single place that decides which branch to
+    take, instead of an inline isinstance() check duplicated at every call
+    site (which is how the previous, correct instance of this exact
+    pattern in postgres_ledger.py never got applied anywhere else).
+    """
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    return datetime.fromisoformat(value)
+
 
 SCHEMA_SQL = """
 PRAGMA journal_mode = WAL;

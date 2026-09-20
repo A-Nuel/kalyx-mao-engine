@@ -8,6 +8,23 @@ from typing import Any, Dict, List, Optional
 
 from src.domain.capability import CapabilityGrant, CapabilityGrantStatus
 from src.domain.exceptions import IdempotencyConflict
+
+
+def _iso_or_none(value: Any) -> Optional[str]:
+    """Normalize a possibly-None timestamp field read from either backend
+    back to the ISO string every dataclass in this file declares it as.
+    SQLite always returns these as str already; Postgres TIMESTAMPTZ
+    columns come back as real datetime objects via psycopg, which these
+    dataclasses were never updated to accept -- calling
+    datetime.fromisoformat() later on one of those (e.g.
+    CapabilityGrant.is_valid()) raised exactly
+    "TypeError: fromisoformat: argument must be str" in production."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return value
+
 from src.domain.marketplace import (
     EscrowAgreement,
     EscrowStatus,
@@ -518,8 +535,8 @@ class MarketplaceRepository:
             work_order_id=row["work_order_id"],
             deliverable_id=row["deliverable_id"],
             created_at=row["created_at"],
-            claimed_at=row["claimed_at"],
-            completed_at=row["completed_at"],
+            claimed_at=_iso_or_none(row["claimed_at"]),
+            completed_at=_iso_or_none(row["completed_at"]),
         )
 
     def _row_to_escrow(self, row: Any) -> EscrowAgreement:
@@ -538,7 +555,7 @@ class MarketplaceRepository:
             client_ledger_tx_id=row["client_ledger_tx_id"],
             provider_ledger_tx_id=row["provider_ledger_tx_id"],
             created_at=row["created_at"],
-            released_at=row["released_at"],
+            released_at=_iso_or_none(row["released_at"]),
         )
 
     def _row_to_grant(self, row: Any) -> CapabilityGrant:
@@ -553,5 +570,5 @@ class MarketplaceRepository:
             granted_by_policy_id=row["granted_by_policy_id"],
             status=CapabilityGrantStatus(row["status"]),
             granted_at=row["granted_at"],
-            expires_at=row["expires_at"],
+            expires_at=_iso_or_none(row["expires_at"]),
         )

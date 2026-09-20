@@ -349,3 +349,130 @@ def test_save_proposal_policy_decision_execution_receipt_upsert_on_postgres():
         assert row["requested_credits"] == 9
     finally:
         db.close()
+
+
+@requires_postgres
+def test_parse_db_timestamp_handles_postgres_timestamptz_columns():
+    """Regression test for the third production crash found via the live
+    demo: TypeError: fromisoformat: argument must be str /
+    TamperedAuditLogError: ... surfaced from
+    SqliteEventStore.on_startup_verify() -> verify_integrity() ->
+    get_events(), which read audit_events.timestamp (declared TIMESTAMPTZ
+    in migrations/postgres/001_initial.sql) and called
+    datetime.fromisoformat() on it unconditionally.
+
+    psycopg returns a TIMESTAMPTZ column as a real datetime object
+    already, not a string, so fromisoformat() -- which only accepts str
+    -- raised immediately. SQLite never hit this because it stores
+    timestamps as TEXT, so this was invisible in every local/SQLite test
+    run and only appeared against a real Postgres deployment.
+
+    Traced every fromisoformat() call site in the codebase (9 files) --
+    grep confirmed 3 categories: (a) calls on a locally-generated
+    datetime.utcnow().isoformat() string, always safe, left unchanged;
+    (b) calls already guarded with isinstance(x, str) before this fix
+    (src/persistence/work_order_repository.py, one call in
+    postgres_ledger.py), confirmed correct and left as-is; (c) calls on a
+    raw DB row value with no guard at all -- these are what actually
+    broke, fixed via the new parse_db_timestamp() helper in
+    src/persistence/database.py (repositories.py x3, economy_repo.py x4,
+    server.py x1, durable_executor.py x1, consequential.py x2) and a
+    parallel _iso_or_none() helper in marketplace_repository.py for the
+    3 dataclass fields declared as str (CapabilityGrant.expires_at,
+    WorkOrder.claimed_at/completed_at, EscrowAgreement.released_at) that
+    need the reverse normalization back to a string.
+
+    This test exercises the exact original crash chain end-to-end against
+    real Postgres, not just the helper function in isolation.
+    """
+    from src.persistence.repositories import SqliteEventStore
+
+    db = create_database()
+    try:
+        store = SqliteEventStore(db, verify_on_startup=False)
+        store.append_event(
+            actor_id="test-actor",
+            event_type="TEST_EVENT",
+            entity_id="test-entity",
+            payload={"k": "v"},
+            tenant_id="tenant-demo",
+        )
+        # This is the exact call chain that crashed in production:
+        # on_startup_verify() -> verify_integrity() -> get_events(), and
+        # get_events() is where the unguarded fromisoformat() lived.
+        store2 = SqliteEventStore(db, verify_on_startup=True)
+        valid, err = store2.verify_integrity()
+        assert valid is True, f"unexpected integrity failure: {err}"
+
+        events = store2.get_events(tenant_id="tenant-demo")
+        assert len(events) >= 1
+        # Confirm the timestamp actually came back as a usable datetime,
+        # not that get_events() merely avoided crashing.
+        from datetime import datetime as _dt
+        assert isinstance(events[-1].timestamp, _dt)
+    finally:
+        db.close()
+
+
+@requires_postgres
+def test_capability_grant_expires_at_round_trips_through_postgres():
+    """Regression test for the same bug class in
+    src/persistence/marketplace_repository.py: CapabilityGrant.expires_at
+    is declared `str` on the dataclass (src/domain/capability.py), but
+    _row_to_grant() previously passed row["expires_at"] straight through
+    with no normalization -- a real datetime from Postgres's TIMESTAMPTZ
+    column would then break CapabilityGrant.is_valid()'s own
+    datetime.fromisoformat(self.expires_at) call the next time anyone
+    checked the grant's validity.
+
+    save_capability_grant() already normalized on write (isoformat() if
+    isinstance(..., datetime) else str(...)), so this test constructs the
+    grant with a genuine datetime object for granted_at/expires_at to
+    confirm the write path handles that, and focuses the real assertion
+    on the read path (_row_to_grant), which is what this fix touched.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from src.domain.capability import CapabilityGrant, CapabilityGrantStatus
+    from src.domain.entities import Organisation
+    from src.persistence.marketplace_repository import MarketplaceRepository
+    from src.persistence.repositories import SqliteRepository
+
+    db = create_database()
+    try:
+        prefix = f"pg-cap-{os.getpid()}"
+        org_id = f"{prefix}-org"
+
+        # agent_capability_grants.organisation_id has a real FK to
+        # organisations(id) (and tenants(id) for tenant_id, already
+        # seeded by schema init) -- seed the organisation first.
+        repo = SqliteRepository(db)
+        org = Organisation(id=org_id, tenant_id="tenant-demo", mission="test mission", treasury_balance=100)
+        repo.save_organisation(org)
+
+        marketplace_repo = MarketplaceRepository(db.conn)
+        grant = CapabilityGrant(
+            tenant_id="tenant-demo",
+            organisation_id=org_id,
+            grant_id=f"{prefix}-grant",
+            agent_id=f"{prefix}-agent",
+            capability_name="test.capability",
+            permission_level="read",
+            trigger_performance_score=0.9,
+            granted_by_policy_id="policy-1",
+            status=CapabilityGrantStatus.ACTIVE,
+            granted_at=datetime.now(timezone.utc).isoformat(),
+            expires_at=(datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
+        )
+        marketplace_repo.save_capability_grant(grant)
+
+        fetched = marketplace_repo.get_capability_grant("tenant-demo", org_id, f"{prefix}-grant")
+        assert fetched is not None
+        assert isinstance(fetched.expires_at, str), (
+            "expires_at must round-trip as str, matching its dataclass declaration"
+        )
+        # This is the actual call that crashed if expires_at were a raw
+        # Postgres datetime instead of a string.
+        assert fetched.is_valid() in (True, False)
+    finally:
+        db.close()

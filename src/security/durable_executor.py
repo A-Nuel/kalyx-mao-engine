@@ -13,6 +13,7 @@ from typing import Any, Dict, Tuple
 import httpx
 
 from src.domain.entities import ActionProposal, ExecutionReceipt
+from src.persistence.database import parse_db_timestamp
 from src.execution.executor import ControlledExternalExecutor
 from src.security.idempotency import SQLiteIdempotencyJournal
 from src.domain.events import canonical_json
@@ -63,7 +64,7 @@ class DurableControlledExternalExecutor(ControlledExternalExecutor):
                 id=row["id"], proposal_id=row["proposal_id"], authorization_token=row["authorization_token"],
                 action_type=ActionType(row["action_type"]), target=row["target"], http_status=row["http_status"],
                 raw_response_hash=row["raw_response_hash"], raw_output=json.loads(row["raw_output"]),
-                cost_credits=row["cost_credits"], executed_at=datetime.fromisoformat(row["executed_at"]),
+                cost_credits=row["cost_credits"], executed_at=parse_db_timestamp(row["executed_at"]),
             )
         try:
             receipt = super().execute(proposal, decision, org)

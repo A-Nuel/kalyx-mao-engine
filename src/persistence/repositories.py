@@ -3,7 +3,7 @@ import uuid
 import sqlite3
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple, Set, Any
-from src.persistence.database import Database
+from src.persistence.database import Database, parse_db_timestamp
 from src.domain.entities import (
     Organisation,
     AgentRecord,
@@ -125,7 +125,7 @@ class SqliteLedger:
             )
         else:
             cursor.execute("SELECT * FROM ledger_entries ORDER BY sequence_num ASC")
-        return [LedgerEntry(id=r["id"], timestamp=datetime.fromisoformat(r["timestamp"]),
+        return [LedgerEntry(id=r["id"], timestamp=parse_db_timestamp(r["timestamp"]),
                             transaction_id=r["transaction_id"], from_account=r["from_account"],
                             to_account=r["to_account"], amount=r["amount"], memo=r["memo"])
                 for r in cursor.fetchall()]
@@ -230,7 +230,7 @@ class SqliteEventStore:
             sql += f" LIMIT {int(limit)}"
 
         cursor.execute(sql, tuple(params))
-        return [AuditEvent(sequence_id=r["sequence_id"], timestamp=datetime.fromisoformat(r["timestamp"]),
+        return [AuditEvent(sequence_id=r["sequence_id"], timestamp=parse_db_timestamp(r["timestamp"]),
                            actor_id=r["actor_id"], event_type=r["event_type"], entity_id=r["entity_id"],
                            payload=json.loads(r["payload"]), payload_hash=r["payload_hash"],
                            previous_event_hash=r["previous_event_hash"], event_hash=r["event_hash"])
@@ -285,7 +285,7 @@ class SqliteRepository:
         treasury_balance = ledger.get_balance(TREASURY) if ledger is not None else row["treasury_balance"]
         org = Organisation(id=row["id"], mission=row["mission"], tenant_id=row["tenant_id"],
                            treasury_balance=treasury_balance, state=OrgState(row["state"]),
-                           created_at=datetime.fromisoformat(row["created_at"]))
+                           created_at=parse_db_timestamp(row["created_at"]))
         cursor.execute("SELECT * FROM agents WHERE org_id = ?", (org_id,))
         for ar in cursor.fetchall():
             task_history = json.loads(ar["task_history"]) if "task_history" in ar.keys() and ar["task_history"] else []

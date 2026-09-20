@@ -49,7 +49,7 @@ class CapabilityGrant:
         ref = as_of or datetime.now(timezone.utc)
         if ref.tzinfo is None:
             ref = ref.replace(tzinfo=timezone.utc)
-        exp = datetime.fromisoformat(self.expires_at)
+        exp = self.expires_at if isinstance(self.expires_at, datetime) else datetime.fromisoformat(self.expires_at)
         if exp.tzinfo is None:
             exp = exp.replace(tzinfo=timezone.utc)
         return ref <= exp
