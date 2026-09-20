@@ -185,7 +185,7 @@ def _record_live_demo_stage(session_id: str, stage: str, evidence: Dict[str, Any
         mode = session.get("mode", "guided")
         advance_event = session.get("advance_event")
 
-    if mode == "judge" and advance_event:
+    if mode == "judge" and advance_event and key in {"PROPOSE", "AUTHORIZE", "EXECUTE", "VERIFY", "SETTLE", "AUDIT"}:
         advance_event.clear()
         auto_seconds = 0.0
         if key == "PROPOSE":
