@@ -366,10 +366,11 @@ class IdentityAuthorizationMiddleware(BaseHTTPMiddleware):
 
         path = request.url.path
         parts = [p for p in path.split("/") if p]
-        if "organisations" not in parts:
+        org_segment = "organisations" if "organisations" in parts else ("organization" if "organization" in parts else None)
+        if org_segment is None:
             return await call_next(request)
 
-        org_idx = parts.index("organisations")
+        org_idx = parts.index(org_segment)
         if org_idx == 0 or parts[0] != "api":
             return await call_next(request)
 
