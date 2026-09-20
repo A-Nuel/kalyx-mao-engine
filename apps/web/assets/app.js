@@ -102,54 +102,6 @@ const App = (() => {
     const isMobile = window.matchMedia('(max-width: 760px)').matches;
     document.body.classList.toggle('nav-collapsed', !isMobile && navigationCollapsed);
     document.body.classList.toggle('nav-open', isMobile && !navigationCollapsed);
-
-    const toggle = $('navToggle');
-    if (toggle) {
-      const open = !navigationCollapsed;
-      toggle.setAttribute('aria-expanded', String(open));
-      toggle.setAttribute('aria-label', open ? 'Close navigation' : 'Open navigation');
-      const icon = toggle.querySelector('.material-symbols-outlined');
-      if (icon) icon.textContent = open ? 'menu_open' : 'menu';
-    }
-  }
-
-  function toggleNavigation() {
-    navigationCollapsed = !navigationCollapsed;
-    try { localStorage.setItem('kalyx-nav-collapsed', navigationCollapsed ? '1' : '0'); } catch {}
-    applyNavigationState();
-  }
-
-  function closeNavigation() {
-    navigationCollapsed = true;
-    try { localStorage.setItem('kalyx-nav-collapsed', '1'); } catch {}
-    applyNavigationState();
-  }
-
-  function openNavigation() {
-    navigationCollapsed = false;
-    try { localStorage.setItem('kalyx-nav-collapsed', '0'); } catch {}
-    applyNavigationState();
-  }
-
-  function restoreNavigationState() {
-    try {
-      const stored = localStorage.getItem('kalyx-nav-collapsed');
-      navigationCollapsed = stored !== null
-        ? stored === '1'
-        : window.matchMedia('(max-width: 760px)').matches;
-    } catch {
-      navigationCollapsed = true;
-    }
-    applyNavigationState();
-  }
-
-  window.addEventListener('resize', applyNavigationState);
-
-  // Navigation Controller
-  function applyNavigationState() {
-    const isMobile = window.matchMedia('(max-width: 760px)').matches;
-    document.body.classList.toggle('nav-collapsed', !isMobile && navigationCollapsed);
-    document.body.classList.toggle('nav-open', isMobile && !navigationCollapsed);
     const toggle = $('navToggle');
     if (toggle) {
       const open = !navigationCollapsed;
