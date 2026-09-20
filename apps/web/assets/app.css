@@ -1154,8 +1154,7 @@ body.nav-collapsed .kalyx-nav .nav-tab[data-tooltip]:hover::after{opacity:1;tran
   .kalyx-event-main small{white-space:normal;overflow-wrap:anywhere}
   .judge-control-panel{grid-template-columns:1fr;padding:13px}
 }
-@media(max-width:760px){
-  html,body{height:auto!important;min-height:100%;overflow-x:clip!important;overflow-y:auto!important}
-  body.kalyx-shell{overflow-y:auto!important}
-  .kalyx-main,.view-panel,.kalyx-page{overflow:visible!important}
-}
+/* Never trap the document in a nested scroll owner. Applies at every viewport size. */
+html,body{height:auto!important;min-height:100%;overflow-x:clip!important;overflow-y:auto!important}
+body.kalyx-shell{overflow-y:auto!important}
+.kalyx-main,.view-panel,.kalyx-page{overflow:visible!important}
