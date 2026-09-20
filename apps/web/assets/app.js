@@ -6,6 +6,18 @@ const App = (() => {
   let cachedLedgerData = null;
   let cachedAgents = [];
   let auditEventsById = {};
+  let liveDemoSessionId = null;
+  let liveDemoPollTimer = null;
+  const LIVE_DEMO_STAGES = [
+    ['INITIALIZE', 'Initialize', 'Mission accepted by the control plane'],
+    ['PLAN', 'Plan', 'Agents decompose the objective'],
+    ['PROPOSE', 'Propose', 'An agent submits a consequential proposal'],
+    ['AUTHORIZE', 'Authorize', 'Policy decides whether authority is valid'],
+    ['EXECUTE', 'Execute', 'Controlled executor performs the action'],
+    ['VERIFY', 'Verify', 'Independent auditor checks evidence'],
+    ['SETTLE', 'Settle', 'Ledger reflects the resulting economic state'],
+    ['AUDIT', 'Audit', 'The completed chronology remains inspectable'],
+  ];
 
   // Agent inspector is always populated from the authoritative API. No fictional fallback registry.
   const AGENT_REGISTRY = Object.freeze({});
@@ -42,7 +54,7 @@ const App = (() => {
 
   // Navigation & Routing
   function setRoute(route) {
-    const validRoutes = ['overview', 'missions', 'organisation', 'treasury', 'policies', 'operations', 'marketplace', 'collateral', 'audit', 'experiments', 'settings'];
+    const validRoutes = ['overview', 'demo', 'missions', 'organisation', 'treasury', 'policies', 'operations', 'marketplace', 'collateral', 'audit', 'experiments', 'settings'];
     const target = validRoutes.includes(route) ? route : 'overview';
     currentRoute = target;
 
@@ -161,7 +173,7 @@ const App = (() => {
 
   // Refresh current view based on activeRoute
   async function refreshCurrentView() {
-    if (!activeOrgId && currentRoute !== 'experiments' && currentRoute !== 'settings') {
+    if (!activeOrgId && currentRoute !== 'experiments' && currentRoute !== 'settings' && currentRoute !== 'demo') {
       return;
     }
 
@@ -186,6 +198,9 @@ const App = (() => {
       switch (currentRoute) {
         case 'overview':
           await refreshOverview();
+          break;
+        case 'demo':
+          renderLiveDemoSnapshot(null);
           break;
         case 'missions':
           await refreshMissions();
@@ -965,18 +980,8 @@ const App = (() => {
   }
 
   async function confirmConsequentialAuth() {
-    const btn = $('btnConfirmConsequentialAuth');
-    if (btn) btn.disabled = true;
-
-    try {
-      closeModals();
-      alert('AUTHORIZATION CONFIRMED\n\nAuthorization token issued by the configured policy authority.\nBound to Consequential Execution Provider.');
-      if (activeOrgId) {
-        await refreshCurrentView();
-      }
-    } finally {
-      if (btn) btn.disabled = false;
-    }
+    closeModals();
+    await startLiveDemo();
   }
 
   async function submitMission(event) {
@@ -1009,20 +1014,114 @@ const App = (() => {
     }
   }
 
-  async function runDemo() {
-    const btn = $('btnRunDemo');
-    if (btn) btn.disabled = true;
+  function renderLiveDemoSnapshot(snapshot) {
+    const stageRoot = $('liveDemoStages');
+    const evidenceRoot = $('liveDemoEvidence');
+    const currentBadge = $('liveDemoCurrentStage');
+    const status = $('liveDemoStatus');
+    const sessionLabel = $('liveDemoSession');
+    if (!stageRoot) return;
 
-    try {
-      const result = await API.runPublicDemo();
-      activeOrgId = result.organisation_id;
-      await loadOrganisations();
-      setRoute('overview');
-    } catch (err) {
-      alert(`Demo mission failed: ${err.message}`);
-    } finally {
-      if (btn) btn.disabled = false;
+    const currentKey = snapshot?.current_stage || 'INITIALIZE';
+    const history = snapshot?.history || [];
+    const completedKeys = new Set(history.map(item => item.key));
+    stageRoot.innerHTML = LIVE_DEMO_STAGES.map(([key, title, desc], index) => {
+      const isCurrent = currentKey === key;
+      const isComplete = completedKeys.has(key) || currentKey === 'COMPLETE';
+      const cls = isCurrent ? 'demo-stage-current' : (isComplete ? 'demo-stage-complete' : '');
+      return `
+        <div class="demo-stage ${cls}">
+          <div class="demo-stage-index">${String(index + 1).padStart(2, '0')}</div>
+          <div class="demo-stage-copy"><strong>${esc(title)}</strong><span>${esc(desc)}</span></div>
+          <div class="demo-stage-state">${isCurrent ? 'ACTIVE' : (isComplete ? 'DONE' : 'WAIT')}</div>
+        </div>`;
+    }).join('');
+
+    if (currentBadge) currentBadge.textContent = snapshot?.current_title || 'Ready to run';
+    if (status) {
+      status.textContent = snapshot?.status === 'completed'
+        ? 'COMPLETE'
+        : snapshot?.status === 'failed'
+          ? 'FAILED'
+          : snapshot ? 'RUNNING · LIVE TRACE' : 'READY';
+      status.className = 'demo-status ' + (snapshot?.status === 'completed' ? 'is-complete' : snapshot?.status === 'failed' ? 'is-failed' : '');
     }
+    if (sessionLabel) sessionLabel.textContent = snapshot?.session_id ? `SESSION ${snapshot.session_id}` : 'NO SESSION';
+
+    const latest = history[history.length - 1];
+    if (evidenceRoot) {
+      if (!latest) {
+        evidenceRoot.innerHTML = '<div class="demo-empty">Run the walkthrough to reveal real orchestration evidence here.</div>';
+      } else {
+        const evidence = latest.evidence || {};
+        const compact = Object.entries(evidence)
+          .filter(([k, v]) => v !== null && v !== undefined && typeof v !== 'object')
+          .slice(0, 8)
+          .map(([k, v]) => `<div><span>${esc(k.replaceAll('_', ' '))}</span><strong>${esc(v)}</strong></div>`)
+          .join('');
+        evidenceRoot.innerHTML = `
+          <div class="demo-evidence-head"><div><span class="demo-kicker">REAL ENGINE EVIDENCE</span><strong>${esc(latest.title)}</strong></div><time>${fmtTime(latest.timestamp)}</time></div>
+          <p>${esc(latest.description)}</p>
+          <div class="demo-evidence-grid">${compact || '<div><span>EVENT</span><strong>' + esc(latest.source_event) + '</strong></div>'}</div>
+          <details class="demo-raw"><summary>Inspect stage payload</summary><pre>${esc(JSON.stringify(evidence, null, 2))}</pre></details>
+        `;
+      }
+    }
+  }
+
+  async function pollLiveDemo() {
+    if (!liveDemoSessionId) return;
+    try {
+      const snapshot = await API.getLiveDemo(liveDemoSessionId);
+      renderLiveDemoSnapshot(snapshot);
+      if (snapshot.result?.organisation_id) {
+        activeOrgId = snapshot.result.organisation_id;
+      }
+      if (snapshot.status === 'running') {
+        liveDemoPollTimer = setTimeout(pollLiveDemo, 350);
+      } else {
+        liveDemoPollTimer = null;
+        if (snapshot.status === 'completed' && activeOrgId) {
+          await loadOrganisations();
+          setTxt('liveDemoCompletionNote', 'The walkthrough is complete. Use View Full Trace to inspect the persisted system state.');
+        }
+      }
+    } catch (err) {
+      renderLiveDemoSnapshot({ status: 'failed', current_stage: 'ERROR', current_title: 'Unable to read demo session', history: [], error: err.message });
+      liveDemoPollTimer = null;
+    }
+  }
+
+  async function startLiveDemo() {
+    if (liveDemoPollTimer) {
+      clearTimeout(liveDemoPollTimer);
+      liveDemoPollTimer = null;
+    }
+    setRoute('demo');
+    renderLiveDemoSnapshot(null);
+    const button = $('btnLiveDemoStart');
+    if (button) {
+      button.disabled = true;
+      button.classList.add('is-busy');
+    }
+    try {
+      const started = await API.startLiveDemo();
+      liveDemoSessionId = started.session_id;
+      setTxt('liveDemoCompletionNote', 'Following actual orchestration boundaries from the Kalyx engine. Nothing here is a pre-recorded animation.');
+      await pollLiveDemo();
+    } catch (err) {
+      renderLiveDemoSnapshot({ status: 'failed', current_stage: 'ERROR', current_title: 'Unable to start demo', history: [], error: err.message });
+      setTxt('liveDemoCompletionNote', err.message);
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.classList.remove('is-busy');
+      }
+    }
+  }
+
+  async function runDemo() {
+    await startLiveDemo();
   }
 
   async function toggleCircuitBreaker() {
@@ -1298,6 +1397,7 @@ return {
     confirmConsequentialAuth,
     submitMission,
     runDemo,
+    startLiveDemo,
     toggleCircuitBreaker,
     toggleCircuitBreakerPopover,
     verifyAuditChain,
