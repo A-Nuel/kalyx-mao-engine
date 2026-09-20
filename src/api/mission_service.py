@@ -158,6 +158,13 @@ def run_mission(
         research, strategy, finance = engine.run_intelligence_pipeline()
         proposal = engine.ceo.formulate_action_proposal("task-03", finance)
         decision, receipt = engine.process_action_proposal("task-03", proposal)
+        if stage_callback:
+            stage_callback("SETTLED", ledger={
+                "treasury": ledger.get_balance("TREASURY"),
+                "escrow": ledger.get_balance("ESCROW"),
+                "external_sink": ledger.get_balance("EXTERNAL_SINK"),
+                "conserved": ledger.verify_conservation(),
+            }, receipt_id=receipt.id if receipt else None)
         review = engine.complete_mission()
 
         # Update and persist agent performance records post-mission
