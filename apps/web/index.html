@@ -13,7 +13,7 @@
 <script>
 tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans-serif'],mono:['JetBrains Mono','monospace']}}}};
 </script>
-<link rel="stylesheet" href="/assets/app.css?v=20260920-3">
+<link rel="stylesheet" href="/assets/app.css?v=20260920-4">
 </head>
 <body class="kalyx-shell">
   <div class="kalyx-noise" aria-hidden="true"></div>
@@ -159,14 +159,14 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans
 
         <div class="kalyx-grid-work">
           <section class="kalyx-panel">
-            <div class="kalyx-panel-head"><div><span class="kalyx-panel-kicker">WORKFORCE</span><h2>Active agents</h2></div><button class="kalyx-panel-link" onclick="App.setRoute('organisation')">View all →</button></div>
+            <div class="kalyx-panel-head"><div><span class="kalyx-panel-kicker">WORKFORCE</span><h2>Agents online</h2></div><button class="kalyx-panel-link" onclick="App.setRoute('organisation')">View workforce →</button></div>
             <div id="activeAgentsContainer" class="kalyx-agent-list">
               <div class="kalyx-empty">Waiting for organization data…</div>
             </div>
           </section>
 
           <section class="kalyx-panel">
-            <div class="kalyx-panel-head"><div><span class="kalyx-panel-kicker">CHRONOLOGY</span><h2>Recent activity</h2></div><button class="kalyx-panel-link" onclick="App.setRoute('audit')">Open audit →</button></div>
+            <div class="kalyx-panel-head"><div><span class="kalyx-panel-kicker">CHRONOLOGY</span><h2>Latest control events</h2></div><button class="kalyx-panel-link" onclick="App.setRoute('audit')">Inspect audit →</button></div>
             <div id="recentActivityContainer" class="kalyx-activity-list">
               <div class="kalyx-empty">Waiting for events…</div>
             </div>
@@ -195,7 +195,7 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans
             <span class="kalyx-panel-kicker">DEMO SEQUENCE</span>
             <h2>Show the machine, not the mockup.</h2>
             <p>Watch one governed operation move through proposal, policy, execution, verification, settlement and audit in real time.</p>
-            <div class="kalyx-judge-actions"><button onclick="App.runDemo()" type="button">Run live governance demo →</button><button onclick="App.startLoopGuide()" type="button">Explain the loop</button></div>
+            <div class="kalyx-judge-actions"><button onclick="App.runDemo()" type="button">Run guided trace →</button><button onclick="App.startJudgeDemo()" type="button">Enter Judge Mode</button></div>
           </section>
         </div>
       </div>
@@ -243,6 +243,15 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans
           </section>
         </div>
 
+        <div id="judgeControlPanel" class="judge-control-panel hidden">
+          <div>
+            <span class="demo-kicker">JUDGE MODE / REAL CHECKPOINT</span>
+            <strong id="judgeControlMessage">Waiting for the engine to reach a checkpoint.</strong>
+          </div>
+          <span id="judgeCountdown" class="judge-countdown"></span>
+          <button id="judgeContinueBtn" type="button" onclick="App.continueJudgeDemo()" disabled>Waiting for engine…</button>
+        </div>
+
         <div class="live-demo-bottom">
           <div class="live-demo-explainer">
             <span class="demo-kicker">JUDGE READ</span>
@@ -250,7 +259,8 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans
             <p>AGENT PROPOSES → POLICY AUTHORIZES → EXECUTOR ACTS → AUDITOR VERIFIES → LEDGER SETTLES → AUDIT REMAINS</p>
           </div>
           <div class="live-demo-actions">
-            <button id="btnLiveDemoStart" type="button" onclick="App.startLiveDemo()">Run live governance demo <span>→</span></button>
+            <button id="btnLiveDemoStart" type="button" onclick="App.startLiveDemo()">Run guided trace <span>→</span></button>
+            <button id="btnJudgeDemoStart" type="button" onclick="App.startJudgeDemo()">Enter Judge Mode <span>→</span></button>
             <button type="button" onclick="App.setRoute('audit')">View full audit →</button>
           </div>
         </div>
@@ -569,7 +579,7 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans
       <div class="kalyx-guide-foot"><span>DEMO PROVENANCE</span><b>SIMULATED</b><button onclick="App.closeLoopGuide();App.runDemo()">Run the simulated path →</button></div>
     </div>
   </div>
-  <script src="/assets/api.js?v=20260920-1"></script>
+  <script src="/assets/api.js?v=20260920-2"></script>
   <script src="/assets/app.js?v=20260920-2"></script>
 </body>
 </html>

@@ -244,7 +244,13 @@ const API = (() => {
       return request('/api/demo/public-run', { method: 'POST' });
     },
     async startLiveDemo() {
-      return request('/api/demo/live/start', { method: 'POST' });
+      return request('/api/demo/live/start?mode=guided', { method: 'POST' });
+    },
+    async startJudgeDemo() {
+      return request('/api/demo/live/start?mode=judge', { method: 'POST' });
+    },
+    async continueLiveDemo(sessionId) {
+      return request('/api/demo/live/' + encodeURIComponent(sessionId) + '/continue', { method: 'POST' });
     },
     async getLiveDemo(sessionId) {
       return request('/api/demo/live/' + encodeURIComponent(sessionId));

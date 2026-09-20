@@ -1085,3 +1085,76 @@ body.nav-collapsed .kalyx-nav .nav-tab .kalyx-nav-badge{font-size:8px;position:a
   body.nav-open .kalyx-sidebar .kalyx-mode-card,
   body.nav-open .kalyx-sidebar .kalyx-back-link{display:block}
 }
+
+/* 2026-09-20 judge mode + dashboard polish */
+/* Collapsed rail: icons remain direct navigation targets, with compact labels on hover. */
+body.nav-collapsed .kalyx-nav .nav-tab{overflow:visible}
+body.nav-collapsed .kalyx-nav .nav-tab[data-tooltip]::after{
+  content:attr(data-tooltip);position:absolute;left:calc(100% + 10px);top:50%;
+  transform:translateY(-50%) translateX(-4px);opacity:0;pointer-events:none;z-index:80;
+  padding:7px 9px;border:1px solid rgba(255,255,255,.09);border-radius:5px;background:#0b0f15;
+  color:#dce5f2;box-shadow:0 12px 30px rgba(0,0,0,.35);white-space:nowrap;
+  font:600 9px/1 'JetBrains Mono',monospace;letter-spacing:.05em;
+  transition:opacity .15s ease,transform .15s ease;
+}
+body.nav-collapsed .kalyx-nav .nav-tab[data-tooltip]:hover::after{opacity:1;transform:translateY(-50%) translateX(0)}
+
+/* Dashboard workforce + chronology: never squeeze identifiers into unreadable fragments. */
+.kalyx-agent-list,.kalyx-activity-list{min-width:0}
+.kalyx-agent-row{
+  width:100%;display:grid;grid-template-columns:36px minmax(0,1fr) auto auto;align-items:center;gap:12px;
+  padding:13px 10px;border:1px solid transparent;border-radius:7px;background:rgba(255,255,255,.018);
+  color:inherit;text-align:left;cursor:pointer;transition:background .15s ease,border-color .15s ease;
+}
+.kalyx-agent-row:hover{background:rgba(255,255,255,.045);border-color:rgba(255,255,255,.07)}
+.kalyx-agent-icon{width:34px;height:34px;display:flex;align-items:center;justify-content:center;border:1px solid rgba(91,140,255,.2);border-radius:7px;background:rgba(91,140,255,.08);color:#6ea0ff}
+.kalyx-agent-icon .material-symbols-outlined{font-size:18px}
+.kalyx-agent-main{display:block;min-width:0}
+.kalyx-agent-topline{display:flex;align-items:center;gap:10px;min-width:0}
+.kalyx-agent-id{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#f0f4fa;font:600 12px/1.25 'JetBrains Mono',monospace}
+.kalyx-agent-model{flex:0 1 auto;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#71809a;font:500 10px/1.25 'JetBrains Mono',monospace}
+.kalyx-agent-role{display:block;margin-top:6px;color:#6f7d92;font:500 9px/1.2 'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase}
+.kalyx-agent-metrics{display:flex;gap:16px;align-items:center;flex:0 0 auto}
+.kalyx-agent-metrics span{display:flex;flex-direction:column;align-items:flex-end;min-width:48px}
+.kalyx-agent-metrics b{color:#dce4ef;font:600 10px/1.2 'JetBrains Mono',monospace}
+.kalyx-agent-metrics small{margin-top:4px;color:#58667a;font:500 8px/1 'JetBrains Mono',monospace}
+.kalyx-agent-status{display:inline-flex;align-items:center;gap:6px;padding:6px 8px;border:1px solid rgba(94,231,173,.18);border-radius:999px;background:rgba(94,231,173,.06);color:#5ee7ad;font:600 8px/1 'JetBrains Mono',monospace;white-space:nowrap}
+.kalyx-agent-status.is-idle{border-color:rgba(251,191,36,.18);background:rgba(251,191,36,.06);color:#f5c76b}
+.kalyx-agent-status i{width:5px;height:5px;border-radius:50%;background:currentColor;display:block}
+.kalyx-activity-row{display:grid;grid-template-columns:46px minmax(0,1fr);gap:12px;align-items:center;padding:13px 10px;border-bottom:1px solid rgba(255,255,255,.05)}
+.kalyx-activity-row:last-child{border-bottom:0}
+.kalyx-event-seq{display:flex;align-items:center;justify-content:center;min-width:46px;height:29px;border:1px solid rgba(255,255,255,.08);border-radius:5px;background:rgba(255,255,255,.035);color:#6ea0ff;font:600 9px/1 'JetBrains Mono',monospace}
+.kalyx-event-main{display:block;min-width:0}
+.kalyx-event-main>b{display:block;overflow-wrap:anywhere;color:#eef2f8;font:600 12px/1.25 'JetBrains Mono',monospace;letter-spacing:.01em}
+.kalyx-event-main small{display:flex;align-items:center;gap:6px;min-width:0;margin-top:5px;color:#78859a;font:500 9px/1.25 'JetBrains Mono',monospace;white-space:nowrap}
+.kalyx-event-main small strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#a9b5c6;font-weight:500}
+.kalyx-event-main small i{font-style:normal;color:#4d596b}
+
+/* Judge Mode: the engine stops here until the judge releases the next boundary. */
+.judge-control-panel{
+  max-width:1480px;margin:14px auto 0;display:grid;grid-template-columns:minmax(0,1fr) auto auto;
+  align-items:center;gap:16px;border:1px solid rgba(91,140,255,.2);
+  background:linear-gradient(90deg,rgba(91,140,255,.07),rgba(11,14,20,.86));padding:15px 18px;
+}
+.judge-control-panel strong{display:block;margin-top:7px;color:#dce5f0;font:500 12px/1.5 Geist,sans-serif}
+.judge-countdown{color:#9db9ff;font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.08em;white-space:nowrap}
+.judge-control-panel button{border:1px solid rgba(91,140,255,.3);background:rgba(91,140,255,.1);color:#a9c1ff;border-radius:5px;padding:9px 12px;font:600 9px/1 'JetBrains Mono',monospace;cursor:pointer;white-space:nowrap}
+.judge-control-panel button:disabled{opacity:.45;cursor:wait}
+@media(max-width:900px){
+  .kalyx-agent-row{grid-template-columns:34px minmax(0,1fr) auto}
+  .kalyx-agent-metrics{display:none}.kalyx-agent-model{max-width:130px}
+  .judge-control-panel{grid-template-columns:1fr auto}.judge-control-panel button{grid-column:1/-1;width:100%}
+}
+@media(max-width:600px){
+  .kalyx-agent-row{grid-template-columns:34px minmax(0,1fr)}
+  .kalyx-agent-status{grid-column:2;justify-self:start}
+  .kalyx-agent-topline{display:block}.kalyx-agent-model{display:block;margin-top:4px;max-width:100%}
+  .kalyx-activity-row{grid-template-columns:40px minmax(0,1fr);gap:9px;padding-left:7px;padding-right:7px}
+  .kalyx-event-seq{min-width:40px;height:27px}.kalyx-event-main>b{font-size:10px}
+  .kalyx-event-main small{white-space:normal;overflow-wrap:anywhere}
+  .judge-control-panel{grid-template-columns:1fr;padding:13px}
+}
+/* Never trap the document in a nested scroll owner. Applies at every viewport size. */
+html,body{height:auto!important;min-height:100%;overflow-x:clip!important;overflow-y:auto!important}
+body.kalyx-shell{overflow-y:auto!important}
+.kalyx-main,.view-panel,.kalyx-page{overflow:visible!important}

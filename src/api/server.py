@@ -126,6 +126,15 @@ _LIVE_DEMO_STAGE_DELAY = 1.35
 
 
 def _live_demo_json(value: Any) -> Any:
+    """Serialize live-demo state while keeping in-memory control primitives private."""
+    if isinstance(value, dict):
+        return {
+            key: _live_demo_json(item)
+            for key, item in value.items()
+            if key not in {"advance_event"}
+        }
+    if isinstance(value, list):
+        return [_live_demo_json(item) for item in value]
     try:
         return json.loads(json.dumps(value, default=str))
     except Exception:
@@ -164,6 +173,8 @@ def _record_live_demo_stage(session_id: str, stage: str, evidence: Dict[str, Any
         "evidence": _live_demo_json(_redact_live_demo(evidence)),
         "timestamp": datetime.utcnow().isoformat() + "Z",
     }
+    checkpoint = 0
+    auto_seconds = 0.0
     with _live_demo_lock:
         session = _live_demo_sessions.get(session_id)
         if not session:
@@ -173,6 +184,47 @@ def _record_live_demo_stage(session_id: str, stage: str, evidence: Dict[str, Any
         session["current_description"] = description
         session["updated_at"] = item["timestamp"]
         session["history"].append(item)
+        mode = session.get("mode", "guided")
+        if mode == "judge" and key in {"PROPOSE", "AUTHORIZE", "EXECUTE", "VERIFY", "SETTLE", "AUDIT"}:
+            session["checkpoint_counter"] = int(session.get("checkpoint_counter", 0)) + 1
+            checkpoint = session["checkpoint_counter"]
+            session["active_checkpoint"] = checkpoint
+            auto_seconds = (
+                max(0.0, min(60.0, float(os.getenv("KALYX_JUDGE_PROPOSAL_AUTO_SECONDS", "15"))))
+                if key == "PROPOSE"
+                else 0.0
+            )
+            session["waiting_for_judge"] = True
+            session["can_continue"] = True
+            session["auto_advance_seconds"] = auto_seconds
+            session["auto_advance_at"] = time.time() + auto_seconds if auto_seconds > 0 else None
+            session["control_message"] = (
+                f"Agent proposal submitted. Automatically advancing to policy review in {int(auto_seconds)}s."
+                if key == "PROPOSE" and auto_seconds > 0
+                else "Judge checkpoint reached. Continue when ready."
+            )
+
+    if checkpoint:
+        deadline = time.time() + auto_seconds if auto_seconds > 0 else None
+        while True:
+            with _live_demo_lock:
+                session = _live_demo_sessions.get(session_id)
+                if not session:
+                    return
+                released = int(session.get("released_checkpoint", 0)) >= checkpoint
+            if released or (deadline is not None and time.time() >= deadline):
+                break
+            time.sleep(0.025)
+        with _live_demo_lock:
+            session = _live_demo_sessions.get(session_id)
+            if session:
+                session["waiting_for_judge"] = False
+                session["can_continue"] = False
+                session["auto_advance_seconds"] = 0
+                session["auto_advance_at"] = None
+                session["control_message"] = ""
+        return
+
     delay = max(0.0, min(5.0, float(os.getenv("KALYX_LIVE_DEMO_STAGE_DELAY", str(_LIVE_DEMO_STAGE_DELAY)))))
     time.sleep(delay)
 
@@ -323,10 +375,11 @@ class IdentityAuthorizationMiddleware(BaseHTTPMiddleware):
 
         path = request.url.path
         parts = [p for p in path.split("/") if p]
-        if "organisations" not in parts:
+        org_segment = "organisations" if "organisations" in parts else ("organization" if "organization" in parts else None)
+        if org_segment is None:
             return await call_next(request)
 
-        org_idx = parts.index("organisations")
+        org_idx = parts.index(org_segment)
         if org_idx == 0 or parts[0] != "api":
             return await call_next(request)
 
@@ -483,6 +536,12 @@ def organisations(x_tenant_id: str | None = Header(default=None, alias="X-Tenant
         return [dict(r) for r in db.conn.execute("SELECT * FROM organisations ORDER BY created_at DESC").fetchall()]
     finally:
         db.close()
+
+
+@app.get("/api/v1/organization/{organization_id}")
+def organization_compatibility(organization_id: str) -> Dict[str, Any]:
+    """Compatibility alias for older Command Centre clients using singular organization paths."""
+    return organisation(organization_id)
 
 
 @app.get("/api/organisations/{org_id}")
@@ -1143,10 +1202,13 @@ def system_settings() -> Dict[str, Any]:
 @app.post("/api/demo/live/start")
 def start_live_demo(
     x_tenant_id: str | None = Header(default=None, alias="X-Tenant-ID"),
+    mode: str = Query(default="guided"),
 ) -> Dict[str, Any]:
-    """Start the deterministic public judge walkthrough and return immediately."""
+    """Start the deterministic judge walkthrough in guided or manually gated mode."""
     if os.getenv("KALYX_PUBLIC_DEMO", "false").strip().lower() != "true":
         raise HTTPException(status_code=404, detail="Public demo is disabled")
+    if mode not in {"guided", "judge"}:
+        raise HTTPException(status_code=400, detail="Unsupported demo mode")
 
     session_id = f"live-demo-{uuid.uuid4().hex[:12]}"
     tenant_id = x_tenant_id or "tenant-demo"
@@ -1154,6 +1216,7 @@ def start_live_demo(
         _live_demo_sessions[session_id] = {
             "session_id": session_id,
             "tenant_id": tenant_id,
+            "mode": mode,
             "status": "running",
             "current_stage": "INITIALIZE",
             "current_title": "Starting control plane",
@@ -1161,6 +1224,14 @@ def start_live_demo(
             "history": [],
             "result": None,
             "error": None,
+            "waiting_for_judge": False,
+            "can_continue": False,
+            "auto_advance_seconds": 0,
+            "auto_advance_at": None,
+            "control_message": "",
+            "checkpoint_counter": 0,
+            "active_checkpoint": 0,
+            "released_checkpoint": 0,
             "updated_at": datetime.utcnow().isoformat() + "Z",
         }
 
@@ -1174,6 +1245,7 @@ def start_live_demo(
     return {
         "session_id": session_id,
         "status": "running",
+        "mode": mode,
         "provenance": "SIMULATED / CONTROLLED GATEWAY",
         "poll_ms": 350,
     }
@@ -1188,6 +1260,27 @@ def get_live_demo(session_id: str) -> Dict[str, Any]:
         session = _live_demo_sessions.get(session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Live demo session not found")
+        return _live_demo_json(session)
+
+
+@app.post("/api/demo/live/{session_id}/continue")
+def continue_live_demo(session_id: str) -> Dict[str, Any]:
+    """Release one real orchestration checkpoint in Judge Mode."""
+    if os.getenv("KALYX_PUBLIC_DEMO", "false").strip().lower() != "true":
+        raise HTTPException(status_code=404, detail="Public demo is disabled")
+    with _live_demo_lock:
+        session = _live_demo_sessions.get(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Live demo session not found")
+        if session.get("mode") != "judge":
+            raise HTTPException(status_code=409, detail="Session is not running in Judge Mode")
+        if not session.get("waiting_for_judge"):
+            return _live_demo_json(session)
+        checkpoint = int(session.get("active_checkpoint", 0))
+        if checkpoint <= 0:
+            raise HTTPException(status_code=409, detail="Judge checkpoint is unavailable")
+        session["released_checkpoint"] = checkpoint
+        session["control_message"] = "Judge released the checkpoint. Advancing to the next real engine boundary."
         return _live_demo_json(session)
 
 
