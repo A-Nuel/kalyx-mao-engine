@@ -6,6 +6,19 @@ const App = (() => {
   let cachedLedgerData = null;
   let cachedAgents = [];
   let auditEventsById = {};
+  let liveDemoSessionId = null;
+  let liveDemoPollTimer = null;
+  let navigationCollapsed = true;
+  const LIVE_DEMO_STAGES = [
+    ['INITIALIZE', 'Initialize', 'Mission accepted by the control plane'],
+    ['PLAN', 'Plan', 'Agents decompose the objective'],
+    ['PROPOSE', 'Propose', 'An agent submits a consequential proposal'],
+    ['AUTHORIZE', 'Authorize', 'Policy decides whether authority is valid'],
+    ['EXECUTE', 'Execute', 'Controlled executor performs the action'],
+    ['VERIFY', 'Verify', 'Independent auditor checks evidence'],
+    ['SETTLE', 'Settle', 'Ledger reflects the resulting economic state'],
+    ['AUDIT', 'Audit', 'The completed chronology remains inspectable'],
+  ];
 
   // Agent inspector is always populated from the authoritative API. No fictional fallback registry.
   const AGENT_REGISTRY = Object.freeze({});
@@ -42,9 +55,19 @@ const App = (() => {
 
   // Navigation & Routing
   function setRoute(route) {
-    const validRoutes = ['overview', 'missions', 'organisation', 'treasury', 'policies', 'operations', 'marketplace', 'collateral', 'audit', 'experiments', 'settings'];
+    const validRoutes = ['overview', 'demo', 'missions', 'organisation', 'treasury', 'policies', 'operations', 'marketplace', 'collateral', 'audit', 'experiments', 'settings'];
     const target = validRoutes.includes(route) ? route : 'overview';
     currentRoute = target;
+
+    if (window.matchMedia('(max-width: 760px)').matches) closeNavigation();
+
+    // Route changes must never inherit a stale document scroll lock. If the
+    // tour itself is still visible it retains the lock until it closes.
+    const tourOverlay = $('kalyxTour');
+    if (!tourOverlay || tourOverlay.classList.contains('hidden')) {
+      document.documentElement.classList.remove('overflow-hidden');
+      document.body.classList.remove('overflow-hidden');
+    }
 
     // Update URL hash
     if (window.location.hash !== `#${target}`) {
@@ -74,22 +97,86 @@ const App = (() => {
     refreshCurrentView().catch(console.warn);
   }
 
-  // Drawers Controller
-  function openDrawer(id) {
-    closeDrawers();
-    const el = $(id);
-    if (el) {
-      el.classList.remove('hidden');
-      requestAnimationFrame(() => el.classList.add('drawer-open'));
+  // Navigation Controller
+  function applyNavigationState() {
+    const isMobile = window.matchMedia('(max-width: 760px)').matches;
+    document.body.classList.toggle('nav-collapsed', !isMobile && navigationCollapsed);
+    document.body.classList.toggle('nav-open', isMobile && !navigationCollapsed);
+    const toggle = $('navToggle');
+    if (toggle) {
+      const open = !navigationCollapsed;
+      toggle.setAttribute('aria-expanded', String(open));
+      toggle.setAttribute('aria-label', open ? 'Close navigation' : 'Open navigation');
+      const icon = toggle.querySelector('.material-symbols-outlined');
+      if (icon) icon.textContent = open ? 'menu_open' : 'menu';
     }
   }
+  function toggleNavigation() {
+    navigationCollapsed = !navigationCollapsed;
+    try { localStorage.setItem('kalyx-nav-collapsed', navigationCollapsed ? '1' : '0'); } catch {}
+    applyNavigationState();
+  }
+  function closeNavigation() {
+    navigationCollapsed = true;
+    try { localStorage.setItem('kalyx-nav-collapsed', '1'); } catch {}
+    applyNavigationState();
+  }
+  function openNavigation() {
+    navigationCollapsed = false;
+    try { localStorage.setItem('kalyx-nav-collapsed', '0'); } catch {}
+    applyNavigationState();
+  }
+  function restoreNavigationState() {
+    try {
+      const stored = localStorage.getItem('kalyx-nav-collapsed');
+      navigationCollapsed = stored !== null ? stored === '1' : window.matchMedia('(max-width: 760px)').matches;
+    } catch { navigationCollapsed = true; }
+    applyNavigationState();
+  }
+  window.addEventListener('resize', applyNavigationState);
 
-  function closeDrawers() {
+  // Drawers Controller
+  const drawerCloseTimers = new Map();
+
+  function openDrawer(id) {
+    const el = $(id);
+    if (!el) return;
+
+    // Cancel any delayed close for the drawer being opened. The previous
+    // controller scheduled a hide for every drawer, including the drawer
+    // that was about to open, which caused the New Mission composer to
+    // flash open and then disappear ~200ms later.
+    const pending = drawerCloseTimers.get(id);
+    if (pending) {
+      clearTimeout(pending);
+      drawerCloseTimers.delete(id);
+    }
+
+    closeDrawers(id);
+    el.classList.remove('hidden');
+    requestAnimationFrame(() => el.classList.add('drawer-open'));
+  }
+
+  function closeDrawers(exceptId = null) {
     document.querySelectorAll('.fixed.z-50').forEach(el => {
-      if (el.id && el.id.startsWith('drawer')) {
-        el.classList.remove('drawer-open');
-        setTimeout(() => el.classList.add('hidden'), 200);
+      if (!el.id || !el.id.startsWith('drawer') || el.id === exceptId) return;
+
+      const pending = drawerCloseTimers.get(el.id);
+      if (pending) clearTimeout(pending);
+
+      // Hidden drawers do not need a delayed hide. Avoid creating timers
+      // that can race with a subsequent openDrawer() call.
+      if (el.classList.contains('hidden')) {
+        drawerCloseTimers.delete(el.id);
+        return;
       }
+
+      el.classList.remove('drawer-open');
+      const timer = setTimeout(() => {
+        el.classList.add('hidden');
+        drawerCloseTimers.delete(el.id);
+      }, 200);
+      drawerCloseTimers.set(el.id, timer);
     });
   }
 
@@ -161,7 +248,7 @@ const App = (() => {
 
   // Refresh current view based on activeRoute
   async function refreshCurrentView() {
-    if (!activeOrgId && currentRoute !== 'experiments' && currentRoute !== 'settings') {
+    if (!activeOrgId && currentRoute !== 'experiments' && currentRoute !== 'settings' && currentRoute !== 'demo') {
       return;
     }
 
@@ -186,6 +273,8 @@ const App = (() => {
       switch (currentRoute) {
         case 'overview':
           await refreshOverview();
+          break;
+        case 'demo':
           break;
         case 'missions':
           await refreshMissions();
@@ -924,14 +1013,28 @@ const App = (() => {
     try{renderTourStep();}
     catch(err){console.error('Tour step failed, closing tour safely:',err);closeTour();}
   }
-  function closeTour(){$('kalyxTour')?.classList.add('hidden');document.body.classList.remove('overflow-hidden');document.querySelectorAll('.tour-target').forEach(e=>e.classList.remove('tour-target'));}
+  function closeTour(){
+    $('kalyxTour')?.classList.add('hidden');
+    document.documentElement.classList.remove('overflow-hidden');
+    document.body.classList.remove('overflow-hidden');
+    document.querySelectorAll('.tour-target').forEach(e=>e.classList.remove('tour-target'));
+  }
   function skipTour(){closeTour();localStorage.setItem('kalyx-tour-seen','1');}
   let tourResizeTimer;
   function handleTourResize(){clearTimeout(tourResizeTimer);tourResizeTimer=setTimeout(()=>{const tour=$('kalyxTour');if(!tour||tour.classList.contains('hidden'))return;try{renderTourStep();}catch(err){console.error('Tour resize re-render failed, closing tour safely:',err);closeTour();}},50);}
   window.addEventListener('resize',handleTourResize);
   window.addEventListener('orientationchange',()=>setTimeout(handleTourResize,100));
   function startLoopGuide(){ $('loopGuide')?.classList.remove('hidden'); }
-  function closeLoopGuide(){ $('loopGuide')?.classList.add('hidden'); }
+  function closeLoopGuide(){
+    $('loopGuide')?.classList.add('hidden');
+    // Keep the document scroll state authoritative even if another overlay
+    // was dismissed by navigation or an exception.
+    const tour = $('kalyxTour');
+    if (!tour || tour.classList.contains('hidden')) {
+      document.documentElement.classList.remove('overflow-hidden');
+      document.body.classList.remove('overflow-hidden');
+    }
+  }
   // Universal safety net for both full-screen overlays (tour + loop
   // guide): Escape always closes whichever is open, and clicking the
   // dimmed backdrop (not the card inside it) closes it too. Without
@@ -965,18 +1068,8 @@ const App = (() => {
   }
 
   async function confirmConsequentialAuth() {
-    const btn = $('btnConfirmConsequentialAuth');
-    if (btn) btn.disabled = true;
-
-    try {
-      closeModals();
-      alert('AUTHORIZATION CONFIRMED\n\nAuthorization token issued by the configured policy authority.\nBound to Consequential Execution Provider.');
-      if (activeOrgId) {
-        await refreshCurrentView();
-      }
-    } finally {
-      if (btn) btn.disabled = false;
-    }
+    closeModals();
+    await startLiveDemo();
   }
 
   async function submitMission(event) {
@@ -1009,20 +1102,135 @@ const App = (() => {
     }
   }
 
-  async function runDemo() {
-    const btn = $('btnRunDemo');
-    if (btn) btn.disabled = true;
+  function renderLiveDemoSnapshot(snapshot) {
+    const stageRoot = $('liveDemoStages');
+    const evidenceRoot = $('liveDemoEvidence');
+    const currentBadge = $('liveDemoCurrentStage');
+    const status = $('liveDemoStatus');
+    const sessionLabel = $('liveDemoSession');
+    if (!stageRoot) return;
 
-    try {
-      const result = await API.runPublicDemo();
-      activeOrgId = result.organisation_id;
-      await loadOrganisations();
-      setRoute('overview');
-    } catch (err) {
-      alert(`Demo mission failed: ${err.message}`);
-    } finally {
-      if (btn) btn.disabled = false;
+    const currentKey = snapshot?.current_stage || 'INITIALIZE';
+    const history = snapshot?.history || [];
+    const completedKeys = new Set(history.map(item => item.key));
+    stageRoot.innerHTML = LIVE_DEMO_STAGES.map(([key, title, desc], index) => {
+      const isCurrent = currentKey === key;
+      const isComplete = completedKeys.has(key) || currentKey === 'COMPLETE';
+      const cls = isCurrent ? 'demo-stage-current' : (isComplete ? 'demo-stage-complete' : '');
+      return `
+        <div class="demo-stage ${cls}">
+          <div class="demo-stage-index">${String(index + 1).padStart(2, '0')}</div>
+          <div class="demo-stage-copy"><strong>${esc(title)}</strong><span>${esc(desc)}</span></div>
+          <div class="demo-stage-state">${isCurrent ? 'ACTIVE' : (isComplete ? 'DONE' : 'WAIT')}</div>
+        </div>`;
+    }).join('');
+
+    if (currentBadge) currentBadge.textContent = snapshot?.current_title || 'Ready to run';
+    if (status) {
+      status.textContent = snapshot?.status === 'completed'
+        ? 'COMPLETE'
+        : snapshot?.status === 'failed'
+          ? 'FAILED'
+          : snapshot ? 'RUNNING · LIVE TRACE' : 'READY';
+      status.className = 'demo-status ' + (snapshot?.status === 'completed' ? 'is-complete' : snapshot?.status === 'failed' ? 'is-failed' : '');
     }
+    if (sessionLabel) sessionLabel.textContent = snapshot?.session_id ? `SESSION ${snapshot.session_id}` : 'NO SESSION';
+
+    const latest = history[history.length - 1];
+    if (evidenceRoot) {
+      if (!latest) {
+        evidenceRoot.innerHTML = '<div class="demo-empty">Run the walkthrough to reveal real orchestration evidence here.</div>';
+      } else {
+        const evidence = latest.evidence || {};
+        const row = (label, value) => `<div><span>${esc(label)}</span><strong>${esc(value ?? '—')}</strong></div>`;
+        let rows = [];
+        if (latest.key === 'PROPOSE') {
+          const p = evidence.proposal || {};
+          rows = [['PROPOSAL ID', p.id], ['AGENT', p.proposing_agent_id], ['ACTION', p.action_type], ['TARGET', p.target], ['REQUESTED CREDITS', p.requested_credits]];
+        } else if (latest.key === 'AUTHORIZE') {
+          const d = evidence.decision || {};
+          rows = [['DECISION', d.result], ['RULE', d.violated_rule_id || d.rule_id || 'policy evaluation'], ['DECISION ID', d.id], ['PROPOSAL', evidence.proposal_id]];
+        } else if (latest.key === 'EXECUTE') {
+          const r = evidence.receipt || {};
+          rows = [['RECEIPT', r.id], ['HTTP STATUS', r.http_status], ['COST', r.cost_credits], ['TARGET', r.target], ['AUTHORIZATION', r.authorization_token ? 'BOUND / CONSUMED' : 'NOT PRESENT']];
+        } else if (latest.key === 'VERIFY') {
+          const v = evidence.verification || {};
+          rows = [['VERIFICATION', v.id || v.status || 'PASSED'], ['RECEIPT', evidence.receipt_id], ['EVIDENCE HASH', v.evidence_hash || v.hash || 'recorded']];
+        } else if (latest.key === 'SETTLE') {
+          const l = evidence.ledger || {};
+          rows = [['TREASURY', l.treasury], ['ESCROW', l.escrow], ['EXTERNAL SINK', l.external_sink], ['CONSERVATION', l.conserved ? 'BALANCED' : 'BREACH']];
+        } else if (latest.key === 'AUDIT') {
+          const r = evidence.review || {};
+          rows = [['MISSION', evidence.organisation_id || 'completed'], ['REVIEW', r.summary || r.status || 'recorded'], ['STATE', 'COMPLETED']];
+        } else {
+          rows = Object.entries(evidence)
+            .filter(([k, v]) => v !== null && v !== undefined && typeof v !== 'object')
+            .slice(0, 8);
+        }
+        const compact = rows.map(([k, v]) => row(k, v)).join('');
+        evidenceRoot.innerHTML = `
+          <div class="demo-evidence-head"><div><span class="demo-kicker">REAL ENGINE EVIDENCE</span><strong>${esc(latest.title)}</strong></div><time>${fmtTime(latest.timestamp)}</time></div>
+          <p>${esc(latest.description)}</p>
+          <div class="demo-evidence-grid">${compact || '<div><span>EVENT</span><strong>' + esc(latest.source_event) + '</strong></div>'}</div>
+          <details class="demo-raw"><summary>Inspect stage payload</summary><pre>${esc(JSON.stringify(evidence, null, 2))}</pre></details>
+        `;
+      }
+    }
+  }
+
+  async function pollLiveDemo() {
+    if (!liveDemoSessionId) return;
+    try {
+      const snapshot = await API.getLiveDemo(liveDemoSessionId);
+      renderLiveDemoSnapshot(snapshot);
+      if (snapshot.result?.organisation_id) {
+        activeOrgId = snapshot.result.organisation_id;
+      }
+      if (snapshot.status === 'running') {
+        liveDemoPollTimer = setTimeout(pollLiveDemo, 350);
+      } else {
+        liveDemoPollTimer = null;
+        if (snapshot.status === 'completed' && activeOrgId) {
+          await loadOrganisations();
+          setTxt('liveDemoCompletionNote', 'The walkthrough is complete. Use View Full Trace to inspect the persisted system state.');
+        }
+      }
+    } catch (err) {
+      renderLiveDemoSnapshot({ status: 'failed', current_stage: 'ERROR', current_title: 'Unable to read demo session', history: [], error: err.message });
+      liveDemoPollTimer = null;
+    }
+  }
+
+  async function startLiveDemo() {
+    if (liveDemoPollTimer) {
+      clearTimeout(liveDemoPollTimer);
+      liveDemoPollTimer = null;
+    }
+    setRoute('demo');
+    renderLiveDemoSnapshot(null);
+    const button = $('btnLiveDemoStart');
+    if (button) {
+      button.disabled = true;
+      button.classList.add('is-busy');
+    }
+    try {
+      const started = await API.startLiveDemo();
+      liveDemoSessionId = started.session_id;
+      setTxt('liveDemoCompletionNote', 'Following actual orchestration boundaries from the Kalyx engine. Nothing here is a pre-recorded animation.');
+      await pollLiveDemo();
+    } catch (err) {
+      renderLiveDemoSnapshot({ status: 'failed', current_stage: 'ERROR', current_title: 'Unable to start demo', history: [], error: err.message });
+      setTxt('liveDemoCompletionNote', err.message);
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.classList.remove('is-busy');
+      }
+    }
+  }
+
+  async function runDemo() {
+    await startLiveDemo();
   }
 
   async function toggleCircuitBreaker() {
@@ -1073,23 +1281,24 @@ const App = (() => {
 
   // Initialize application
   async function init() {
-    // Defensive cleanup: overflow-hidden is only ever meant to be applied
-    // while the tour overlay is open (see startTour/closeTour above). A
-    // fresh page load should never start with it already present, but if
-    // a prior session somehow left it stuck, clear it now rather than let
-    // the whole page silently start non-scrollable.
+    // Defensive cleanup: the tour is the only component allowed to lock
+    // document scrolling. Clear both roots on boot so a stale class from a
+    // previous overlay state can never make the command centre start frozen.
+    document.documentElement.classList.remove('overflow-hidden');
     document.body.classList.remove('overflow-hidden');
 
     // 1. Health check
     try {
-      await API.getHealth();
+      const health = await API.getHealth();
       setTxt('engineStatusText', 'OPERATIONAL');
+      setTxt('overviewEnvironment', String(health.environment || 'unknown').toUpperCase());
     } catch (err) {
       console.warn('Health check failed:', err);
       setTxt('engineStatusText', 'DEGRADED');
     }
 
     enhanceSecondaryViews();
+    restoreNavigationState();
 
     // 2. Hash routing listener
     window.addEventListener('hashchange', () => {
@@ -1298,6 +1507,7 @@ return {
     confirmConsequentialAuth,
     submitMission,
     runDemo,
+    startLiveDemo,
     toggleCircuitBreaker,
     toggleCircuitBreakerPopover,
     verifyAuditChain,
@@ -1314,6 +1524,9 @@ return {
     skipTour,
     startLoopGuide,
     closeLoopGuide,
+    toggleNavigation,
+    openNavigation,
+    closeNavigation,
     refreshCollateral,
     refreshMarketplaceView: refreshMarketplace,
     runB2BMarketplaceLoop,

@@ -3,6 +3,8 @@ import logging
 import os
 import secrets
 import uuid
+import threading
+import time
 from datetime import datetime
 from typing import Any, Dict
 from fastapi import FastAPI, Header, HTTPException, Query
@@ -112,7 +114,100 @@ async def unhandled_exception_handler(request, exc: Exception):
     )
 
 _default_settlement_provider = SimulatedConsequentialProvider()
+
 _latest_experiment_report = None
+
+# Read-only, in-memory state for the public judge walkthrough. The demo itself
+# still executes through the real mission/orchestration stack; this state only
+# lets the browser reveal those persisted boundaries progressively.
+_live_demo_sessions: Dict[str, Dict[str, Any]] = {}
+_live_demo_lock = threading.Lock()
+_LIVE_DEMO_STAGE_DELAY = 1.35
+
+
+def _live_demo_json(value: Any) -> Any:
+    try:
+        return json.loads(json.dumps(value, default=str))
+    except Exception:
+        return str(value)
+
+
+def _redact_live_demo(value: Any) -> Any:
+    """Remove authorization material before exposing demo evidence publicly."""
+    if isinstance(value, dict):
+        return {
+            key: ("[REDACTED]" if key.lower() in {"authorization_token", "token", "secret", "private_key"} else _redact_live_demo(item))
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_live_demo(item) for item in value]
+    return value
+
+
+def _record_live_demo_stage(session_id: str, stage: str, evidence: Dict[str, Any]) -> None:
+    stage_meta = {
+        "MISSION_STARTED": ("INITIALIZE", "Control plane started", "The orchestrator accepted the mission and established the organisation state."),
+        "PLAN_CREATED": ("PLAN", "Agent plan created", "The CEO agent decomposed the objective into delegated work."),
+        "PROPOSAL_SUBMITTED": ("PROPOSE", "Agent proposal submitted", "An agent proposed a consequential action. The proposal is now a persisted object."),
+        "POLICY_EVALUATED": ("AUTHORIZE", "Policy evaluated", "The policy engine evaluated the proposal before execution authority was consumed."),
+        "ACTION_EXECUTED": ("EXECUTE", "Controlled execution", "The executor consumed authorization, reserved credits and called the controlled gateway."),
+        "VERIFIED": ("VERIFY", "Independent verification", "The auditor checked the execution evidence against the policy and operation."),
+        "SETTLED": ("SETTLE", "Ledger settlement", "The organisation ledger now reflects the resulting economic movement and conservation check."),
+        "MISSION_COMPLETED": ("AUDIT", "Audit recorded", "The mission completed and its chronology is available through the audit/event store."),
+    }
+    key, title, description = stage_meta.get(stage, (stage, stage.replace("_", " ").title(), "Control-plane state advanced."))
+    item = {
+        "key": key,
+        "source_event": stage,
+        "title": title,
+        "description": description,
+        "evidence": _live_demo_json(_redact_live_demo(evidence)),
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+    }
+    with _live_demo_lock:
+        session = _live_demo_sessions.get(session_id)
+        if not session:
+            return
+        session["current_stage"] = key
+        session["current_title"] = title
+        session["current_description"] = description
+        session["updated_at"] = item["timestamp"]
+        session["history"].append(item)
+    delay = max(0.0, min(5.0, float(os.getenv("KALYX_LIVE_DEMO_STAGE_DELAY", str(_LIVE_DEMO_STAGE_DELAY)))))
+    time.sleep(delay)
+
+
+def _run_live_demo_session(session_id: str, tenant_id: str) -> None:
+    try:
+        result = run_mission(
+            mission="Kalyx Judge Demo — Governed Autonomous Economic Loop",
+            budget=100,
+            live=False,
+            tenant_id=tenant_id,
+            stage_callback=lambda stage, evidence=None, **kwargs: _record_live_demo_stage(
+                session_id, stage, {**(evidence or {}), **kwargs}
+            ),
+        )
+        with _live_demo_lock:
+            session = _live_demo_sessions.get(session_id)
+            if session:
+                session["status"] = "completed"
+                session["current_stage"] = "COMPLETE"
+                session["current_title"] = "Governance loop complete"
+                session["current_description"] = "Every demonstrated boundary has real persisted evidence behind it."
+                session["result"] = _live_demo_json(_redact_live_demo(result))
+                session["updated_at"] = datetime.utcnow().isoformat() + "Z"
+    except Exception as exc:
+        logger.exception("Live judge demo failed")
+        with _live_demo_lock:
+            session = _live_demo_sessions.get(session_id)
+            if session:
+                session["status"] = "failed"
+                session["current_stage"] = "ERROR"
+                session["current_title"] = "Demo failed"
+                session["current_description"] = f"{type(exc).__name__}: {exc}"
+                session["error"] = f"{type(exc).__name__}: {exc}"
+                session["updated_at"] = datetime.utcnow().isoformat() + "Z"
 
 
 def get_settlement_provider():
@@ -1042,6 +1137,58 @@ def system_settings() -> Dict[str, Any]:
         "circuit_breaker_status": "ARMED",
         "consensus_anchor": "Synchronized",
     }
+
+
+
+@app.post("/api/demo/live/start")
+def start_live_demo(
+    x_tenant_id: str | None = Header(default=None, alias="X-Tenant-ID"),
+) -> Dict[str, Any]:
+    """Start the deterministic public judge walkthrough and return immediately."""
+    if os.getenv("KALYX_PUBLIC_DEMO", "false").strip().lower() != "true":
+        raise HTTPException(status_code=404, detail="Public demo is disabled")
+
+    session_id = f"live-demo-{uuid.uuid4().hex[:12]}"
+    tenant_id = x_tenant_id or "tenant-demo"
+    with _live_demo_lock:
+        _live_demo_sessions[session_id] = {
+            "session_id": session_id,
+            "tenant_id": tenant_id,
+            "status": "running",
+            "current_stage": "INITIALIZE",
+            "current_title": "Starting control plane",
+            "current_description": "Preparing a deterministic, non-live mission through the real Kalyx engine.",
+            "history": [],
+            "result": None,
+            "error": None,
+            "updated_at": datetime.utcnow().isoformat() + "Z",
+        }
+
+    worker = threading.Thread(
+        target=_run_live_demo_session,
+        args=(session_id, tenant_id),
+        name=f"kalyx-live-demo-{session_id[-6:]}",
+        daemon=True,
+    )
+    worker.start()
+    return {
+        "session_id": session_id,
+        "status": "running",
+        "provenance": "SIMULATED / CONTROLLED GATEWAY",
+        "poll_ms": 350,
+    }
+
+
+@app.get("/api/demo/live/{session_id}")
+def get_live_demo(session_id: str) -> Dict[str, Any]:
+    """Return the current read-only state of a public judge walkthrough."""
+    if os.getenv("KALYX_PUBLIC_DEMO", "false").strip().lower() != "true":
+        raise HTTPException(status_code=404, detail="Public demo is disabled")
+    with _live_demo_lock:
+        session = _live_demo_sessions.get(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Live demo session not found")
+        return _live_demo_json(session)
 
 
 @app.post("/api/demo/public-run")

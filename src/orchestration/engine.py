@@ -1,5 +1,5 @@
 import uuid
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple, Any, Callable
 from src.domain.entities import Organisation, Task, ActionProposal, PolicyDecision, ExecutionReceipt
 from src.domain.enums import OrgState, TaskStatus, PolicyResult
 from src.domain.exceptions import PolicyViolationError, NoEligibleAgentException
@@ -38,15 +38,23 @@ class OrchestrationEngine:
     def __init__(self, org: Organisation, ledger: Any, policy_engine: PolicyEngine, executor: BaseExecutor,
                  event_store: Any, human_gate: HumanGate, ceo: CEOAgent, researcher: ResearcherAgent,
                  strategist: StrategistAgent, financial_analyst: FinancialAnalystAgent,
-                 auditor: Optional[Auditor] = None, repository: Optional[Any] = None, max_replan_attempts: int = 3):
+                 auditor: Optional[Auditor] = None, repository: Optional[Any] = None, max_replan_attempts: int = 3,
+                 stage_callback: Optional[Callable[[str, Dict[str, Any]], None]] = None):
         self.org, self.ledger, self.policy_engine, self.executor = org, ledger, policy_engine, executor
         self.event_store, self.human_gate = event_store, human_gate
         self.ceo, self.researcher, self.strategist, self.financial_analyst = ceo, researcher, strategist, financial_analyst
         self.auditor, self.repository, self.max_replan_attempts = auditor or Auditor(), repository, max_replan_attempts
+        self.stage_callback = stage_callback
         self.tasks: TaskRegistry = TaskRegistry(); self._task_aliases: Dict[str, str] = self.tasks.aliases; self.replan_counts: Dict[str, int] = {}
         self.execution_receipts: List[ExecutionReceipt] = []; self.verification_receipts: List[VerificationReceipt] = []
 
     def _task_id(self, logical_id: str) -> str: return self._task_aliases.get(logical_id, logical_id)
+
+    def _emit_stage(self, stage: str, **evidence: Any) -> None:
+        """Expose real orchestration boundaries to an optional live demo observer."""
+        if self.stage_callback:
+            self.stage_callback(stage, evidence)
+
     def _sync_state(self) -> None:
         if self.repository:
             self.repository.save_organisation(self.org)
@@ -57,11 +65,13 @@ class OrchestrationEngine:
         StateMachine.transition_org(self.org, OrgState.PLANNING)
         self.event_store.append_event(actor_id="ORCHESTRATOR", event_type="MISSION_STARTED", entity_id=self.org.id,
                                       payload={"mission": self.org.mission, "treasury_balance": self.org.treasury_balance})
+        self._emit_stage("MISSION_STARTED", organisation_id=self.org.id, mission=self.org.mission, treasury_balance=self.org.treasury_balance)
         self._sync_state()
 
     def decompose_and_plan(self) -> List[Task]:
         plan = self.ceo.create_initial_plan(self.org.mission, self.org.treasury_balance)
         self.event_store.append_event(actor_id=self.ceo.agent_id, event_type="MISSION_PLAN_CREATED", entity_id=self.org.id, payload=plan.model_dump())
+        self._emit_stage("PLAN_CREATED", agent_id=self.ceo.agent_id, task_count=len(plan.tasks), plan=plan.model_dump())
         created = []
         for item in plan.tasks:
             logical_id = item.task_id
@@ -116,6 +126,7 @@ class OrchestrationEngine:
             StateMachine.transition_task(ft, TaskStatus.IN_PROGRESS)
         finance = self.financial_analyst.formulate_proposal(strategy)
         self.event_store.append_event(actor_id=self.financial_analyst.agent_id, event_type="FINANCIAL_PROPOSAL_FORMULATED", entity_id=ft.id if ft else self._task_id("task-03"), payload=finance.model_dump())
+        self._emit_stage("INTELLIGENCE_READY", agent_id=self.financial_analyst.agent_id, finance=finance.model_dump(), research=research.model_dump(), strategy=strategy.model_dump())
         self._sync_state(); return research, strategy, finance
 
     def process_action_proposal(self, task_id: str, proposal: ActionProposal) -> Tuple[PolicyDecision, Optional[ExecutionReceipt]]:
@@ -127,16 +138,21 @@ class OrchestrationEngine:
         task.proposals.append(proposal)
         if self.repository: self.repository.save_proposal(proposal)
         self.event_store.append_event(actor_id=proposal.proposing_agent_id, event_type="PROPOSAL_SUBMITTED", entity_id=proposal.id, payload=proposal.model_dump())
+        self._emit_stage("PROPOSAL_SUBMITTED", proposal=proposal.model_dump(), task_id=task.id)
         decision = self.policy_engine.evaluate(proposal, self.org, ledger=self.ledger)
         if self.repository: self.repository.save_policy_decision(decision)
         self.event_store.append_event(actor_id="POLICY_ENGINE", event_type="POLICY_EVALUATED", entity_id=decision.id, payload=decision.model_dump())
+        self._emit_stage("POLICY_EVALUATED", decision=decision.model_dump(), proposal_id=proposal.id)
         agent = self.org.agents.get(proposal.proposing_agent_id)
         if decision.result == PolicyResult.APPROVED:
             StateMachine.transition_task(task, TaskStatus.APPROVED); receipt = self.executor.execute(proposal, decision, self.org); self.execution_receipts.append(receipt)
             if self.repository: self.repository.save_execution_receipt(receipt)
             self.event_store.append_event(actor_id="EXECUTOR", event_type="ACTION_EXECUTED", entity_id=receipt.id, payload=receipt.model_dump())
+            self._emit_stage("ACTION_EXECUTED", receipt=receipt.model_dump(), ledger={"treasury": self.ledger.get_balance("TREASURY"), "escrow": self.ledger.get_balance("ESCROW"), "external_sink": self.ledger.get_balance("EXTERNAL_SINK")})
             try:
-                self.verification_receipts.append(self.auditor.verify_execution(proposal=proposal, decision=decision, receipt=receipt, org=self.org, task=task, ledger=self.ledger, event_store=self.event_store, policy_engine=self.policy_engine))
+                verification = self.auditor.verify_execution(proposal=proposal, decision=decision, receipt=receipt, org=self.org, task=task, ledger=self.ledger, event_store=self.event_store, policy_engine=self.policy_engine)
+                self.verification_receipts.append(verification)
+                self._emit_stage("VERIFIED", verification=verification.model_dump(), receipt_id=receipt.id)
             except AuditVerificationError as ave:
                 StateMachine.transition_task(task, TaskStatus.FAILED); StateMachine.transition_org(self.org, OrgState.FAILED)
                 self.event_store.append_event(actor_id="AUDITOR", event_type="AUDIT_FAILED", entity_id=receipt.id, payload={"failures": ave.failures}); self._sync_state(); raise
@@ -198,4 +214,5 @@ class OrchestrationEngine:
         StateMachine.transition_org(self.org, OrgState.COMPLETED)
         review = self.ceo.review_mission(self.org.mission, [r.model_dump() for r in self.execution_receipts])
         self.event_store.append_event(actor_id=self.ceo.agent_id, event_type="MISSION_COMPLETED", entity_id=self.org.id, payload=review.model_dump())
+        self._emit_stage("MISSION_COMPLETED", review=review.model_dump(), ledger={"treasury": self.ledger.get_balance("TREASURY"), "escrow": self.ledger.get_balance("ESCROW"), "external_sink": self.ledger.get_balance("EXTERNAL_SINK")})
         self._sync_state(); return review

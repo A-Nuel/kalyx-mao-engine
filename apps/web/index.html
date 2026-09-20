@@ -13,7 +13,7 @@
 <script>
 tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans-serif'],mono:['JetBrains Mono','monospace']}}}};
 </script>
-<link rel="stylesheet" href="/assets/app.css?v=20260920-2">
+<link rel="stylesheet" href="/assets/app.css?v=20260920-3">
 </head>
 <body class="kalyx-shell">
   <div class="kalyx-noise" aria-hidden="true"></div>
@@ -23,6 +23,9 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans
       <span class="kalyx-mark"><i></i><i></i></span>
       <span>KALYX</span>
     </a>
+    <button id="navToggle" type="button" class="kalyx-nav-toggle" onclick="App.toggleNavigation()" aria-label="Open navigation" aria-expanded="false">
+      <span class="material-symbols-outlined">menu</span>
+    </button>
     <div class="kalyx-top-context">
       <span class="kalyx-context-dot"></span>
       <span>COMMAND CENTRE</span>
@@ -50,6 +53,8 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans
     <nav class="kalyx-nav" aria-label="Command Centre">
       <div class="kalyx-nav-label">OPERATE</div>
       <button class="nav-tab active" data-nav="overview" onclick="App.setRoute('overview')"><span class="material-symbols-outlined">grid_view</span>Overview</button>
+      <div class="kalyx-nav-label kalyx-nav-label-spaced">DEMONSTRATE</div>
+      <button class="nav-tab" data-nav="demo" onclick="App.setRoute('demo')"><span class="material-symbols-outlined">play_circle</span>Live Demo</button>
       <button class="nav-tab" data-nav="missions" onclick="App.setRoute('missions')"><span class="material-symbols-outlined">route</span>Missions</button>
       <button class="nav-tab" data-nav="organisation" onclick="App.setRoute('organisation')"><span class="material-symbols-outlined">hub</span>Organisation</button>
       <button class="nav-tab" data-nav="treasury" onclick="App.setRoute('treasury')"><span class="material-symbols-outlined">account_balance_wallet</span>Treasury</button>
@@ -73,6 +78,7 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans
       <a href="/" class="kalyx-back-link">← Kalyx system</a>
     </div>
   </aside>
+  <button id="navScrim" class="kalyx-nav-scrim" type="button" aria-label="Close navigation" onclick="App.closeNavigation()"></button>
 
   <main class="kalyx-main">
     <section id="view-overview" class="view-panel">
@@ -85,7 +91,7 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans
           </div>
           <div class="kalyx-hero-meta">
             <div><span>UTC</span><strong id="overviewClock">—</strong></div>
-            <div><span>ENVIRONMENT</span><strong>PRODUCTION</strong></div>
+            <div><span>ENVIRONMENT</span><strong id="overviewEnvironment">CHECKING</strong></div>
           </div>
         </div>
 
@@ -112,7 +118,7 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans
             <span>JUDGE PATH</span>
             <strong>RUN THE LOOP</strong>
             <small>Execute the public deterministic demo.</small>
-            <button id="btnRunDemo" type="button" onclick="App.runDemo()">Run simulated demo <span>→</span></button>
+            <button id="btnRunDemo" type="button" onclick="App.runDemo()">Run live governance demo <span>→</span></button>
           </article>
         </div>
 
@@ -188,9 +194,65 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans
           <section class="kalyx-panel kalyx-judge-panel">
             <span class="kalyx-panel-kicker">DEMO SEQUENCE</span>
             <h2>Show the machine, not the mockup.</h2>
-            <p>Run the deterministic public demo, then inspect Missions, Treasury and Audit as the state changes.</p>
-            <div class="kalyx-judge-actions"><button onclick="App.runDemo()" type="button">Run simulated demo →</button><button onclick="App.startLoopGuide()" type="button">Explain the loop</button></div>
+            <p>Watch one governed operation move through proposal, policy, execution, verification, settlement and audit in real time.</p>
+            <div class="kalyx-judge-actions"><button onclick="App.runDemo()" type="button">Run live governance demo →</button><button onclick="App.startLoopGuide()" type="button">Explain the loop</button></div>
           </section>
+        </div>
+      </div>
+    </section>
+
+
+    <section id="view-demo" class="view-panel hidden">
+      <div class="live-demo-shell">
+        <div class="live-demo-header">
+          <div>
+            <span class="demo-kicker">KALYX / LIVE GOVERNANCE TRACE</span>
+            <h1>Watch the machine.</h1>
+            <p>One deterministic mission, executed by the real control plane. The screen advances only when the underlying engine reaches the corresponding boundary.</p>
+          </div>
+          <div class="live-demo-header-meta">
+            <span id="liveDemoStatus" class="demo-status">READY</span>
+            <span id="liveDemoSession">NO SESSION</span>
+          </div>
+        </div>
+
+        <div class="live-demo-proofbar">
+          <div><span>EXTERNAL EXECUTION</span><strong>SIMULATED / CONTROLLED GATEWAY</strong></div>
+          <div><span>AUTHORITY</span><strong>POLICY ENGINE</strong></div>
+          <div><span>EVIDENCE</span><strong>PERSISTED EVENT STORE</strong></div>
+          <div><span>ECONOMICS</span><strong>DOUBLE-ENTRY LEDGER</strong></div>
+        </div>
+
+        <div class="live-demo-grid">
+          <section class="live-demo-panel live-demo-stages-panel">
+            <div class="live-demo-panel-head">
+              <div><span class="demo-kicker">CONTROL LOOP</span><h2>What Kalyx is doing</h2></div>
+              <span id="liveDemoCurrentStage" class="live-demo-current">Ready to run</span>
+            </div>
+            <div id="liveDemoStages" class="live-demo-stages"></div>
+          </section>
+
+          <section class="live-demo-panel live-demo-evidence-panel">
+            <div class="live-demo-panel-head">
+              <div><span class="demo-kicker">EVIDENCE</span><h2>What actually happened</h2></div>
+              <span class="live-demo-live-mark">● LIVE</span>
+            </div>
+            <div id="liveDemoEvidence" class="live-demo-evidence">
+              <div class="demo-empty">Run the walkthrough to reveal real orchestration evidence here.</div>
+            </div>
+          </section>
+        </div>
+
+        <div class="live-demo-bottom">
+          <div class="live-demo-explainer">
+            <span class="demo-kicker">JUDGE READ</span>
+            <strong id="liveDemoCompletionNote">Nothing is pre-recorded. Every stage is emitted from the orchestration engine as it executes.</strong>
+            <p>AGENT PROPOSES → POLICY AUTHORIZES → EXECUTOR ACTS → AUDITOR VERIFIES → LEDGER SETTLES → AUDIT REMAINS</p>
+          </div>
+          <div class="live-demo-actions">
+            <button id="btnLiveDemoStart" type="button" onclick="App.startLiveDemo()">Run live governance demo <span>→</span></button>
+            <button type="button" onclick="App.setRoute('audit')">View full audit →</button>
+          </div>
         </div>
       </div>
     </section>
@@ -361,7 +423,7 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans
       </div>
 
       <div class="pt-6 border-t border-white/[0.08] flex items-center justify-end">
-        <button type="button" class="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-medium shadow-md transition-all" onclick="App.openModal('modalConsequentialAuth')">Authorize Consequential Action</button>
+        <button type="button" class="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-medium shadow-md transition-all" onclick="App.openModal('modalConsequentialAuth')">Open Live Governance Trace</button>
       </div>
     </div>
   </div>
@@ -375,33 +437,33 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans
           <span class="material-symbols-outlined text-2xl">verified_user</span>
         </div>
         <div>
-          <h3 class="text-lg font-semibold text-white">Authorize Consequential Action</h3>
-          <p class="text-xs text-slate-400 mt-1">This operation carries economic impact and binds funds to external protocol execution.</p>
+          <h3 class="text-lg font-semibold text-white">Consequential Authorization Trace</h3>
+          <p class="text-xs text-slate-400 mt-1">This control is read-only. Kalyx derives execution authority from the policy decision recorded by the engine; use the live trace to watch that boundary happen.</p>
         </div>
       </div>
 
       <div class="p-4 rounded-xl bg-surface-container-lowest border border-white/10 text-xs font-mono space-y-2">
         <div class="flex justify-between text-slate-400">
-          <span>TARGET OPERATION:</span>
-          <span class="text-white font-semibold">Live proposal</span>
+          <span>AUTHORITY SOURCE:</span>
+          <span class="text-emerald-400 font-semibold">Persisted policy decision</span>
         </div>
         <div class="flex justify-between text-slate-400">
-          <span>ALLOCATED VOLUME:</span>
-          <span class="text-primary font-bold">$45,000.00 USD</span>
+          <span>EXECUTION MODE:</span>
+          <span class="text-white font-semibold">SIMULATED / CONTROLLED GATEWAY</span>
         </div>
         <div class="flex justify-between text-slate-400">
-          <span>SIGNING AUTHORITY:</span>
-          <span class="text-emerald-400">Workspace Operator (Director)</span>
+          <span>AUTHORIZATION BOUNDARY:</span>
+          <span class="text-white font-semibold">Policy → Executor</span>
         </div>
         <div class="flex justify-between text-slate-400">
-          <span>HARDWARE TOKEN:</span>
-          <span class="text-slate-300">Operator authorization (HMAC-SHA256)</span>
+          <span>TRACE:</span>
+          <span class="text-slate-300">Live engine evidence</span>
         </div>
       </div>
 
       <div class="flex items-center justify-end gap-3 pt-2">
         <button type="button" class="px-4 py-2 rounded-lg bg-surface-container hover:bg-surface-bright text-slate-300 text-sm font-medium transition-colors" onclick="App.closeModals()">Cancel</button>
-        <button id="btnConfirmConsequentialAuth" type="button" onclick="App.confirmConsequentialAuth()" class="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-medium shadow-md shadow-blue-600/20 active:scale-[0.98] transition-all">Sign & Authorize</button>
+        <button id="btnConfirmConsequentialAuth" type="button" onclick="App.confirmConsequentialAuth()" class="px-5 py-2 rounded-lg bg-primary hover:bg-primary-hover text-white text-sm font-medium shadow-md shadow-blue-600/20 active:scale-[0.98] transition-all">Open Live Trace</button>
       </div>
     </div>
   </div>
@@ -478,7 +540,7 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans
         <span>Consensus Finality Live telemetry</span>
       </div>
       <div>
-        &copy; 2025 Kalyx Protocol. All autonomous directives preserved.
+        &copy; 2026 Kalyx Protocol. All autonomous directives preserved.
       </div>
     </div>
   </footer>
@@ -507,7 +569,7 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans
       <div class="kalyx-guide-foot"><span>DEMO PROVENANCE</span><b>SIMULATED</b><button onclick="App.closeLoopGuide();App.runDemo()">Run the simulated path →</button></div>
     </div>
   </div>
-  <script src="/assets/api.js?v=20260919-2"></script>
-  <script src="/assets/app.js?v=20260919-2"></script>
+  <script src="/assets/api.js?v=20260920-1"></script>
+  <script src="/assets/app.js?v=20260920-2"></script>
 </body>
 </html>
