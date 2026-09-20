@@ -5,6 +5,7 @@ const App = (() => {
   let cachedOrgData = null;
   let cachedLedgerData = null;
   let cachedAgents = [];
+  let auditEventsById = {};
 
   // Agent inspector is always populated from the authoritative API. No fictional fallback registry.
   const AGENT_REGISTRY = Object.freeze({});
@@ -691,8 +692,12 @@ const App = (() => {
 
     const tbody = $('ledgerTableBody');
     if (tbody && events && events.length > 0) {
-      tbody.innerHTML = events.slice(-8).reverse().map((e, idx) => `
-        <tr class="cursor-pointer bg-surface-container-low hover:bg-surface-container/60 transition-colors group select-none" data-row-id="row-${idx + 1}">
+      const recent = events.slice(-8).reverse();
+      auditEventsById = {};
+      recent.forEach((e) => { auditEventsById[e.sequence_id] = e; });
+
+      tbody.innerHTML = recent.map((e) => `
+        <tr class="cursor-pointer bg-surface-container-low hover:bg-surface-container/60 transition-colors group select-none" onclick="App.selectAuditEvent(${e.sequence_id})">
           <td class="py-space-md px-space-lg font-label-md text-label-md text-on-surface-variant whitespace-nowrap font-mono">
             ${fmtTime(e.timestamp)}
           </td>
@@ -704,16 +709,48 @@ const App = (() => {
           </td>
           <td class="py-space-md px-space-md">
             <div class="font-body-md text-body-md text-on-surface font-medium">${esc(e.event_type)}</div>
-            <div class="font-label-sm text-label-sm text-on-surface-variant truncate max-w-xs font-mono">Payload: ${esc(e.payload_hash ? e.payload_hash.slice(0, 16) : '—')}…</div>
+            <div class="font-label-sm text-label-sm text-on-surface-variant truncate max-w-xs font-mono">Payload: ${esc(e.payload_hash ? e.payload_hash.slice(0, 16) : '—')}&hellip;</div>
           </td>
           <td class="py-space-md px-space-md">
-            <span class="text-xs font-mono text-emerald-400">PASSED 14/14</span>
+            <span class="text-xs font-mono text-on-surface-variant">#${e.sequence_id}</span>
           </td>
           <td class="py-space-md px-space-lg font-medium text-right font-mono text-xs text-primary">
-            VERIFIED
+            ${esc(e.entity_id ? e.entity_id.slice(0, 10) : '—')}
           </td>
         </tr>
       `).join('');
+    } else if (tbody) {
+      tbody.innerHTML = '<tr><td colspan="5" class="kc-empty">No audit events yet — run the demo to generate one.</td></tr>';
+    }
+  }
+
+  // Populates the Evidence Inspector panel from a real AuditEvent the user
+  // clicked in the ledger table -- every field shown is read directly from
+  // that event, none of it is invented (there is no "guards passed" or
+  // "verified" concept on AuditEvent itself, so those are not displayed
+  // here rather than fabricated).
+  function selectAuditEvent(sequenceId) {
+    const e = auditEventsById && auditEventsById[sequenceId];
+    if (!e) return;
+    setTxt('auditInspectorActionTitle', e.event_type);
+    setTxt('auditInspectorStatusBadge', 'RECORDED');
+    setTxt('auditInspectorAgentName', e.actor_id);
+    setTxt('auditInspectorAgentRole', e.entity_id || '—');
+    setTxt('auditInspectorAgentSig', e.event_hash ? e.event_hash.slice(0, 20) + '…' : '—');
+    setTxt('auditInspectorMerkleLeaf', e.payload_hash ? e.payload_hash.slice(0, 20) + '…' : '—');
+    setTxt('auditInspectorReceipt', 'seq-' + e.sequence_id);
+    const payloadEl = $('auditInspectorPayloadCode');
+    if (payloadEl) {
+      try {
+        payloadEl.textContent = JSON.stringify(e.payload, null, 2);
+      } catch {
+        payloadEl.textContent = String(e.payload);
+      }
+    }
+    setTxt('auditInspectorRationaleText', `Event #${e.sequence_id}, chained to previous event ${e.previous_event_hash ? e.previous_event_hash.slice(0, 16) + '…' : '(genesis)'}.`);
+    const guardsList = $('auditInspectorGuardsList');
+    if (guardsList) {
+      guardsList.innerHTML = `<div><span>CHAIN</span><b>${e.previous_event_hash ? 'LINKED' : 'GENESIS'}</b></div>`;
     }
   }
 
@@ -1218,6 +1255,7 @@ return {
     toggleCircuitBreaker,
     toggleCircuitBreakerPopover,
     verifyAuditChain,
+    selectAuditEvent,
     runBenchmark,
     reconcileLatest,
     reconcileOp,
