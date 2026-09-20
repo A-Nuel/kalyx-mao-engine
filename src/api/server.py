@@ -161,7 +161,8 @@ def _record_live_demo_stage(session_id: str, stage: str, evidence: Dict[str, Any
         session["current_description"] = description
         session["updated_at"] = item["timestamp"]
         session["history"].append(item)
-    time.sleep(_LIVE_DEMO_STAGE_DELAY)
+    delay = max(0.0, min(5.0, float(os.getenv("KALYX_LIVE_DEMO_STAGE_DELAY", str(_LIVE_DEMO_STAGE_DELAY)))))
+    time.sleep(delay)
 
 
 def _run_live_demo_session(session_id: str, tenant_id: str) -> None:
