@@ -1053,11 +1053,32 @@ const App = (() => {
         evidenceRoot.innerHTML = '<div class="demo-empty">Run the walkthrough to reveal real orchestration evidence here.</div>';
       } else {
         const evidence = latest.evidence || {};
-        const compact = Object.entries(evidence)
-          .filter(([k, v]) => v !== null && v !== undefined && typeof v !== 'object')
-          .slice(0, 8)
-          .map(([k, v]) => `<div><span>${esc(k.replaceAll('_', ' '))}</span><strong>${esc(v)}</strong></div>`)
-          .join('');
+        const row = (label, value) => `<div><span>${esc(label)}</span><strong>${esc(value ?? '—')}</strong></div>`;
+        let rows = [];
+        if (latest.key === 'PROPOSE') {
+          const p = evidence.proposal || {};
+          rows = [['PROPOSAL ID', p.id], ['AGENT', p.proposing_agent_id], ['ACTION', p.action_type], ['TARGET', p.target], ['REQUESTED CREDITS', p.requested_credits]];
+        } else if (latest.key === 'AUTHORIZE') {
+          const d = evidence.decision || {};
+          rows = [['DECISION', d.result], ['RULE', d.violated_rule_id || d.rule_id || 'policy evaluation'], ['DECISION ID', d.id], ['PROPOSAL', evidence.proposal_id]];
+        } else if (latest.key === 'EXECUTE') {
+          const r = evidence.receipt || {};
+          rows = [['RECEIPT', r.id], ['HTTP STATUS', r.http_status], ['COST', r.cost_credits], ['TARGET', r.target], ['AUTH TOKEN', r.authorization_token ? r.authorization_token.slice(0, 18) + '…' : '—']];
+        } else if (latest.key === 'VERIFY') {
+          const v = evidence.verification || {};
+          rows = [['VERIFICATION', v.id || v.status || 'PASSED'], ['RECEIPT', evidence.receipt_id], ['EVIDENCE HASH', v.evidence_hash || v.hash || 'recorded']];
+        } else if (latest.key === 'SETTLE') {
+          const l = evidence.ledger || {};
+          rows = [['TREASURY', l.treasury], ['ESCROW', l.escrow], ['EXTERNAL SINK', l.external_sink], ['CONSERVATION', l.conserved ? 'BALANCED' : 'BREACH']];
+        } else if (latest.key === 'AUDIT') {
+          const r = evidence.review || {};
+          rows = [['MISSION', evidence.organisation_id || 'completed'], ['REVIEW', r.summary || r.status || 'recorded'], ['STATE', 'COMPLETED']];
+        } else {
+          rows = Object.entries(evidence)
+            .filter(([k, v]) => v !== null && v !== undefined && typeof v !== 'object')
+            .slice(0, 8);
+        }
+        const compact = rows.map(([k, v]) => row(k, v)).join('');
         evidenceRoot.innerHTML = `
           <div class="demo-evidence-head"><div><span class="demo-kicker">REAL ENGINE EVIDENCE</span><strong>${esc(latest.title)}</strong></div><time>${fmtTime(latest.timestamp)}</time></div>
           <p>${esc(latest.description)}</p>
