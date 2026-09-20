@@ -243,6 +243,12 @@ const API = (() => {
     async runPublicDemo() {
       return request('/api/demo/public-run', { method: 'POST' });
     },
+    async startLiveDemo() {
+      return request('/api/demo/live/start', { method: 'POST' });
+    },
+    async getLiveDemo(sessionId) {
+      return request('/api/demo/live/' + encodeURIComponent(sessionId));
+    },
   };
 
 })();
