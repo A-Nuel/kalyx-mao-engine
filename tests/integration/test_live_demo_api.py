@@ -8,6 +8,7 @@ import src.api.server as server
 def test_live_judge_demo_reveals_real_engine_boundaries(tmp_path, monkeypatch):
     monkeypatch.setenv("KALYX_DB", str(tmp_path / "live_demo.db"))
     monkeypatch.setenv("KALYX_PUBLIC_DEMO", "true")
+    monkeypatch.setenv("KALYX_RATE_LIMIT_ENABLED", "false")
     monkeypatch.setenv("KALYX_LIVE_DEMO_STAGE_DELAY", "0")
 
     client = TestClient(server.app)
@@ -103,6 +104,7 @@ def test_judge_mode_pauses_at_real_boundaries_and_auto_advances_proposal(tmp_pat
 def test_singular_organization_compatibility_route_is_public_demo_readable(tmp_path, monkeypatch):
     monkeypatch.setenv("KALYX_DB", str(tmp_path / "compat.db"))
     monkeypatch.setenv("KALYX_PUBLIC_DEMO", "true")
+    monkeypatch.setenv("KALYX_RATE_LIMIT_ENABLED", "false")
     client = TestClient(server.app)
     result = client.post("/api/demo/public-run")
     assert result.status_code == 200, result.text
