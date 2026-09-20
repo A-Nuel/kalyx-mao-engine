@@ -8,6 +8,8 @@ const App = (() => {
   let auditEventsById = {};
   let liveDemoSessionId = null;
   let liveDemoPollTimer = null;
+  let liveDemoCountdownTimer = null;
+  let liveDemoMode = 'guided';
   let navigationCollapsed = true;
   const LIVE_DEMO_STAGES = [
     ['INITIALIZE', 'Initialize', 'Mission accepted by the control plane'],
@@ -100,6 +102,19 @@ const App = (() => {
   // Navigation Controller
   function applyNavigationState() {
     const isMobile = window.matchMedia('(max-width: 760px)').matches;
+    const navLabels = {
+      overview: 'Overview', demo: 'Live Demo', missions: 'Missions', organisation: 'Organisation',
+      treasury: 'Treasury', policies: 'Policies', operations: 'Operations', marketplace: 'Marketplace',
+      collateral: 'CREDIT Collateral', audit: 'Audit', experiments: 'Experiments', settings: 'Settings',
+    };
+    document.querySelectorAll('.nav-tab[data-nav]').forEach(tab => {
+      const label = navLabels[tab.getAttribute('data-nav')];
+      if (label) {
+        tab.setAttribute('aria-label', label);
+        tab.setAttribute('data-tooltip', label);
+        tab.setAttribute('title', label);
+      }
+    });
     document.body.classList.toggle('nav-collapsed', !isMobile && navigationCollapsed);
     document.body.classList.toggle('nav-open', isMobile && !navigationCollapsed);
     const toggle = $('navToggle');
@@ -383,48 +398,38 @@ const App = (() => {
     // 1. Active Agents List
     const agentContainer = $('activeAgentsContainer');
     if (agentContainer && agents && agents.length > 0) {
-      agentContainer.innerHTML = agents.map(a => `
-        <div class="flex items-center justify-between p-space-md rounded-lg bg-white/[0.02] hover:bg-white/[0.05] border border-transparent hover:border-white/10 transition-colors duration-150 group cursor-pointer" onclick="App.selectAgentForInspector('${esc(a.id)}')">
-          <div class="flex items-center gap-space-md min-w-0">
-            <div class="w-9 h-9 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 shrink-0 shadow-sm">
-              <span class="material-symbols-outlined text-[20px]">smart_toy</span>
-            </div>
-            <div class="flex flex-col min-w-0">
-              <div class="flex items-center gap-2">
-                <span class="font-label-md text-label-md text-white font-semibold truncate group-hover:text-blue-400 transition-colors">${esc(a.id)}</span>
-                <span class="font-label-sm text-label-sm text-slate-500 font-mono">${esc(a.model_name || 'Autonomous')}</span>
-              </div>
-              <span class="font-body-sm text-body-sm text-slate-400 truncate">${esc(a.role)}</span>
-            </div>
-          </div>
-          <div class="flex items-center gap-space-md shrink-0">
-            <div class="hidden sm:flex flex-col items-end font-mono">
-              <span class="font-label-sm text-label-sm text-white">${fmtNum(a.authority_ceiling)} CR</span>
-              <span class="font-label-sm text-label-sm text-slate-500">Rep: ${Number(a.reputation_score).toFixed(0)}</span>
-            </div>
-            <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full ${a.status === 'ACTIVE' ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400' : 'bg-amber-500/10 border border-amber-500/20 text-amber-300'}">
-              <span class="w-1.5 h-1.5 rounded-full ${a.status === 'ACTIVE' ? 'bg-emerald-400' : 'bg-amber-400'}"></span>
-              <span class="font-label-sm text-label-sm font-medium uppercase">${esc(a.status)}</span>
-            </div>
-          </div>
-        </div>
-      `).join('');
+      const compactAgentId = (id) => {
+        const value = String(id || '—');
+        return value.length > 27 ? value.slice(0, 14) + '…' + value.slice(-9) : value;
+      };
+      agentContainer.innerHTML = agents.map(a =>
+        '<button type="button" class="kalyx-agent-row group" onclick="App.selectAgentForInspector(\'' + esc(a.id) + '\')" title="' + esc(a.id) + '">' +
+          '<span class="kalyx-agent-icon"><span class="material-symbols-outlined">smart_toy</span></span>' +
+          '<span class="kalyx-agent-main">' +
+            '<span class="kalyx-agent-topline"><span class="kalyx-agent-id">' + esc(compactAgentId(a.id)) + '</span>' +
+            '<span class="kalyx-agent-model">' + esc(a.model_name || 'Autonomous') + '</span></span>' +
+            '<span class="kalyx-agent-role">' + esc(a.role || 'UNASSIGNED') + '</span>' +
+          '</span>' +
+          '<span class="kalyx-agent-metrics"><span><b>' + fmtNum(a.authority_ceiling) + ' CR</b><small>Authority</small></span>' +
+          '<span><b>' + Number(a.reputation_score).toFixed(0) + '</b><small>Rep</small></span></span>' +
+          '<span class="kalyx-agent-status ' + (a.status === 'ACTIVE' ? 'is-active' : 'is-idle') + '"><i></i>' +
+          esc(a.status || 'UNKNOWN') + '</span></button>'
+      ).join('');
     }
 
     // 2. Recent Chronology Activity
     const activityContainer = $('recentActivityContainer');
     if (activityContainer && events && events.length > 0) {
-      activityContainer.innerHTML = events.slice(-6).reverse().map(e => `
-        <div class="flex items-start gap-space-md relative group">
-          <div class="w-11 h-8 rounded-md bg-white/[0.06] border border-white/[0.08] flex items-center justify-center shrink-0 z-10 font-mono text-[11px] text-blue-400 font-medium">
-            #${e.sequence_id}
-          </div>
-          <div class="flex flex-col pt-0.5 min-w-0">
-            <span class="font-body-sm text-body-sm text-white font-medium leading-snug truncate">${esc(e.event_type)}</span>
-            <span class="font-label-sm text-label-sm text-slate-400 truncate">Actor: <span class="text-slate-300 font-mono">${esc(e.actor_id)}</span> • ${fmtTime(e.timestamp)}</span>
-          </div>
-        </div>
-      `).join('');
+      const compactActor = (id) => {
+        const value = String(id || '—');
+        return value.length > 30 ? value.slice(0, 13) + '…' + value.slice(-8) : value;
+      };
+      activityContainer.innerHTML = events.slice(-6).reverse().map(e =>
+        '<div class="kalyx-activity-row"><span class="kalyx-event-seq">#' + esc(e.sequence_id) + '</span>' +
+        '<span class="kalyx-event-main"><b>' + esc(e.event_type || 'EVENT') + '</b>' +
+        '<small>Actor <strong title="' + esc(e.actor_id) + '">' + esc(compactActor(e.actor_id)) + '</strong><i>•</i>' +
+        esc(fmtTime(e.timestamp)) + '</small></span></div>'
+      ).join('');
     }
   }
 
@@ -1178,11 +1183,68 @@ const App = (() => {
     }
   }
 
+  function clearLiveDemoCountdown() {
+    if (liveDemoCountdownTimer) {
+      clearInterval(liveDemoCountdownTimer);
+      liveDemoCountdownTimer = null;
+    }
+  }
+
+  function renderJudgeControls(snapshot) {
+    const panel = $('judgeControlPanel');
+    const message = $('judgeControlMessage');
+    const action = $('judgeContinueBtn');
+    const countdown = $('judgeCountdown');
+    if (!panel) return;
+    clearLiveDemoCountdown();
+    const judge = liveDemoMode === 'judge' || snapshot?.mode === 'judge';
+    if (!judge || !snapshot || snapshot.status !== 'running') {
+      panel.classList.add('hidden');
+      return;
+    }
+    panel.classList.remove('hidden');
+    if (message) message.textContent = snapshot.control_message || 'The next engine boundary is ready.';
+    const waiting = Boolean(snapshot.waiting_for_judge);
+    const current = LIVE_DEMO_STAGES.findIndex(([key]) => key === snapshot.current_stage);
+    const next = LIVE_DEMO_STAGES[current + 1]?.[1] || 'completion';
+    if (action) {
+      action.disabled = !waiting || !snapshot.can_continue;
+      action.textContent = waiting ? 'Continue to ' + next + ' →' : 'Waiting for engine…';
+    }
+    if (countdown) {
+      countdown.textContent = '';
+      if (waiting && snapshot.auto_advance_at) {
+        const tick = () => {
+          const remaining = Math.max(0, Math.ceil((new Date(snapshot.auto_advance_at).getTime() - Date.now()) / 1000));
+          countdown.textContent = remaining > 0 ? 'AUTO-ADVANCE ' + remaining + 's' : 'ADVANCING…';
+        };
+        tick();
+        liveDemoCountdownTimer = setInterval(tick, 250);
+      } else if (waiting) {
+        countdown.textContent = 'JUDGE CHECKPOINT';
+      }
+    }
+  }
+
+  async function continueJudgeDemo() {
+    if (!liveDemoSessionId || liveDemoMode !== 'judge') return;
+    const button = $('judgeContinueBtn');
+    if (button) button.disabled = true;
+    try {
+      await API.continueLiveDemo(liveDemoSessionId);
+      await pollLiveDemo();
+    } catch (err) {
+      setTxt('judgeControlMessage', err.message);
+      if (button) button.disabled = false;
+    }
+  }
+
   async function pollLiveDemo() {
     if (!liveDemoSessionId) return;
     try {
       const snapshot = await API.getLiveDemo(liveDemoSessionId);
       renderLiveDemoSnapshot(snapshot);
+      renderJudgeControls(snapshot);
       if (snapshot.result?.organisation_id) {
         activeOrgId = snapshot.result.organisation_id;
       }
@@ -1206,8 +1268,11 @@ const App = (() => {
       clearTimeout(liveDemoPollTimer);
       liveDemoPollTimer = null;
     }
+    clearLiveDemoCountdown();
+    liveDemoMode = 'guided';
     setRoute('demo');
     renderLiveDemoSnapshot(null);
+    renderJudgeControls(null);
     const button = $('btnLiveDemoStart');
     if (button) {
       button.disabled = true;
@@ -1216,10 +1281,43 @@ const App = (() => {
     try {
       const started = await API.startLiveDemo();
       liveDemoSessionId = started.session_id;
+      liveDemoMode = started.mode || 'guided';
       setTxt('liveDemoCompletionNote', 'Following actual orchestration boundaries from the Kalyx engine. Nothing here is a pre-recorded animation.');
       await pollLiveDemo();
     } catch (err) {
       renderLiveDemoSnapshot({ status: 'failed', current_stage: 'ERROR', current_title: 'Unable to start demo', history: [], error: err.message });
+      setTxt('liveDemoCompletionNote', err.message);
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.classList.remove('is-busy');
+      }
+    }
+  }
+
+  async function startJudgeDemo() {
+    if (liveDemoPollTimer) {
+      clearTimeout(liveDemoPollTimer);
+      liveDemoPollTimer = null;
+    }
+    clearLiveDemoCountdown();
+    liveDemoMode = 'judge';
+    setRoute('demo');
+    renderLiveDemoSnapshot(null);
+    renderJudgeControls(null);
+    const button = $('btnJudgeDemoStart');
+    if (button) {
+      button.disabled = true;
+      button.classList.add('is-busy');
+    }
+    try {
+      const started = await API.startJudgeDemo();
+      liveDemoSessionId = started.session_id;
+      liveDemoMode = 'judge';
+      setTxt('liveDemoCompletionNote', 'Judge Mode pauses the real engine at each persisted boundary. Proposal review auto-advances after 15 seconds.');
+      await pollLiveDemo();
+    } catch (err) {
+      renderLiveDemoSnapshot({ status: 'failed', current_stage: 'ERROR', history: [], error: err.message });
       setTxt('liveDemoCompletionNote', err.message);
     } finally {
       if (button) {
@@ -1508,6 +1606,8 @@ return {
     submitMission,
     runDemo,
     startLiveDemo,
+    startJudgeDemo,
+    continueJudgeDemo,
     toggleCircuitBreaker,
     toggleCircuitBreakerPopover,
     verifyAuditChain,
