@@ -53,6 +53,7 @@ def test_live_judge_demo_reveals_real_engine_boundaries(tmp_path, monkeypatch):
 def test_judge_mode_pauses_at_real_boundaries_and_auto_advances_proposal(tmp_path, monkeypatch):
     monkeypatch.setenv("KALYX_DB", str(tmp_path / "judge_demo.db"))
     monkeypatch.setenv("KALYX_PUBLIC_DEMO", "true")
+    monkeypatch.setenv("KALYX_RATE_LIMIT_ENABLED", "false")
     monkeypatch.setenv("KALYX_LIVE_DEMO_STAGE_DELAY", "0")
     monkeypatch.setenv("KALYX_JUDGE_PROPOSAL_AUTO_SECONDS", "1")
 
@@ -61,6 +62,8 @@ def test_judge_mode_pauses_at_real_boundaries_and_auto_advances_proposal(tmp_pat
     assert started.status_code == 200, started.text
     session_id = started.json()["session_id"]
 
+    # The agent submits its proposal without a judge click. The proposal
+    # checkpoint then auto-releases after the configured review window.
     deadline = time.time() + 10
     snapshot = {}
     while time.time() < deadline:
@@ -69,8 +72,8 @@ def test_judge_mode_pauses_at_real_boundaries_and_auto_advances_proposal(tmp_pat
             break
         time.sleep(0.03)
     assert snapshot["current_stage"] == "PROPOSE"
+    assert snapshot["waiting_for_judge"] is True
 
-    # Proposal review is agent-owned: it auto-releases without a judge click.
     deadline = time.time() + 5
     while time.time() < deadline:
         snapshot = client.get(f"/api/demo/live/{session_id}").json()
@@ -79,26 +82,29 @@ def test_judge_mode_pauses_at_real_boundaries_and_auto_advances_proposal(tmp_pat
         time.sleep(0.03)
     assert snapshot["current_stage"] == "AUTHORIZE"
 
-    # Every later boundary is explicitly released by the judge.
-    for expected in ["EXECUTE", "VERIFY", "SETTLE", "AUDIT"]:
-        response = client.post(f"/api/demo/live/{session_id}/continue")
-        assert response.status_code == 200, response.text
-        deadline = time.time() + 5
-        while time.time() < deadline:
-            snapshot = client.get(f"/api/demo/live/{session_id}").json()
-            if snapshot["current_stage"] == expected and snapshot["waiting_for_judge"]:
-                break
-            time.sleep(0.03)
-        assert snapshot["current_stage"] == expected, snapshot
-
-    client.post(f"/api/demo/live/{session_id}/continue")
-    deadline = time.time() + 5
+    # The deterministic mission may replan after a policy rejection. In either
+    # case, every consequential boundary is still released by the judge.
+    seen_waiting_stages = set()
+    deadline = time.time() + 20
     while time.time() < deadline:
         snapshot = client.get(f"/api/demo/live/{session_id}").json()
-        if snapshot["status"] in {"completed", "failed"}:
+        if snapshot["status"] == "completed":
             break
+        if snapshot["status"] == "failed":
+            raise AssertionError(snapshot)
+
+        if snapshot["waiting_for_judge"]:
+            stage = snapshot["current_stage"]
+            if stage in {"AUTHORIZE", "EXECUTE", "VERIFY", "SETTLE", "AUDIT"}:
+                seen_waiting_stages.add(stage)
+                response = client.post(f"/api/demo/live/{session_id}/continue")
+                assert response.status_code == 200, response.text
         time.sleep(0.03)
+
     assert snapshot["status"] == "completed", snapshot
+    assert {"AUTHORIZE", "EXECUTE", "VERIFY", "SETTLE", "AUDIT"} <= seen_waiting_stages
+    sources = {item["source_event"] for item in snapshot["history"]}
+    assert {"PROPOSAL_SUBMITTED", "POLICY_EVALUATED", "ACTION_EXECUTED", "VERIFIED", "SETTLED", "MISSION_COMPLETED"} <= sources
 
 
 def test_singular_organization_compatibility_route_is_public_demo_readable(tmp_path, monkeypatch):
