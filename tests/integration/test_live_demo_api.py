@@ -45,4 +45,5 @@ def test_live_judge_demo_reveals_real_engine_boundaries(tmp_path, monkeypatch):
 
     assert policy["evidence"]["decision"]["result"]
     assert execution["evidence"]["receipt"]["id"]
+    assert execution["evidence"]["receipt"]["authorization_token"] == "[REDACTED]"
     assert settlement["evidence"]["ledger"]["conserved"] is True
