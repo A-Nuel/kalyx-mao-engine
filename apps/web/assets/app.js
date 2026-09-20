@@ -811,13 +811,13 @@ const App = (() => {
 
   // ==================== PRODUCT WALKTHROUGH ====================
   const TOUR_STEPS = [
-    {title:'Welcome to Kalyx', body:'This is the operating system for an autonomous organization. Agents can propose work without receiving unrestricted authority to execute it. The core loop is PROPOSE → AUTHORIZE → EXECUTE → VERIFY.', target:null, button:'Start tour'},
-    {title:'Your organization', body:'Everything in this workspace belongs to an organization. Agents act on its behalf, while policy defines what they are allowed to do.', target:'#orgSelect', button:'Next'},
-    {title:'The control surface', body:'Overview shows system state. Missions show work. Treasury shows capital and surplus. Policies show authority. Operations show execution. Marketplace shows B2B work. CREDIT Collateral shows the economic commitment layer.', target:'#mainNav', button:'Next'},
-    {title:'The control loop', body:'Agents PROPOSE. Policies AUTHORIZE. Executors EXECUTE. Auditors VERIFY. This separation is the core safety boundary of Kalyx.', target:'#view-overview', button:'Next'},
-    {title:'Capital becomes productive work', body:'Kalyx tracks CAPITAL → WORK → REVENUE → SURPLUS. Verified surplus can fund a subsequent governed mission.', target:'#view-treasury', button:'Next'},
-    {title:'Evidence makes outcomes authoritative', body:'An agent saying “done” is not enough. Kalyx requires verifiable execution evidence before an economic result becomes authoritative.', target:'#view-audit', button:'Next'},
-    {title:'You now know the machine', body:'Use Follow the loop to walk through the judge path: proposal → policy → resource acquisition → productive work → independent verification → revenue → surplus → next mission.', target:null, button:'Finish'}
+    {title:'Welcome to Kalyx', body:'This is the operating system for an autonomous organization. Agents can propose work without receiving unrestricted authority to execute it. The core loop is PROPOSE → AUTHORIZE → EXECUTE → VERIFY.', target:null, route:'overview', button:'Start tour'},
+    {title:'Your organization', body:'Everything in this workspace belongs to an organization. Agents act on its behalf, while policy defines what they are allowed to do.', target:'#orgSelect', route:'overview', button:'Next'},
+    {title:'The control surface', body:'Overview shows system state. Missions show work. Treasury shows capital and surplus. Policies show authority. Operations show execution. Marketplace shows B2B work. CREDIT Collateral shows the economic commitment layer.', target:'#mainNav', route:'overview', button:'Next'},
+    {title:'The control loop', body:'Agents PROPOSE. Policies AUTHORIZE. Executors EXECUTE. Auditors VERIFY. This separation is the core safety boundary of Kalyx.', target:'#view-overview', route:'overview', button:'Next'},
+    {title:'Capital becomes productive work', body:'Kalyx tracks CAPITAL → WORK → REVENUE → SURPLUS. Verified surplus can fund a subsequent governed mission.', target:'#view-treasury', route:'treasury', button:'Next'},
+    {title:'Evidence makes outcomes authoritative', body:'An agent saying “done” is not enough. Kalyx requires verifiable execution evidence before an economic result becomes authoritative.', target:'#view-audit', route:'audit', button:'Next'},
+    {title:'You now know the machine', body:'Use Follow the loop to walk through the judge path: proposal → policy → resource acquisition → productive work → independent verification → revenue → surplus → next mission.', target:null, route:'overview', button:'Finish'}
   ];
   let tourIndex=0;
   const TOUR_DESKTOP_BREAKPOINT=768;
@@ -850,7 +850,21 @@ const App = (() => {
     top=Math.max(margin,Math.min(top,window.innerHeight-cardHeight-margin));
     card.style.left=left+'px';card.style.top=top+'px';
   }
-  function renderTourStep(){const st=TOUR_STEPS[tourIndex];setTxt('tourTitle',st.title);setTxt('tourBody',st.body);setTxt('tourProgress',(tourIndex+1)+' / '+TOUR_STEPS.length);setTxt('tourNext',st.button);positionTourTarget(st.target);positionTourCard(st.target);}
+  function renderTourStep(){
+    const st=TOUR_STEPS[tourIndex];
+    setTxt('tourTitle',st.title);setTxt('tourBody',st.body);setTxt('tourProgress',(tourIndex+1)+' / '+TOUR_STEPS.length);setTxt('tourNext',st.button);
+    // Navigate to the step's own view BEFORE measuring anything. A tour
+    // step targeting e.g. #view-treasury has a zero-size, off-screen
+    // rect while that section carries the .hidden class (display:none) --
+    // this was the root cause of the popup and spotlight jumping to the
+    // top-left corner on desktop whenever the tour was started from a
+    // page other than the one a later step referenced. setRoute() itself
+    // is synchronous about toggling .hidden (only refreshCurrentView()
+    // inside it is async), so the very next paint already has the right
+    // section visible for positionTourTarget/positionTourCard to measure.
+    if(st.route && st.route!==currentRoute){setRoute(st.route);}
+    positionTourTarget(st.target);positionTourCard(st.target);
+  }
   function startTour(){tourIndex=0;$('kalyxTour')?.classList.remove('hidden');document.body.classList.add('overflow-hidden');requestAnimationFrame(renderTourStep);}
   function nextTourStep(){if(tourIndex>=TOUR_STEPS.length-1){closeTour();return;}tourIndex++;renderTourStep();}
   function closeTour(){$('kalyxTour')?.classList.add('hidden');document.body.classList.remove('overflow-hidden');document.querySelectorAll('.tour-target').forEach(e=>e.classList.remove('tour-target'));}
