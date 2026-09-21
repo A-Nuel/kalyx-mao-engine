@@ -266,7 +266,7 @@ def _run_live_demo_session(session_id: str, tenant_id: str) -> None:
                 session["result"] = _live_demo_json(_redact_live_demo(result))
                 session["updated_at"] = datetime.utcnow().isoformat() + "Z"
     except Exception as exc:
-        logger.exception("Live judge demo failed")
+        logger.exception("Live demo session failed")
         with _live_demo_lock:
             session = _live_demo_sessions.get(session_id)
             if session:
