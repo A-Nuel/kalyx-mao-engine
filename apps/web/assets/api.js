@@ -243,8 +243,9 @@ const API = (() => {
     async runPublicDemo() {
       return request('/api/demo/public-run', { method: 'POST' });
     },
-    async startLiveDemo() {
-      return request('/api/demo/live/start?mode=guided', { method: 'POST' });
+    async startLiveDemo(mode = 'guided') {
+      const supportedMode = ['guided', 'judge', 'marketplace'].includes(mode) ? mode : 'guided';
+      return request('/api/demo/live/start?mode=' + encodeURIComponent(supportedMode), { method: 'POST' });
     },
     async startJudgeDemo() {
       return request('/api/demo/live/start?mode=judge', { method: 'POST' });
