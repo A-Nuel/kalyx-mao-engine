@@ -1077,6 +1077,7 @@ body.nav-collapsed .kalyx-nav .nav-tab .kalyx-nav-badge{font-size:8px;position:a
   body.nav-open .kalyx-sidebar .kalyx-org-state span:last-child,
   body.nav-open .kalyx-sidebar .kalyx-mode-card,
   body.nav-open .kalyx-sidebar .kalyx-back-link{display:block}
+}
 /* 2026-09-20 judge mode + dashboard polish */
 /* Collapsed rail: icons remain direct navigation targets, with compact labels on hover. */
 body.nav-collapsed .kalyx-nav .nav-tab{overflow:visible}
