@@ -1149,3 +1149,40 @@ body.nav-collapsed .kalyx-nav .nav-tab[data-tooltip]:hover::after{opacity:1;tran
 html { height: auto !important; min-height: 100%; overflow-x: clip !important; overflow-y: auto !important; }
 body, body.kalyx-shell { height: auto !important; min-height: 100%; overflow-x: clip !important; overflow-y: visible !important; }
 .kalyx-main, .view-panel, .kalyx-page { overflow: visible !important; }
+
+
+/* Final dashboard workforce guard: keep agent metadata readable at laptop widths. */
+.kalyx-agent-row{min-width:0;font:inherit;appearance:none;-webkit-appearance:none}
+.kalyx-agent-main,.kalyx-agent-topline,.kalyx-agent-metrics{min-width:0}
+@media (max-width:1100px) and (min-width:761px){
+  .kalyx-grid-work{grid-template-columns:1fr 1fr}
+  .kalyx-agent-row{grid-template-columns:34px minmax(0,1fr) auto;gap:10px}
+  .kalyx-agent-metrics{display:none}
+  .kalyx-agent-model{max-width:150px}
+  .kalyx-agent-status{justify-self:end}
+}
+
+/* Marketplace live governance modal */
+.market-demo-overlay{position:fixed;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;padding:22px}
+.market-demo-overlay.hidden{display:none}
+.market-demo-backdrop{position:absolute;inset:0;background:rgba(1,2,4,.86);backdrop-filter:blur(16px)}
+.market-demo-dialog{position:relative;z-index:1;width:min(1220px,100%);max-height:calc(100vh - 44px);overflow:auto;border:1px solid rgba(255,255,255,.12);border-radius:12px;background:rgba(8,11,16,.97);box-shadow:0 30px 120px rgba(0,0,0,.72);padding:24px}
+.market-demo-head{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;padding-bottom:20px;border-bottom:1px solid var(--kc-line)}
+.market-demo-head h2{margin:8px 0 7px;color:#f5f7fb;font-size:clamp(22px,3vw,32px);letter-spacing:-.03em;font-weight:550}
+.market-demo-head p{max-width:760px;margin:0;color:#78859a;font-size:12px;line-height:1.65}
+.market-demo-head-actions{display:flex;align-items:center;gap:12px;flex-shrink:0}
+.market-demo-close{width:32px;height:32px;border:1px solid var(--kc-line);border-radius:7px;background:rgba(255,255,255,.025);color:#9aa6b8;font-size:22px;line-height:1;cursor:pointer}
+.market-demo-close:hover{color:#fff;background:rgba(255,255,255,.07)}
+.market-demo-proofbar{margin-top:18px}
+.market-demo-session-line{display:flex;justify-content:space-between;gap:12px;padding:14px 2px;color:#627087;font:600 8px 'JetBrains Mono',monospace;letter-spacing:.1em}
+.market-demo-session-line span:last-child{color:#a9b9d1}
+.market-demo-grid{margin-top:0}
+.market-demo-footer{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-top:14px;padding:14px 2px 0;border-top:1px solid var(--kc-line);color:#627087;font:500 8px 'JetBrains Mono',monospace}
+.market-demo-footer strong{display:block;margin-top:6px;color:#8e9db2;font:500 10px Geist,sans-serif}
+@media(max-width:760px){
+  .market-demo-overlay{padding:10px}
+  .market-demo-dialog{max-height:calc(100vh - 20px);padding:16px}
+  .market-demo-head{flex-direction:column}
+  .market-demo-head-actions{width:100%;justify-content:space-between}
+  .market-demo-session-line,.market-demo-footer{flex-direction:column;align-items:flex-start}
+}

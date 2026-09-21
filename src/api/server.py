@@ -225,14 +225,30 @@ def _record_live_demo_stage(session_id: str, stage: str, evidence: Dict[str, Any
                 session["control_message"] = ""
         return
 
-    delay = max(0.0, min(5.0, float(os.getenv("KALYX_LIVE_DEMO_STAGE_DELAY", str(_LIVE_DEMO_STAGE_DELAY)))))
+    if mode == "marketplace":
+        delay = max(
+            0.0,
+            min(20.0, float(os.getenv("KALYX_MARKETPLACE_DEMO_STAGE_DELAY", "9.0"))),
+        )
+    else:
+        delay = max(
+            0.0,
+            min(5.0, float(os.getenv("KALYX_LIVE_DEMO_STAGE_DELAY", str(_LIVE_DEMO_STAGE_DELAY)))),
+        )
     time.sleep(delay)
 
 
 def _run_live_demo_session(session_id: str, tenant_id: str) -> None:
     try:
+        with _live_demo_lock:
+            session = _live_demo_sessions.get(session_id)
+            demo_mode = session.get("mode", "guided") if session else "guided"
         result = run_mission(
-            mission="Kalyx Judge Demo — Governed Autonomous Economic Loop",
+            mission=(
+                "Kalyx Marketplace — Governed Autonomous Economic Loop"
+                if demo_mode == "marketplace"
+                else "Kalyx Judge Demo — Governed Autonomous Economic Loop"
+            ),
             budget=100,
             live=False,
             tenant_id=tenant_id,
@@ -250,7 +266,7 @@ def _run_live_demo_session(session_id: str, tenant_id: str) -> None:
                 session["result"] = _live_demo_json(_redact_live_demo(result))
                 session["updated_at"] = datetime.utcnow().isoformat() + "Z"
     except Exception as exc:
-        logger.exception("Live judge demo failed")
+        logger.exception("Live demo session failed")
         with _live_demo_lock:
             session = _live_demo_sessions.get(session_id)
             if session:
@@ -1204,10 +1220,10 @@ def start_live_demo(
     x_tenant_id: str | None = Header(default=None, alias="X-Tenant-ID"),
     mode: str = Query(default="guided"),
 ) -> Dict[str, Any]:
-    """Start the deterministic judge walkthrough in guided or manually gated mode."""
+    """Start the deterministic governance walkthrough in guided, marketplace, or manually gated mode."""
     if os.getenv("KALYX_PUBLIC_DEMO", "false").strip().lower() != "true":
         raise HTTPException(status_code=404, detail="Public demo is disabled")
-    if mode not in {"guided", "judge"}:
+    if mode not in {"guided", "judge", "marketplace"}:
         raise HTTPException(status_code=400, detail="Unsupported demo mode")
 
     session_id = f"live-demo-{uuid.uuid4().hex[:12]}"

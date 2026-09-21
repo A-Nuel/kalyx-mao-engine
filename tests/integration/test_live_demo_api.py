@@ -118,3 +118,30 @@ def test_singular_organization_compatibility_route_is_public_demo_readable(tmp_p
     response = client.get(f"/api/v1/organization/{org_id}", headers={"X-Tenant-ID": "tenant-demo"})
     assert response.status_code == 200, response.text
     assert response.json()["organisation"]["id"] == org_id
+
+
+def test_marketplace_mode_uses_real_live_boundaries(tmp_path, monkeypatch):
+    monkeypatch.setenv("KALYX_DB", str(tmp_path / "marketplace_demo.db"))
+    monkeypatch.setenv("KALYX_PUBLIC_DEMO", "true")
+    monkeypatch.setenv("KALYX_RATE_LIMIT_ENABLED", "false")
+    monkeypatch.setenv("KALYX_MARKETPLACE_DEMO_STAGE_DELAY", "0")
+
+    client = TestClient(server.app)
+    started = client.post("/api/demo/live/start?mode=marketplace")
+    assert started.status_code == 200, started.text
+    assert started.json()["mode"] == "marketplace"
+    session_id = started.json()["session_id"]
+
+    deadline = time.time() + 15
+    snapshot = {}
+    while time.time() < deadline:
+        snapshot = client.get(f"/api/demo/live/{session_id}").json()
+        if snapshot["status"] in {"completed", "failed"}:
+            break
+        time.sleep(0.05)
+
+    assert snapshot["status"] == "completed", snapshot
+    assert snapshot["current_stage"] == "COMPLETE"
+    assert "Kalyx Marketplace" in snapshot["result"]["mission"]
+    sources = {item["source_event"] for item in snapshot["history"]}
+    assert {"PROPOSAL_SUBMITTED", "POLICY_EVALUATED", "ACTION_EXECUTED", "VERIFIED", "SETTLED", "MISSION_COMPLETED"} <= sources
