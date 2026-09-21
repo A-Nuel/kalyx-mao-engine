@@ -305,10 +305,67 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans
       </section>
 
       <section id="view-marketplace" class="view-panel hidden space-y-6">
-<div class="kc-page"><div class="kc-hero"><div><span class="kc-kicker">07 / ECONOMY</span><h1>Capability Marketplace</h1><p>A governed exchange for organizations to discover capabilities, dispatch work and settle only after verified delivery.</p></div><button id="btnTriggerLoopDemo" class="kc-btn kc-btn-primary" onclick="App.runB2BMarketplaceLoop()">Run 6-stage loop →</button></div><div class="kc-grid-4"><article class="kc-metric"><span>ACTIVE ORDERS</span><strong id="mktActiveOrdersCount">—</strong><small>Open + claimed</small></article><article class="kc-metric"><span>ESCROW VOLUME</span><strong id="mktTotalEscrowVolume">—</strong><small>Public commitments</small></article><article class="kc-metric"><span>CAPABILITY GRANTS</span><strong id="mktCapabilityGrantsCount">—</strong><small>Governed agent access</small></article><article class="kc-metric"><span>VERIFIED DELIVERABLES</span><strong id="mktVerifiedDeliverablesCount">—</strong><small>Completed work</small></article></div><div class="kc-grid-2"><section class="kc-panel"><div class="kc-panel-head"><div><span class="kc-kicker">PUBLIC WORK</span><h3>Marketplace orders</h3></div></div><div id="marketplaceOrdersList" class="kc-stack"><div class="kc-empty">Loading public orders…</div></div></section><section class="kc-panel"><div class="kc-panel-head"><div><span class="kc-kicker">CAPABILITY REGISTRY</span><h3>Governed grants</h3></div></div><div id="capabilityGrantsList" class="kc-stack"><div class="kc-empty">Loading capability grants…</div></div></section></div></div>
+<div class="kc-page"><div class="kc-hero"><div><span class="kc-kicker">07 / ECONOMY</span><h1>Capability Marketplace</h1><p>A governed exchange for organizations to discover capabilities, dispatch work and settle only after verified delivery.</p></div><button id="btnTriggerLoopDemo" class="kc-btn kc-btn-primary" onclick="App.runB2BMarketplaceLoop()">Run live market loop →</button></div><div class="kc-grid-4"><article class="kc-metric"><span>ACTIVE ORDERS</span><strong id="mktActiveOrdersCount">—</strong><small>Open + claimed</small></article><article class="kc-metric"><span>ESCROW VOLUME</span><strong id="mktTotalEscrowVolume">—</strong><small>Public commitments</small></article><article class="kc-metric"><span>CAPABILITY GRANTS</span><strong id="mktCapabilityGrantsCount">—</strong><small>Governed agent access</small></article><article class="kc-metric"><span>VERIFIED DELIVERABLES</span><strong id="mktVerifiedDeliverablesCount">—</strong><small>Completed work</small></article></div><div class="kc-grid-2"><section class="kc-panel"><div class="kc-panel-head"><div><span class="kc-kicker">PUBLIC WORK</span><h3>Marketplace orders</h3></div></div><div id="marketplaceOrdersList" class="kc-stack"><div class="kc-empty">Loading public orders…</div></div></section><section class="kc-panel"><div class="kc-panel-head"><div><span class="kc-kicker">CAPABILITY REGISTRY</span><h3>Governed grants</h3></div></div><div id="capabilityGrantsList" class="kc-stack"><div class="kc-empty">Loading capability grants…</div></div></section></div></div>
       </section>
 
-      </main>
+      
+  <!-- Marketplace live governance session: same real engine trace as Judge Mode, auto-paced. -->
+  <div id="marketDemoModal" class="market-demo-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="marketDemoTitle">
+    <div class="market-demo-backdrop" onclick="App.closeMarketplaceDemo()"></div>
+    <div class="market-demo-dialog">
+      <div class="market-demo-head">
+        <div>
+          <span class="demo-kicker">MARKETPLACE / LIVE GOVERNANCE SESSION</span>
+          <h2 id="marketDemoTitle">Watch the market loop execute</h2>
+          <p>One real Kalyx mission is progressing through the same proposal, policy, authorization, execution, verification, settlement and audit boundaries used by the Live Demo.</p>
+        </div>
+        <div class="market-demo-head-actions">
+          <span id="marketDemoStatus" class="demo-status">READY</span>
+          <button type="button" class="market-demo-close" onclick="App.closeMarketplaceDemo()" aria-label="Close marketplace demo">×</button>
+        </div>
+      </div>
+
+      <div class="live-demo-proofbar market-demo-proofbar">
+        <div><span>EXTERNAL EXECUTION</span><strong>SIMULATED / CONTROLLED GATEWAY</strong></div>
+        <div><span>AUTHORITY</span><strong>POLICY ENGINE</strong></div>
+        <div><span>EVIDENCE</span><strong>PERSISTED EVENT STORE</strong></div>
+        <div><span>ECONOMICS</span><strong>DOUBLE-ENTRY LEDGER</strong></div>
+      </div>
+
+      <div class="market-demo-session-line">
+        <span id="marketDemoSession">NO SESSION</span>
+        <span id="marketDemoCurrentStage">Preparing control plane…</span>
+      </div>
+
+      <div class="live-demo-grid market-demo-grid">
+        <section class="live-demo-panel live-demo-stages-panel">
+          <div class="live-demo-panel-head">
+            <div><span class="demo-kicker">CONTROL LOOP</span><h2>What Kalyx is doing</h2></div>
+          </div>
+          <div id="marketDemoStages" class="live-demo-stages"></div>
+        </section>
+
+        <section class="live-demo-panel live-demo-evidence-panel">
+          <div class="live-demo-panel-head">
+            <div><span class="demo-kicker">EVIDENCE</span><h2>What actually happened</h2></div>
+            <span class="live-demo-live-mark">● LIVE</span>
+          </div>
+          <div id="marketDemoEvidence" class="live-demo-evidence">
+            <div class="demo-empty">Starting the real engine session…</div>
+          </div>
+        </section>
+      </div>
+
+      <div class="market-demo-footer">
+        <div>
+          <span class="demo-kicker">ORBIO / ECONOMIC BOUNDARY</span>
+          <strong>Controlled inference economy — simulation / explicit gateway boundary</strong>
+        </div>
+        <span>~90 sec automatic walkthrough</span>
+      </div>
+    </div>
+  </div>
+</main>
 
   <!-- ========================================================================= -->
   <!-- DRAWERS & MODALS (OBSIDIAN TRANSLUCENCE ELEVATIONS) -->
