@@ -1403,7 +1403,12 @@ const App = (() => {
         }
       }
     } catch (err) {
-      renderLiveDemoSnapshot({ status: 'failed', current_stage: 'ERROR', current_title: 'Unable to read demo session', history: [], error: err.message });
+      const failure = { status: 'failed', current_stage: 'ERROR', current_title: 'Unable to read demo session', history: [], error: err.message };
+      if (liveDemoMode === 'marketplace') {
+        renderMarketplaceDemoSnapshot(failure);
+      } else {
+        renderLiveDemoSnapshot(failure);
+      }
       liveDemoPollTimer = null;
     }
   }
