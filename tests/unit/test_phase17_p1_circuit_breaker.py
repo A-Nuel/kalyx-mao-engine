@@ -1,4 +1,4 @@
-﻿"""Milestone 3 & 4: Emergency Circuit Breaker and Governed 2-of-2 Multi-Sig tests."""
+"""Milestone 3 & 4: Emergency Circuit Breaker and Governed 2-of-2 Multi-Sig tests."""
 
 import pytest
 from src.domain.entities import AgentRecord, Organisation
@@ -30,6 +30,7 @@ def env():
         marketplace_repo=mkt_repo,
         work_order_repo=wo_repo,
         circuit_breaker=cb,
+        receipt_secret_key=secret,
     )
     ledger = DoubleEntryLedger(initial_treasury=1000)
     policy_engine = PolicyEngine(signing_secret=secret, human_approval_threshold=1000)

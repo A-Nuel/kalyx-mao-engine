@@ -83,6 +83,9 @@ const App = (() => {
       if (isTab) {
         el.classList.add('bg-white/10', 'text-white');
         el.classList.remove('text-slate-400');
+        try {
+          el.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+        } catch {}
       } else {
         el.classList.remove('bg-white/10', 'text-white');
         el.classList.add('text-slate-400');
@@ -149,6 +152,33 @@ const App = (() => {
     applyNavigationState();
   }
   window.addEventListener('resize', applyNavigationState);
+
+  function setupSidebarScroll() {
+    const sidebar = $('mainNav');
+    if (!sidebar) return;
+
+    sidebar.addEventListener('wheel', (e) => {
+      const isHorizontalScrollable = sidebar.scrollWidth > sidebar.clientWidth;
+      const isVerticalScrollable = sidebar.scrollHeight > sidebar.clientHeight + 4;
+
+      if (isHorizontalScrollable && !isVerticalScrollable) {
+        if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+          sidebar.scrollLeft += e.deltaY;
+          e.preventDefault();
+        }
+      }
+    }, { passive: false });
+
+    sidebar.addEventListener('scroll', () => {
+      const tour = $('kalyxTour');
+      if (!tour || tour.classList.contains('hidden')) return;
+      const st = TOUR_STEPS[tourIndex];
+      if (st && st.target && isTourDesktop()) {
+        positionTourTarget(st.target);
+        positionTourCard(st.target);
+      }
+    }, { passive: true });
+  }
 
   // Drawers Controller
   const drawerCloseTimers = new Map();
@@ -945,16 +975,19 @@ const App = (() => {
     {title:'Welcome to Kalyx', body:'This is the operating system for an autonomous organization. Agents can propose work without receiving unrestricted authority to execute it. The core loop is PROPOSE → AUTHORIZE → EXECUTE → VERIFY.', target:null, route:'overview', button:'Start tour'},
     {title:'Your organization', body:'Everything in this workspace belongs to an organization. Agents act on its behalf, while policy defines what they are allowed to do.', target:'#orgSelect', route:'overview', button:'Next'},
     {title:'The control surface', body:'Overview shows system state. Missions show work. Treasury shows capital and surplus. Policies show authority. Operations show execution. Marketplace shows B2B work. CREDIT Collateral shows the economic commitment layer.', target:'#mainNav', route:'overview', button:'Next'},
-    {title:'The control loop', body:'Agents PROPOSE. Policies AUTHORIZE. Executors EXECUTE. Auditors VERIFY. This separation is the core safety boundary of Kalyx.', target:'#view-overview', route:'overview', button:'Next'},
-    {title:'Capital becomes productive work', body:'Kalyx tracks CAPITAL → WORK → REVENUE → SURPLUS. Verified surplus can fund a subsequent governed mission.', target:'#view-treasury', route:'treasury', button:'Next'},
-    {title:'Evidence makes outcomes authoritative', body:'An agent saying “done” is not enough. Kalyx requires verifiable execution evidence before an economic result becomes authoritative.', target:'#view-audit', route:'audit', button:'Next'},
+    {title:'The control loop', body:'Agents PROPOSE. Policies AUTHORIZE. Executors EXECUTE. Auditors VERIFY. This separation is the core safety boundary of Kalyx.', target:'#view-overview .kalyx-loop-panel', route:'overview', button:'Next'},
+    {title:'Capital becomes productive work', body:'Kalyx tracks CAPITAL → WORK → REVENUE → SURPLUS. Verified surplus can fund a subsequent governed mission.', target:'#view-treasury .kc-money-flow', route:'treasury', button:'Next'},
+    {title:'Evidence makes outcomes authoritative', body:'An agent saying “done” is not enough. Kalyx requires verifiable execution evidence before an economic result becomes authoritative.', target:'#view-audit .kc-audit-layout', route:'audit', button:'Next'},
     {title:'You now know the machine', body:'Use Follow the loop to walk through the judge path: proposal → policy → resource acquisition → productive work → independent verification → revenue → surplus → next mission.', target:null, route:'overview', button:'Finish'}
   ];
   let tourIndex=0;
   const TOUR_DESKTOP_BREAKPOINT=768;
   const TOUR_WIDE_BREAKPOINT=1100;
   function isTourDesktop(){return window.matchMedia('(min-width:'+TOUR_DESKTOP_BREAKPOINT+'px)').matches;}
-  function resetTourCardPosition(card){if(!card)return;card.style.top='';card.style.left='';card.style.right='';card.style.bottom='';card.style.transform='';card.style.width='';}
+  function resetTourCardPosition(card){
+    if(!card)return;
+    card.style.top='';card.style.left='';card.style.right='';card.style.bottom='';card.style.transform='';card.style.width='';card.style.position='';card.style.margin='';
+  }
   function positionTourTarget(target){
     const s=$('tourSpotlight');
     document.querySelectorAll('.tour-target').forEach(e=>e.classList.remove('tour-target'));
@@ -970,43 +1003,98 @@ const App = (() => {
     const card=$('tourCard');if(!card)return;
     resetTourCardPosition(card);
     if(!isTourDesktop())return;
+    card.style.position='fixed';
+    card.style.margin='0';
     const margin=window.innerWidth>=TOUR_WIDE_BREAKPOINT?24:16;
-    const cardWidth=Math.min(440,window.innerWidth-(margin*2));card.style.width=cardWidth+'px';
-    if(!target){card.style.top='50%';card.style.left='50%';card.style.transform='translate(-50%,-50%)';return;}
+    const topbarHeight=68;
+    const cardWidth=Math.min(420,window.innerWidth-(margin*2));
+    card.style.width=cardWidth+'px';
+
+    if(!target){
+      card.style.top='50%';
+      card.style.left='50%';
+      card.style.transform='translate(-50%,-50%)';
+      return;
+    }
     const el=document.querySelector(target);
-    if(!el){card.style.top='50%';card.style.left='50%';card.style.transform='translate(-50%,-50%)';return;}
-    const r=el.getBoundingClientRect(),cardHeight=Math.min(card.scrollHeight,window.innerHeight-(margin*2));
-    let left=Math.max(margin,Math.min(r.left,window.innerWidth-cardWidth-margin)),top=r.bottom+16;
-    if(top+cardHeight>window.innerHeight-margin)top=r.top-cardHeight-16;
-    top=Math.max(margin,Math.min(top,window.innerHeight-cardHeight-margin));
-    card.style.left=left+'px';card.style.top=top+'px';
+    if(!el){
+      card.style.top='50%';
+      card.style.left='50%';
+      card.style.transform='translate(-50%,-50%)';
+      return;
+    }
+    card.style.transform='none';
+    const r=el.getBoundingClientRect();
+    const cardHeight=Math.max(card.offsetHeight||200,card.scrollHeight||200);
+
+    const sidebar = document.querySelector('.kalyx-sidebar');
+    const isVerticalSidebar = window.innerWidth >= 1100 && sidebar;
+    const inSidebar = Boolean(el.closest('.kalyx-sidebar')) || (sidebar && r.right <= sidebar.getBoundingClientRect().right + 10);
+
+    if (inSidebar && isVerticalSidebar) {
+      const sidebarRight = sidebar ? sidebar.getBoundingClientRect().right : 230;
+      let left = sidebarRight + 24;
+      left = Math.min(left, window.innerWidth - cardWidth - margin);
+
+      let top = el === sidebar ? (topbarHeight + 32) : r.top;
+      top = Math.max(topbarHeight + 16, Math.min(top, window.innerHeight - cardHeight - margin));
+
+      card.style.left = left + 'px';
+      card.style.top = top + 'px';
+      return;
+    }
+
+    if (inSidebar && !isVerticalSidebar) {
+      let top = r.bottom + 16;
+      if (top + cardHeight > window.innerHeight - margin) {
+        top = Math.max(topbarHeight + 12, window.innerHeight - cardHeight - margin);
+      }
+      let left = Math.max(margin, Math.round((window.innerWidth - cardWidth) / 2));
+      card.style.left = left + 'px';
+      card.style.top = top + 'px';
+      return;
+    }
+
+    let top=r.bottom+16;
+    if(top+cardHeight>window.innerHeight-margin){
+      if(r.top-cardHeight-16>=topbarHeight+margin){
+        top=r.top-cardHeight-16;
+      }else{
+        top=Math.max(topbarHeight+12,window.innerHeight-cardHeight-margin);
+      }
+    }
+    top=Math.max(topbarHeight+12,Math.min(top,window.innerHeight-cardHeight-margin));
+
+    let left=r.left;
+    left=Math.max(margin,Math.min(left,window.innerWidth-cardWidth-margin));
+
+    card.style.left=left+'px';
+    card.style.top=top+'px';
   }
   function renderTourStep(){
     const st=TOUR_STEPS[tourIndex];
     setTxt('tourTitle',st.title);setTxt('tourBody',st.body);setTxt('tourProgress',(tourIndex+1)+' / '+TOUR_STEPS.length);setTxt('tourNext',st.button);
-    // Navigate to the step's own view BEFORE measuring anything. A tour
-    // step targeting e.g. #view-treasury has a zero-size, off-screen
-    // rect while that section carries the .hidden class (display:none) --
-    // this was the root cause of the popup and spotlight jumping to the
-    // top-left corner on desktop whenever the tour was started from a
-    // page other than the one a later step referenced. setRoute() itself
-    // is synchronous about toggling .hidden (only refreshCurrentView()
-    // inside it is async), so the very next paint already has the right
-    // section visible for positionTourTarget/positionTourCard to measure.
     if(st.route && st.route!==currentRoute){setRoute(st.route);}
-    positionTourTarget(st.target);positionTourCard(st.target);
+
+    const updateCoords = () => {
+      positionTourTarget(st.target);
+      positionTourCard(st.target);
+    };
+
+    if(st.target){
+      const el=document.querySelector(st.target);
+      if(el){
+        el.scrollIntoView({ behavior: 'auto', block: 'center' });
+      }
+      requestAnimationFrame(()=>{
+        setTimeout(updateCoords, 60);
+      });
+    } else {
+      updateCoords();
+    }
   }
   function startTour(){
-    tourIndex=0;$('kalyxTour')?.classList.remove('hidden');document.body.classList.add('overflow-hidden');
-    // requestAnimationFrame runs renderTourStep() outside the normal call
-    // stack, so an uncaught exception in it (e.g. setRoute() throwing on
-    // an unexpected route, or a target element genuinely missing) would
-    // otherwise never reach a catch block anywhere -- the tour overlay
-    // (position:fixed, inset:0, see .kalyx-overlay in app.css) would stay
-    // visible over the whole page forever, and since it sits on top of
-    // everything it blocks scroll and clicks alike even with no explicit
-    // overflow:hidden anywhere. Wrapping this call is the fix for anyone
-    // reporting the page "won't scroll" after opening the walkthrough.
+    tourIndex=0;$('kalyxTour')?.classList.remove('hidden');
     requestAnimationFrame(()=>{
       try{renderTourStep();}
       catch(err){console.error('Tour step failed, closing tour safely:',err);closeTour();}
@@ -1023,12 +1111,22 @@ const App = (() => {
     document.documentElement.classList.remove('overflow-hidden');
     document.body.classList.remove('overflow-hidden');
     document.querySelectorAll('.tour-target').forEach(e=>e.classList.remove('tour-target'));
+    const s=$('tourSpotlight');if(s)s.style.display='none';
   }
   function skipTour(){closeTour();localStorage.setItem('kalyx-tour-seen','1');}
   let tourResizeTimer;
-  function handleTourResize(){clearTimeout(tourResizeTimer);tourResizeTimer=setTimeout(()=>{const tour=$('kalyxTour');if(!tour||tour.classList.contains('hidden'))return;try{renderTourStep();}catch(err){console.error('Tour resize re-render failed, closing tour safely:',err);closeTour();}},50);}
+  function handleTourResize(){clearTimeout(tourResizeTimer);tourResizeTimer=setTimeout(()=>{const tour=$('kalyxTour');if(!tour||tour.classList.contains('hidden'))return;try{renderTourStep();}catch(err){console.error('Tour resize re-render failed, closing tour safely:',err);closeTour();}},50);};
   window.addEventListener('resize',handleTourResize);
   window.addEventListener('orientationchange',()=>setTimeout(handleTourResize,100));
+  window.addEventListener('scroll',()=>{
+    const tour=$('kalyxTour');
+    if(!tour||tour.classList.contains('hidden'))return;
+    const st=TOUR_STEPS[tourIndex];
+    if(st&&st.target&&isTourDesktop()){
+      positionTourTarget(st.target);
+      positionTourCard(st.target);
+    }
+  }, { passive: true });
   function startLoopGuide(){ $('loopGuide')?.classList.remove('hidden'); }
   function closeLoopGuide(){
     $('loopGuide')?.classList.add('hidden');
@@ -1203,13 +1301,32 @@ const App = (() => {
       return;
     }
     panel.classList.remove('hidden');
-    if (message) message.textContent = snapshot.control_message || 'The next engine boundary is ready.';
+
+    const history = snapshot.history || [];
+    const latest = history[history.length - 1];
+    const isAuthorizeStage = snapshot.current_stage === 'AUTHORIZE' || latest?.key === 'AUTHORIZE';
+    const decisionResult = latest?.evidence?.decision?.result || '';
+    const isPolicyRejected = isAuthorizeStage && String(decisionResult).toUpperCase() === 'REJECTED';
+
+    if (message) {
+      if (isPolicyRejected) {
+        message.textContent = 'Policy boundary enforced: Proposal REJECTED. Re-planning compliant action.';
+      } else {
+        message.textContent = snapshot.control_message || 'The next engine boundary is ready.';
+      }
+    }
     const waiting = Boolean(snapshot.waiting_for_judge);
     const current = LIVE_DEMO_STAGES.findIndex(([key]) => key === snapshot.current_stage);
     const next = LIVE_DEMO_STAGES[current + 1]?.[1] || 'completion';
     if (action) {
       action.disabled = !waiting || !snapshot.can_continue;
-      action.textContent = waiting ? 'Continue to ' + next + ' →' : 'Waiting for engine…';
+      if (!waiting) {
+        action.textContent = 'Waiting for engine…';
+      } else if (isPolicyRejected) {
+        action.textContent = 'Observe Governed Replan →';
+      } else {
+        action.textContent = 'Continue to ' + next + ' →';
+      }
     }
     if (countdown) {
       countdown.textContent = '';
@@ -1397,6 +1514,7 @@ const App = (() => {
 
     enhanceSecondaryViews();
     restoreNavigationState();
+    setupSidebarScroll();
 
     // 2. Hash routing listener
     window.addEventListener('hashchange', () => {
@@ -1622,6 +1740,8 @@ return {
     nextTourStep,
     closeTour,
     skipTour,
+    getTourIndex: () => tourIndex,
+    setTourStep: (idx) => { tourIndex = idx; renderTourStep(); },
     startLoopGuide,
     closeLoopGuide,
     toggleNavigation,
@@ -1630,6 +1750,7 @@ return {
     refreshCollateral,
     refreshMarketplaceView: refreshMarketplace,
     runB2BMarketplaceLoop,
+    renderJudgeControls,
   };
 })();
 

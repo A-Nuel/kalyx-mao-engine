@@ -1933,6 +1933,10 @@ WEB_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../apps/w
 if os.path.isdir(WEB_ROOT):
     app.mount("/assets", StaticFiles(directory=os.path.join(WEB_ROOT, "assets")), name="assets")
 
+    @app.get("/favicon.svg")
+    def favicon() -> FileResponse:
+        return FileResponse(os.path.join(WEB_ROOT, "favicon.svg"), media_type="image/svg+xml")
+
     @app.get("/")
     def landing() -> FileResponse:
         return FileResponse(os.path.join(WEB_ROOT, "landing.html"))
