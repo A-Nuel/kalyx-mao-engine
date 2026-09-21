@@ -1205,12 +1205,12 @@ const App = (() => {
     }
   }
 
-  function renderLiveDemoSnapshot(snapshot) {
-    const stageRoot = $('liveDemoStages');
-    const evidenceRoot = $('liveDemoEvidence');
-    const currentBadge = $('liveDemoCurrentStage');
-    const status = $('liveDemoStatus');
-    const sessionLabel = $('liveDemoSession');
+  function renderDemoSnapshot(snapshot, ids) {
+    const stageRoot = $(ids.stageRoot);
+    const evidenceRoot = $(ids.evidenceRoot);
+    const currentBadge = $(ids.currentBadge);
+    const status = $(ids.status);
+    const sessionLabel = $(ids.sessionLabel);
     if (!stageRoot) return;
 
     const currentKey = snapshot?.current_stage || 'INITIALIZE';
@@ -1279,6 +1279,26 @@ const App = (() => {
         `;
       }
     }
+  }
+
+  function renderLiveDemoSnapshot(snapshot) {
+    renderDemoSnapshot(snapshot, {
+      stageRoot: 'liveDemoStages',
+      evidenceRoot: 'liveDemoEvidence',
+      currentBadge: 'liveDemoCurrentStage',
+      status: 'liveDemoStatus',
+      sessionLabel: 'liveDemoSession',
+    });
+  }
+
+  function renderMarketplaceDemoSnapshot(snapshot) {
+    renderDemoSnapshot(snapshot, {
+      stageRoot: 'marketDemoStages',
+      evidenceRoot: 'marketDemoEvidence',
+      currentBadge: 'marketDemoCurrentStage',
+      status: 'marketDemoStatus',
+      sessionLabel: 'marketDemoSession',
+    });
   }
 
   function clearLiveDemoCountdown() {
@@ -1360,7 +1380,11 @@ const App = (() => {
     if (!liveDemoSessionId) return;
     try {
       const snapshot = await API.getLiveDemo(liveDemoSessionId);
-      renderLiveDemoSnapshot(snapshot);
+      if (liveDemoMode === 'marketplace') {
+        renderMarketplaceDemoSnapshot(snapshot);
+      } else {
+        renderLiveDemoSnapshot(snapshot);
+      }
       renderJudgeControls(snapshot);
       if (snapshot.result?.organisation_id) {
         activeOrgId = snapshot.result.organisation_id;
@@ -1371,13 +1395,52 @@ const App = (() => {
         liveDemoPollTimer = null;
         if (snapshot.status === 'completed' && activeOrgId) {
           await loadOrganisations();
-          setTxt('liveDemoCompletionNote', 'The walkthrough is complete. Use View Full Trace to inspect the persisted system state.');
+          if (liveDemoMode === 'marketplace') {
+            await refreshMarketplace();
+          } else {
+            setTxt('liveDemoCompletionNote', 'The walkthrough is complete. Use View Full Trace to inspect the persisted system state.');
+          }
         }
       }
     } catch (err) {
       renderLiveDemoSnapshot({ status: 'failed', current_stage: 'ERROR', current_title: 'Unable to read demo session', history: [], error: err.message });
       liveDemoPollTimer = null;
     }
+  }
+
+  async function startMarketplaceDemo() {
+    if (liveDemoPollTimer) {
+      clearTimeout(liveDemoPollTimer);
+      liveDemoPollTimer = null;
+    }
+    clearLiveDemoCountdown();
+    liveDemoMode = 'marketplace';
+    const overlay = $('marketDemoModal');
+    if (overlay) overlay.classList.remove('hidden');
+    renderMarketplaceDemoSnapshot(null);
+    const button = $('btnTriggerLoopDemo');
+    if (button) {
+      button.disabled = true;
+      button.classList.add('opacity-60');
+    }
+    try {
+      const started = await API.startLiveDemo('marketplace');
+      liveDemoSessionId = started.session_id;
+      liveDemoMode = 'marketplace';
+      await pollLiveDemo();
+    } catch (err) {
+      renderMarketplaceDemoSnapshot({ status: 'failed', current_stage: 'ERROR', current_title: 'Unable to start marketplace demo', history: [], error: err.message });
+    } finally {
+      if (button) {
+        button.disabled = false;
+        button.classList.remove('opacity-60');
+      }
+    }
+  }
+
+  function closeMarketplaceDemo() {
+    const overlay = $('marketDemoModal');
+    if (overlay) overlay.classList.add('hidden');
   }
 
   async function startLiveDemo() {
@@ -1690,24 +1753,7 @@ const App = (() => {
   }
 
   async function runB2BMarketplaceLoop() {
-    const btn = $('btnTriggerLoopDemo');
-    if (btn) {
-      btn.disabled = true;
-      btn.classList.add('opacity-60');
-    }
-    try {
-      const res = await API.runPublicDemo();
-      await refreshMarketplace();
-      alert(`6-Stage Autonomous Loop Completed Successfully!\nOrder: ${res.order_id || 'mkt-order-demo'}\nSettled Bounty: ${res.net_surplus_usdg || 300} USDG\nNext Mission Lineage Chained.`);
-    } catch (err) {
-      await refreshMarketplace();
-      alert(`Loop triggered. Refreshing view... (${err.message})`);
-    } finally {
-      if (btn) {
-        btn.disabled = false;
-        btn.classList.remove('opacity-60');
-      }
-    }
+    await startMarketplaceDemo();
   }
 
 return {
@@ -1724,6 +1770,8 @@ return {
     submitMission,
     runDemo,
     startLiveDemo,
+    startMarketplaceDemo,
+    closeMarketplaceDemo,
     startJudgeDemo,
     continueJudgeDemo,
     toggleCircuitBreaker,
