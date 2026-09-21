@@ -14,6 +14,56 @@ AGENTS PROPOSE → POLICIES AUTHORIZE → EXECUTORS EXECUTE → AUDITORS VERIFY
 
 Agents produce typed proposals with no direct execution authority. Deterministic policies authorize or reject them. Executors operate only within approved boundaries. Independent audit verifies the resulting receipt, ledger settlement, state and audit chain.
 
+## What Executors Are
+
+In Kalyx, an **executor is the controlled execution boundary between an authorized proposal and the external or economic side effect**. Executors are not the agents that decide what should happen. They receive an already-authorized action, enforce the execution preconditions, perform the bounded operation, and return evidence that can be independently verified.
+
+The current code makes this boundary explicit:
+
+```text
+Agent / Orchestrator
+        │
+        ▼
+   ActionProposal
+        │
+        ▼
+ PolicyEngine → Authorization Token
+        │
+        ▼
+      Executor
+        │
+        ├── validate authorization
+        ├── enforce capabilities
+        ├── consume authorization token
+        ├── reserve / settle credits when required
+        ├── perform bounded external work
+        └── produce an ExecutionReceipt / WorkDeliverable
+        │
+        ▼
+ Independent Auditor / Verifier
+```
+
+### Executors in the current implementation
+
+- **`BaseExecutor`** (`src/execution/base.py`) is the trusted execution boundary. It verifies that a proposal was approved, validates its authorization token, enforces agent capabilities, prevents authorization-token replay, and provides the ledger/escrow primitives used by concrete executors.
+- **`SandboxExecutor`** (`src/execution/executor.py`) performs deterministic simulated actions for development, tests, and demos. It produces an `ExecutionReceipt` rather than claiming that a real external side effect occurred.
+- **`ControlledExternalExecutor`** (`src/execution/executor.py`) performs bounded external API/data operations. It applies an outbound allowlist, SSRF/DNS/IP protections, HTTP-method and payload limits, idempotent authorization consumption, and escrow semantics before dispatching the external request.
+- **`BaseWorkExecutor`** and **`SimulatedWorkExecutor`** (`src/execution/work_executor.py`) form the work-order execution boundary used by the B2B marketplace path. They consume the required Orbio CREDIT resource and return a structured `WorkDeliverable` with execution telemetry for independent verification.
+- **External adapters such as the Orbio gateway** sit behind these execution boundaries. They are mechanisms for carrying out an already-authorized operation; they do not replace Kalyx's policy, authorization, verification, or audit layers.
+
+### The important distinction
+
+An executor is **not a second decision-maker**.
+
+> **Agent:** proposes what should happen.  
+> **Policy:** determines whether it is allowed.  
+> **Authorization:** binds permission to that exact proposal.  
+> **Executor:** performs the authorized operation within technical boundaries.  
+> **Verifier/Auditor:** independently determines what actually happened.  
+> **Ledger:** records the resulting economic state.
+
+This separation is deliberate: giving an agent direct access to executors, credentials, the ledger, or external systems would collapse Kalyx's governance boundary. Executors therefore execute **authority that has already been granted**; they do not create authority themselves.
+
 ## Current Status — 2026-09-19
 
 Kalyx has completed the **Phase 17 autonomous enterprise path** through the P0/P1 hardening gates and the M1–M4 integration work.
