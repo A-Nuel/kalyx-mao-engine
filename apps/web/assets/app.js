@@ -1422,7 +1422,7 @@ const App = (() => {
     }
     if (countdown) {
       countdown.textContent = '';
-      const autoSecs = snapshot.auto_advance_seconds || 20;
+      const autoSecs = snapshot.auto_advance_seconds || 6;
       if (waiting && snapshot.auto_advance_at) {
         const tick = () => {
           const remaining = Math.max(0, (new Date(snapshot.auto_advance_at).getTime() - Date.now()) / 1000);
@@ -1473,7 +1473,7 @@ const App = (() => {
     }
 
     if (snapshot.auto_advance_at) {
-      const autoSecs = snapshot.auto_advance_seconds || 20;
+      const autoSecs = snapshot.auto_advance_seconds || 6;
       const tick = () => {
         const remaining = Math.max(0, (new Date(snapshot.auto_advance_at).getTime() - Date.now()) / 1000);
         const pct = Math.max(0, Math.min(100, (1 - (remaining / autoSecs)) * 100));

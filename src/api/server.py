@@ -122,11 +122,11 @@ _latest_experiment_report = None
 # lets the browser reveal those persisted boundaries progressively.
 _live_demo_sessions: Dict[str, Dict[str, Any]] = {}
 _live_demo_lock = threading.Lock()
-_LIVE_DEMO_STAGE_DELAY = float(os.getenv("KALYX_LIVE_DEMO_STAGE_DELAY", "20.0"))
+_LIVE_DEMO_STAGE_DELAY = float(os.getenv("KALYX_LIVE_DEMO_STAGE_DELAY", "6.0"))
 
 _mkt_demo_sessions: Dict[str, Dict[str, Any]] = {}
 _mkt_demo_lock = threading.Lock()
-_MKT_DEMO_STAGE_DELAY = float(os.getenv("KALYX_MARKETPLACE_DEMO_STAGE_DELAY", "20.0"))
+_MKT_DEMO_STAGE_DELAY = float(os.getenv("KALYX_MARKETPLACE_DEMO_STAGE_DELAY", "6.0"))
 
 
 def _live_demo_json(value: Any) -> Any:
@@ -197,7 +197,7 @@ def _record_live_demo_stage(session_id: str, stage: str, evidence: Dict[str, Any
         if mode == "judge" and key in {"PROPOSE", "AUTHORIZE", "EXECUTE", "VERIFY", "SETTLE", "AUDIT"}:
             checkpoint = current_step
             if key == "PROPOSE":
-                auto_seconds = max(0.0, min(60.0, float(os.getenv("KALYX_JUDGE_PROPOSAL_AUTO_SECONDS", "20.0"))))
+                auto_seconds = max(0.0, min(60.0, float(os.getenv("KALYX_JUDGE_PROPOSAL_AUTO_SECONDS", "6.0"))))
             else:
                 auto_seconds = max(0.0, min(60.0, float(os.getenv("KALYX_JUDGE_AUTO_SECONDS", "0.0"))))
             session["waiting_for_judge"] = True
@@ -211,7 +211,7 @@ def _record_live_demo_stage(session_id: str, stage: str, evidence: Dict[str, Any
         else:
             session["waiting_for_judge"] = False
             if mode == "marketplace":
-                stage_delay = max(0.0, min(60.0, float(os.getenv("KALYX_MARKETPLACE_DEMO_STAGE_DELAY", "20.0"))))
+                stage_delay = max(0.0, min(60.0, float(os.getenv("KALYX_MARKETPLACE_DEMO_STAGE_DELAY", str(_MKT_DEMO_STAGE_DELAY)))))
             else:
                 stage_delay = max(0.0, min(60.0, float(os.getenv("KALYX_LIVE_DEMO_STAGE_DELAY", str(_LIVE_DEMO_STAGE_DELAY)))))
             session["auto_advance_seconds"] = stage_delay
@@ -240,7 +240,7 @@ def _record_live_demo_stage(session_id: str, stage: str, evidence: Dict[str, Any
         return
 
     if mode == "marketplace":
-        delay = max(0.0, min(60.0, float(os.getenv("KALYX_MARKETPLACE_DEMO_STAGE_DELAY", "20.0"))))
+        delay = max(0.0, min(60.0, float(os.getenv("KALYX_MARKETPLACE_DEMO_STAGE_DELAY", str(_MKT_DEMO_STAGE_DELAY)))))
     else:
         delay = max(0.0, min(60.0, float(os.getenv("KALYX_LIVE_DEMO_STAGE_DELAY", str(_LIVE_DEMO_STAGE_DELAY)))))
     deadline = time.time() + delay
@@ -1408,7 +1408,7 @@ def start_marketplace_demo(
             "result": None,
             "error": None,
             "can_continue": True,
-            "auto_advance_seconds": 20,
+            "auto_advance_seconds": int(_MKT_DEMO_STAGE_DELAY),
             "auto_advance_at": None,
             "control_message": "Initializing commerce loop...",
             "checkpoint_counter": 0,
