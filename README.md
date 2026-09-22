@@ -1,423 +1,500 @@
-# Kalyx MAO Engine (Minimum Autonomous Organisation)
+<div align="center">
 
-> **Agents propose. Policies authorize. Executors execute. Auditors verify.**
+# KALYX
+### Machine Autonomous Organisation Engine
 
-Kalyx MAO Engine is an operating and governance layer for **Autonomous Organisations**—systems that receive a mission and finite resources, coordinate specialized AI agents, allocate scarce credits, enforce deterministic policies, execute approved Web2/Web3 actions, and remain accountable through cryptographic auditability and measured performance.
+**Agents propose · Policies authorize · Executors execute · Auditors verify**
 
-This is a long-term infrastructure prototype, not a disposable hackathon demo.
+[![CI](https://github.com/A-Nuel/kalyx-mao-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/A-Nuel/kalyx-mao-engine/actions)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://python.org)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-## Core invariant
+</div>
 
-```text
-AGENTS PROPOSE → POLICIES AUTHORIZE → EXECUTORS EXECUTE → AUDITORS VERIFY
-```
+---
 
-Agents produce typed proposals with no direct execution authority. Deterministic policies authorize or reject them. Executors operate only within approved boundaries. Independent audit verifies the resulting receipt, ledger settlement, state and audit chain.
+## 1. What is Kalyx?
 
-## What Executors Are
+**Kalyx** is an operating and governance runtime for **Machine Autonomous Organisations (MAOs)**.
 
-In Kalyx, an **executor is the controlled execution boundary between an authorized proposal and the external or economic side effect**. Executors are not the agents that decide what should happen. They receive an already-authorized action, enforce the execution preconditions, perform the bounded operation, and return evidence that can be independently verified.
+In traditional multi-agent systems, language models are granted direct tool execution permissions, ambient network credentials, or subjective prompt-based guidelines. When an autonomous system attempts real-world economic interactions, this prompt-level boundary inevitably fails: hallucinated calls slip through, credits are drained without receipts, state desynchronizes, and accountability is lost.
 
-The current code makes this boundary explicit:
+Kalyx replaces prompt-level trust with **deterministic systems infrastructure**:
+- Organisations receive concrete human missions and strictly bounded, finite budgets.
+- Specialized AI agents collaborate to generate structured, typed action proposals.
+- An independent policy engine deterministically validates proposals against invariant rules.
+- Cryptographically authenticated HMAC-SHA256 tokens bind authorization to the exact proposal payload, preventing modification or replay.
+- Controlled executors carry out actions within locked escrow envelopes.
+- An independent auditor verifies external receipts, token validity, and double-entry conservation before state transitions commit.
+- An immutable double-entry ledger serves as the single source of financial and operational truth.
 
-```text
-Agent / Orchestrator
-        │
-        ▼
-   ActionProposal
-        │
-        ▼
- PolicyEngine → Authorization Token
-        │
-        ▼
-      Executor
-        │
-        ├── validate authorization
-        ├── enforce capabilities
-        ├── consume authorization token
-        ├── reserve / settle credits when required
-        ├── perform bounded external work
-        └── produce an ExecutionReceipt / WorkDeliverable
-        │
-        ▼
- Independent Auditor / Verifier
-```
+Kalyx is engineered from day one as resilient infrastructure: zero ambient execution authority, multi-tenant isolation, crash-resilient durable journals, and fail-closed security.
 
-### Executors in the current implementation
+---
 
-- **`BaseExecutor`** (`src/execution/base.py`) is the trusted execution boundary. It verifies that a proposal was approved, validates its authorization token, enforces agent capabilities, prevents authorization-token replay, and provides the ledger/escrow primitives used by concrete executors.
-- **`SandboxExecutor`** (`src/execution/executor.py`) performs deterministic simulated actions for development, tests, and demos. It produces an `ExecutionReceipt` rather than claiming that a real external side effect occurred.
-- **`ControlledExternalExecutor`** (`src/execution/executor.py`) performs bounded external API/data operations. It applies an outbound allowlist, SSRF/DNS/IP protections, HTTP-method and payload limits, idempotent authorization consumption, and escrow semantics before dispatching the external request.
-- **`BaseWorkExecutor`** and **`SimulatedWorkExecutor`** (`src/execution/work_executor.py`) form the work-order execution boundary used by the B2B marketplace path. They consume the required Orbio CREDIT resource and return a structured `WorkDeliverable` with execution telemetry for independent verification.
-- **External adapters such as the Orbio gateway** sit behind these execution boundaries. They are mechanisms for carrying out an already-authorized operation; they do not replace Kalyx's policy, authorization, verification, or audit layers.
+## 2. The Core Thesis
 
-### The important distinction
+The core engineering thesis of Kalyx is:
 
-An executor is **not a second decision-maker**.
+> **AI agents can reliably operate as an economically constrained organisation only when delegation, authority, execution, and verification are explicit architectural primitives rather than prompt instructions.**
 
-> **Agent:** proposes what should happen.  
-> **Policy:** determines whether it is allowed.  
-> **Authorization:** binds permission to that exact proposal.  
-> **Executor:** performs the authorized operation within technical boundaries.  
-> **Verifier/Auditor:** independently determines what actually happened.  
-> **Ledger:** records the resulting economic state.
+Treating an LLM as both the planner and the executor violates the fundamental principle of separation of duties. Giving an agent direct custody of an API key, private key, or treasury balance creates an unbounded attack surface.
 
-This separation is deliberate: giving an agent direct access to executors, credentials, the ledger, or external systems would collapse Kalyx's governance boundary. Executors therefore execute **authority that has already been granted**; they do not create authority themselves.
+In Kalyx, agents have **zero execution authority**. Authority is an ephemeral, cryptographically authenticated capability granted to a verified intent, bounded by deterministic code, executed by constrained adapters, and validated by independent proof.
 
-## Current Status — 2026-09-19
+---
 
-Kalyx has completed the **Phase 17 autonomous enterprise path** through the P0/P1 hardening gates and the M1–M4 integration work.
+## 3. Why Kalyx?
 
-### Completed
+| Challenge in Autonomous Systems | How Kalyx Solves It |
+|---|---|
+| **Ambient & Uncontrolled Execution** | Agents cannot invoke external tools or APIs directly. Every action must be proposed as a typed payload evaluated by a separate policy engine. |
+| **Silent Economic Drain & Hallucinated Cost** | Double-entry bookkeeping enforces strict conservation: $\sum \text{Credits} = \text{Constant}$. Unbacked credit creation and unauthorized overdrafts are physically rejected. |
+| **Self-Reported Execution Bias** | Executors never declare their own success. An independent Auditor validates external cryptographic receipts, hash chains, and network proofs before committing escrow. |
+| **Token Replay & Front-Running** | Authorization tokens are HMAC-SHA256 authenticated and bound to unique nonces, org IDs, policy version hashes, and millisecond timestamps, tracked in a durable consumption store. |
+| **Isolated Agent Silos** | Multi-agent coordination with role hierarchies (CEO, Research, Strategy, Finance), performance scoring, probation lifecycles, and cross-DAO B2B commerce. |
+| **Transient Failures & Network Partitions** | Escrow holds funds in an authoritative state machine (`CREATED` → `AUTHORIZED` → `ESCROWED` → `SUBMITTED` → `RECONCILING` → `RECONCILED`), recovering gracefully after restarts. |
 
-- [x] **Phase 17 P0 — Autonomous Economic Loop:** governed B2B order publication, escrow, provider discovery/claim, capability evolution, Orbio work execution, independent verification, dual-sided settlement, surplus reconciliation, and next-mission chaining.
-- [x] **Phase 17 P1 — Production Hardening:** tenant isolation, public marketplace projection, strict idempotency/replay protection, persisted emergency circuit breaker, multi-signature admin governance, crash/restart recovery, Docker/PostgreSQL migration, and operational runbook.
-- [x] **Phase 17 M1 — Live Orbio Adapter:** official Orbio API base/model configuration, explicit live-vs-simulated provenance, fail-closed production behavior, and deterministic fallback for demo/test environments.
-- [x] **Phase 17 M2 — B2B Marketplace / Escrow:** cross-organisation work orders with tenant-scoped financial state and provider-side settlement visibility.
-- [x] **Phase 17 M3 — Capability Evolution:** autonomous capability discovery/proposal with deterministic policy authorization and performance thresholds.
-- [x] **Phase 17 M4 — Command Centre + Landing:** marketplace/capability/provenance telemetry in the Command Centre plus the public Kalyx landing experience.
-- [x] **CI:** latest verified landing integration run is green; production deployment configuration is being finalized separately from the application code.
+---
 
-### Remaining before public production smoke test
+## 4. How the Governance Loop Works
 
-1. Merge the deployment configuration once its CI gate is green.
-2. Fill the deployment secrets in `.env` from `.env.example` — PostgreSQL, policy/operator/receipt secrets, Orbio API key, and the public CORS origin.
-3. Deploy with `KALYX_ENV=production`, PostgreSQL, operator authentication, and simulated Orbio fallback disabled.
-4. Run the controlled end-to-end smoke path and verify both the live path and fail-closed failure paths.
-5. Keep blockchain settlement disabled initially; enable Ethereum Sepolia only for the controlled testnet settlement milestone.
-
-**Important:** the repository contains deterministic simulated adapters for CI/demo continuity. They are explicitly marked as simulated and must not be presented as live execution. Production configuration is designed to fail closed when required live credentials are missing.
-
-## Phase 18 — Credit Collateral (new)
-
-Orbio's `$CREDIT` is a standard transferable ERC-20 token on Robinhood Chain: you can hold it, transfer it, sell it on the order book, or activate it into non-transferable API balance. That's a real, useful primitive — but it's also all Orbio itself provides. There is no native `lock()` or collateral facility on the deployed CREDIT contract.
-
-**Orbio makes inference transferable capital. Kalyx adds the missing governance layer: a primitive for pledging that capital against an autonomous obligation.**
-
-`CreditCollateralPosition` (`src/domain/collateral.py`) is a state machine — `PROPOSED → AUTHORIZED → LOCKED → OBLIGATION_ACTIVE → VERIFIED_SUCCESS/VERIFIED_FAILURE → RELEASED/FORFEITED` — backed by a minimal on-chain `CollateralVault.sol` contract (`contracts/`) that actually holds transferred CREDIT (or a CREDIT-interface-compatible token during testnet rehearsal), and settled exclusively from `WorkDeliverableVerifier`'s independent evidence — never from an executor's self-reported outcome. See `contracts/README.md` for the deploy runbook and `src/agents/collateral_coordinator.py` for how it composes with the existing B2B marketplace flow without modifying it.
-
-This is a governance layer on top of CREDIT's transferability, not a claim that Orbio itself supports locking — that distinction matters and is stated plainly rather than blurred for effect.
-
-## Architecture
+At the core of Kalyx is the 5-stage conceptual loop:
 
 ```text
-Human mission + finite budget
-          │
-          ▼
-   Autonomous Organisation
-          │
-          ▼
-    CEO / Orchestrator
-       ┌──┼───────────┐
-       ▼  ▼           ▼
- Research Strategy  Finance
-       └──┬───────────┘
-          ▼
-   Deterministic Policy
-          │
-          ├── REJECT → CEO replans
-          │
-          ▼
-   Cryptographic authorization
-          │
-          ▼
- Controlled Executor
-          │
-     ┌────┴─────┐
-     ▼          ▼
-   Ledger    External target
-     ▲          │
-     └────┬─────┘
-          ▼
- Independent Auditor
-          │
-          ▼
- reputation / lifecycle / audit trail
+PROPOSE ──▶ AUTHORIZE ──▶ EXECUTE ──▶ VERIFY ──▶ SETTLE
 ```
-
-## Security model
-
-### Authorization
-Authorization tokens are HMAC-SHA256 signed and bound to organisation ID, proposal content hash, decision ID, policy-version hash, issue/expiry timestamps and a unique nonce. The crypto layer is abstracted so the signing implementation can later move to Ed25519 or a smart-contract verifier.
-
-### Atomic execution
-External execution uses:
 
 ```text
-AUTHORIZE → RESERVE → EXECUTE → VERIFY → COMMIT
-                         │
-                         └──── failure → ROLLBACK
+┌──────────────┐       ┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
+│  1. PROPOSE  │ ────▶ │  2. AUTHORIZE   │ ────▶ │   3. EXECUTE    │ ────▶ │   4. VERIFY     │
+│              │       │                 │       │                 │       │                 │
+│ Agent emits  │       │ PolicyEngine    │       │ BaseExecutor    │       │ Auditor checks  │
+│ typed intent │       │ checks rules    │       │ locks escrow    │       │ receipts, token │
+│ (Action-     │       │ & issues HMAC   │       │ & runs bounded  │       │ binding & ledger│
+│ Proposal)    │       │ Capability Token│       │ adapter         │       │ conservation    │
+└──────────────┘       └─────────────────┘       └─────────────────┘       └─────────────────┘
+                                                           │
+                                                           ▼
+                                                 ┌─────────────────┐
+                                                 │   5. SETTLE     │
+                                                 │ Double-entry    │
+                                                 │ ledger commit   │
+                                                 └─────────────────┘
 ```
 
-Escrow prevents a failed external request from silently consuming organisation credits. Network execution is constrained by method, payload, redirect and DNS/IP SSRF checks.
+1. **PROPOSE:** An autonomous agent (e.g., Finance or Research) constructs an `ActionProposal` specifying the target action, parameters, requested budget, and intent hash. The agent has no access to credentials or network sockets.
+2. **AUTHORIZE:** The `PolicyEngine` evaluates the proposal against deterministic invariant rules (budget ceilings, target allowlists, rate limits, role capabilities). If approved, it generates a cryptographically authenticated `AuthorizationToken` (HMAC-SHA256) binding the proposal hash, policy version, and nonces.
+3. **EXECUTE:** A `ControlledExecutor` validates the authorization token, consumes it idempotently to prevent replay, reserves necessary credits into `ESCROW`, and performs the bounded side effect (e.g., API call or work order).
+4. **VERIFY:** The `Auditor` independently inspects the execution deliverable or receipt, recalculates cryptographic digest bindings, verifies ledger math, and ensures audit chain consistency.
+5. **SETTLE:** Upon audit passage, escrow locks are released to their destinations (`ESCROW` → `EXTERNAL_SINK` or provider balance). If verification fails or execution errors, funds roll back to `TREASURY`.
 
-### Ledger
-SQLite's double-entry ledger is the accounting source of truth. Treasury balances are derived from ledger entries rather than trusting a mutable organisation field. Conservation and overdraft prevention are enforced.
+---
 
-### Independent verification
-The auditor does not simply ask the policy engine whether something is valid. It independently checks proposal fingerprint, token validity, authorization/execution binding, receipt integrity, ledger settlement, audit-chain integrity, credit conservation and state consistency.
-
-## Agent economy
-
-Agents have reputation, performance, reliability, resource efficiency, authority ceilings and lifecycle state. Allocation can therefore adapt to demonstrated performance instead of treating every agent as equally trusted.
-
-Lifecycle:
+## 5. Architecture
 
 ```text
-ACTIVE → PROBATION → RESTRICTED → SUSPENDED → RETIRED
+                                Human Operator / Web Command Centre
+                                                │
+                                    (RBAC / Operator Key)
+                                                ▼
+                     ┌─────────────────────────────────────────────────────┐
+                     │              FastAPI Gateway Layer                  │
+                     │  /api/missions  /api/organisations  /api/demo       │
+                     └──────────────────────────┬──────────────────────────┘
+                                                │
+                                                ▼
+                     ┌─────────────────────────────────────────────────────┐
+                     │            Autonomous Organisation Core             │
+                     │                                                     │
+                     │   ┌─────────────────────────────────────────────┐   │
+                     │   │             Agent Orchestrator              │   │
+                     │   │   [CEO] ──▶ [Strategy] [Research] [Finance] │   │
+                     │   └──────────────────────┬──────────────────────┘   │
+                     │                          │ ActionProposal           │
+                     │                          ▼                          │
+                     │   ┌─────────────────────────────────────────────┐   │
+                     │   │           Policy & Governance Engine        │   │
+                     │   │   • Rule Validator   • Circuit Breaker      │   │
+                     │   │   • Capability Scope • Admin Multi-Sig      │   │
+                     │   └──────────────────────┬──────────────────────┘   │
+                     │                          │ AuthorizationToken       │
+                     │                          ▼                          │
+                     │   ┌─────────────────────────────────────────────┐   │
+                     │   │            Execution Boundaries             │   │
+                     │   │   • SandboxExecutor   • ExternalExecutor    │   │
+                     │   │   • WorkExecutor      • OrbioGatewayAdapter │   │
+                     │   └──────────────┬───────────────────┬──────────┘   │
+                     │                  │                   │              │
+                     │                  ▼                   ▼              │
+                     │        ┌──────────────────┐  ┌────────────────┐     │
+                     │        │ External Network │  │ Escrow / Lock  │     │
+                     │        │ (Allowlist/SSRF) │  │ State Machine  │     │
+                     │        └─────────┬────────┘  └───────┬────────┘     │
+                     │                  │                   │              │
+                     │                  └─────────┬─────────┘              │
+                     │                            ▼                        │
+                     │   ┌─────────────────────────────────────────────┐   │
+                     │   │             Independent Auditor             │   │
+                     │   │   • Tamper-evident SHA-256 Hash Chain       │   │
+                     │   │   • Receipt & Deliverable Verification      │   │
+                     │   └──────────────────────┬──────────────────────┘   │
+                     │                          │ Verified Transitions     │
+                     │                          ▼                          │
+                     │   ┌─────────────────────────────────────────────┐   │
+                     │   │             Persistence Layer               │   │
+                     │   │   • Double-Entry Ledger (SQLite/PostgreSQL) │   │
+                     │   │   • Tenant-Isolated Namespaces              │   │
+                     │   │   • Durable Nonce & Idempotency Store       │   │
+                     │   └─────────────────────────────────────────────┘   │
+                     └─────────────────────────────────────────────────────┘
 ```
 
-The system does **not** give agents a self-preservation objective. Resource pressure is an organisational control mechanism, not an agent motivation.
+---
 
-## Phase 5 — Command Centre & Settlement Boundary
+## 6. What is Actually Implemented
 
-Phase 5 turns the engine into an inspectable control plane without moving authority into the UI.
+Kalyx avoids placeholders. Every trust boundary is enforced in code:
 
-### Command Centre
+### Agents (`src/agents/`)
+- **`CEOOrchestrator`**: Ingests high-level objectives, decomposes missions into stage graphs, coordinates worker assignments, monitors execution outcomes, and triggers adaptive replanning upon policy rejections.
+- **Specialized Roles**: Role-scoped agents (`ResearchAgent`, `StrategyAgent`, `FinanceAgent`) operating under strict capability boundaries.
+- **`B2BMarketplaceCoordinator`**: Orchestrates inter-DAO procurement: discovering open marketplace orders, evaluating profit margins, acquiring required capabilities, managing deliverables, and claiming bounties.
+- **`CollateralCoordinator`**: Manages on-chain collateral pledges for credit-backed contracts without coupling directly to core execution paths.
 
-`src/api/server.py` exposes a thin FastAPI read/control boundary for:
-- organisations and current state
-- agents and workforce metrics
-- tasks, proposals and policy decisions
-- ledger balances and entries
-- append-only mission events
-- audit-chain and verification status
-- bounded pause/resume operator controls
+### Policies (`src/governance/`)
+- **`PolicyEngine`**: Pure, deterministic validation engine checking rules sequentially with zero external side effects.
+- **Concrete Rules**:
+  - `RULE-01` through `RULE-05`: Core budget constraints, transaction limits, capability limits, and target allowlists.
+  - `RULE-BC-01` through `RULE-BC-05`: Blockchain-specific rules enforcing authorized network IDs (Ethereum Sepolia), recipient contract allowlists, gas price ceilings, and intent parameter equality.
+  - `RULE-ORBIO-01` through `RULE-ORBIO-05`: Rules governing Orbio credit purchase limits, slippage bounds, and exchange parameters.
+- **`CircuitBreaker`**: Persisted circuit breaker tripping automatically upon consecutive policy violations, abnormal credit velocity, or operator intervention.
 
-`apps/web/` contains a dependency-light command-centre dashboard. It polls the API for live telemetry and presents:
-- treasury and conservation status
-- active workforce
-- organisation control graph
-- mission replay / event stream
-- policy telemetry
-- ledger state
-- human pause/resume controls
+### Authorization (`src/governance/crypto.py`, `src/security/`)
+- **HMAC-SHA256 Token Authority**: Authorization tokens are cryptographically authenticated using HMAC-SHA256 bound to:
+  $$\text{Token} = \text{HMAC}_{\text{secret}}(\text{OrgID} \parallel \text{ProposalHash} \parallel \text{DecisionID} \parallel \text{PolicyVersion} \parallel \text{Nonce} \parallel \text{Timestamps})$$
+- **`TokenConsumptionStore`**: Durable store recording consumed nonces. Prevents cross-restart token replay attacks.
+- **`CapabilityRegistry`**: Fine-grained role-based permission scopes (`EXECUTE_API`, `TRADE_MARKET`, `STAKE_COLLATERAL`).
 
-The UI never receives policy secrets or execution credentials.
+### Executors (`src/execution/`)
+- **`BaseExecutor`**: Foundation verifying pre-execution invariants: capability scope, authorization validity, token consumption, and escrow reservations.
+- **`SandboxExecutor`**: In-memory deterministic simulator producing valid cryptographic execution receipts for rapid testing and demonstrations.
+- **`ControlledExternalExecutor`**: Hardened HTTP executor with strict network egress controls: IP/CIDR blocklists (blocking private networks and metadata endpoints to defeat SSRF), domain allowlists, HTTP method restrictions, payload size caps, and timeout guards.
+- **`WorkExecutor` & `OrbioGatewayAdapter`**: Executes complex off-chain tasks powered by Orbio models, converting inputs into verifiable `WorkDeliverable` objects.
 
-### Settlement boundary
+### Auditors (`src/audit/`, `src/settlement/`)
+- **`Auditor`**: Independent verification component that inspects every execution receipt, recalculates proposal digest hashes, validates HMAC authentication codes, and cross-examines the double-entry ledger.
+- **`AuditChain`**: Append-only tamper-evident hash chain linking all system events:
+  $$\text{Hash}_n = \text{SHA256}(\text{Hash}_{n-1} \parallel \text{Timestamp} \parallel \text{Payload})$$
+- **`WorkDeliverableVerifier`**: Specialized verifier validating deliverable artifact hashes against published marketplace order specifications.
 
-`src/settlement/adapter.py` defines the explicit settlement interface and a deterministic simulated adapter for demos/tests. This keeps on-chain settlement behind a capability boundary instead of pretending that a hackathon UI is already safe for real money.
+### Ledger (`src/domain/`, `src/persistence/`)
+- **Double-Entry Accounting**: Immutable credit tracking. Every credit movement requires a balancing debit and credit entry across system accounts (`TREASURY`, `ESCROW`, `EXPENSE`, `EXTERNAL_SINK`).
+- **Conservation Invariant**: Mathematical verification asserting $\Delta \text{Assets} = 0$ for all internal transfers.
+- **Tenant Isolation**: Deterministic account namespacing formatted as `{tenant_id}:{org_id}:{account_type}`, physically preventing cross-organisation asset manipulation.
+- **Dual Persistence Backends**: SQLite for zero-dependency local testing/demoing; PostgreSQL for high-concurrency production deployments with connection pooling and advisory locking.
 
-A production Robinhood Chain adapter belongs behind this same interface and must preserve the existing authorization, escrow, receipt and audit invariants.
+---
 
-### Agent identity
+## 7. B2B Marketplace
 
-`src/identity/ed25519.py` provides an Ed25519 identity primitive for stable agent public identities and signed messages. Private keys are held by the caller/key-management layer and are never implicitly persisted by Kalyx.
+Phase 17 introduces a **Cross-DAO B2B Marketplace** enabling autonomous organisations to outsource capabilities, pool resources, and settle commercial bounties without human mediation.
 
-## Phase 6 — Product Hardening
+### The 6-Stage Autonomous Business Loop
 
-Phase 6 hardens the command centre's operational boundary before adding more autonomous behaviour.
+```text
+ ┌──────────────────────┐
+ │  1. ORDER PROPOSED   │  Buyer DAO locks bounty credits into escrow and broadcasts
+ └──────────┬───────────┘  a work order with SLA and technical specification hash.
+            │
+            ▼
+ ┌──────────────────────┐
+ │ 2. CAPABILITY EXPAN. │  Provider DAO discovers order, checks capabilities, and proposes
+ └──────────┬───────────┘  policy-governed capability expansion if requirements are missing.
+            │
+            ▼
+ ┌──────────────────────┐
+ │ 3. ORBIO EXECUTION   │  Provider executes work payload through the Orbio Gateway,
+ └──────────┬───────────┘  consuming model inference and generating a WorkDeliverable.
+            │
+            ▼
+ ┌──────────────────────┐
+ │ 4. INDEPENDENT AUDIT │  WorkDeliverableVerifier independently checks deliverable hashes
+ └──────────┬───────────┘  against buyer spec hash. Bypasses self-reported agent status.
+            │
+            ▼
+ ┌──────────────────────┐
+ │ 5. ESCROW SETTLEMENT │  Dual-sided settlement: Escrow releases bounty to Provider,
+ └──────────┬───────────┘  charges platform fee, and posts balanced double-entry entries.
+            │
+            ▼
+ ┌──────────────────────┐
+ │ 6. MISSION CHAINING  │  Provider reconciles surplus profit and automatically rolls it
+ └──────────────────────┘  into the budget of its next mission, completing the loop.
+```
 
-### API hardening
+---
 
-- Production mode requires `KALYX_OPERATOR_KEY` for pause/resume controls and uses constant-time key comparison.
-- Demo/local mode remains frictionless for judging and development.
-- CORS is configurable with `KALYX_CORS_ORIGINS`; production defaults to same-origin/no cross-origin access unless explicitly configured.
-- Baseline security response headers are added (`nosniff`, frame protection, referrer policy).
-- The audit endpoint reports a broken/corrupt chain as an explicit invalid result instead of hiding the condition behind a startup exception.
-- `/api/health` reports the running API version.
+## 8. Orbio Integration
 
-See `.env.example` for runtime configuration.
+Orbio provides `$CREDIT`, a transferable ERC-20 token used within the Orbio inference ecosystem on Robinhood Chain.
 
-### CI quality gate
+Kalyx adds an autonomous operating layer on top of Orbio:
+1. **Model Gateway (`src/external/orbio/`)**: Connects autonomous agents to Orbio inference endpoints, tracking prompt tokens, completion tokens, latency, and credit burn per request.
+2. **Autonomous Inference Procurement (`src/agents/orbio_purchase_loop.py`)**: When compute credits dip below operational watermarks, the organisation autonomously proposes an Orbio purchase order.
+3. **Execution & Dual Provenance**: Explicit tracking of execution provenance (`LIVE` vs `SIMULATED`). When running without live credentials, Kalyx falls back gracefully to deterministic simulation while explicitly marking the output as simulated.
 
-GitHub Actions runs the test matrix on Python 3.11 and 3.12, verifies dependency consistency with `pip check`, compiles the Python source tree, builds the production container on Python 3.12, and runs the full pytest suite. The workflow is also manually dispatchable for release/demo verification.
+---
 
-The repository treats CI as the authoritative test result because local execution is environment-dependent.
+## 9. Credit Collateral
 
-## Phase 7 — Mission Lifecycle & Autonomous Experience
+While Orbio's `$CREDIT` token is transferable, the base ERC-20 contract lacks native on-chain locking or obligation enforcement. Kalyx adds this governance layer via **Phase 18 Credit Collateral**:
 
-`src/api/mission_service.py` elevates Mission to a first-class operational entity with explicit lifecycle transitions (`DRAFT -> PLANNED -> RUNNING -> COMPLETED / FAILED / CANCELLED`), durable event persistence, live telemetry, visible policy rejection/replanning events, and the deterministic 3-minute Judge Demo Mode.
+- **On-Chain Vault (`contracts/CollateralVault.sol`)**: A secure smart contract that accepts ERC-20 `$CREDIT` deposits, locking tokens until released or forfeited.
+- **Cryptographic State Machine (`src/domain/collateral.py`)**:
+  ```text
+  PROPOSED ──▶ AUTHORIZED ──▶ LOCKED ──▶ OBLIGATION_ACTIVE ──▶ VERIFIED_SUCCESS ──▶ RELEASED
+                                                            └──▶ VERIFIED_FAILURE ──▶ FORFEITED
+  ```
+- **Independent Settle Authority**: Positions are resolved **exclusively** from `WorkDeliverableVerifier` cryptographic proof. An executor cannot unlock its own collateral.
 
-## Phase 8 — Security & Reliability Hardening
+---
 
-`src/security/` establishes defense-in-depth primitives:
-- **Durable Token Consumption**: `token_consumption.py` records consumed authorization token nonces in persistent storage; token replay across server restarts is deterministically rejected.
-- **Durable Idempotency Journal**: `idempotency.py` tracks incoming mutation keys with state and payload hashes, preventing double-invocation of state transitions.
-- **Least-Privilege Capabilities**: `capabilities.py` enforces fine-grained permission scopes for each actor.
-- **Durable External-Operation Journal**: `durable_executor.py` records in-flight external operations to prevent duplicate financial or external calls during transient failures.
+## 10. Security Model
 
-## Phase 9 — Identity, Multi-Tenancy & Organisation Isolation
+Kalyx adheres to defense-in-depth security principles across all layers:
 
-`src/identity/` and `src/tenancy/` establish strict multi-tenant boundaries:
-- **Tenancy Hierarchy**: `Principal -> Tenant/Workspace -> Organisation -> Missions`.
-- **Role-Based Access Control**: `OWNER`, `ADMIN`, `OPERATOR`, and `VIEWER` roles enforced via `src/api/identity_auth.py`.
-- **Canonical Account Namespacing**: `src/tenancy/account_namespace.py` deterministically isolates ledger balances at `{tenant_id}:{organisation_id}:{logical_account}`. No tenant can read or mutate another tenant's treasury.
-- **Cross-Tenant Isolation**: Requests accessing out-of-tenant resources return safe 404s without leaking existence. Client-provided tenant headers are scope selectors, never proofs of authorization.
+- **Zero Ambient Authority**: Agents receive zero API keys or private keys. Execution adapters operate in isolated runtime contexts with scoped credentials.
+- **Fail-Closed Semantics (`KALYX_ENV=production`)**:
+  - Rejects default or weak policy secrets.
+  - Rejects SQLite (PostgreSQL is required).
+  - Enforces operator authentication headers (`X-API-Key`).
+  - Restricts CORS to configured origins.
+- **SSRF & Egress Protection**: Outbound HTTP requests undergo DNS resolution validation. Private IPv4/IPv6 blocks (`10.0.0.0/8`, `192.168.0.0/16`, `172.16.0.0/12`), loopbacks (`127.0.0.1`), and cloud metadata IP (`169.254.169.254`) are blocked before socket creation.
+- **Durable Idempotency & Replay Resistance**: Mutations carry client idempotency keys tracked in persistent storage with payload checksums. Authorization nonces are single-use.
+- **Double-Entry Balance Authority**: System balances are computed dynamically from immutable ledger records; mutable column updates to account balances are disallowed.
 
-## Phase 9.5 — Dual-Backend Persistence (SQLite + PostgreSQL)
+---
 
-`src/persistence/` provides a unified persistence layer with dual backends:
-- **SQLite Backend**: Lightweight, zero-dependency storage for local development, fast CLI demonstrations, and offline unit testing (`create_sqlite()`).
-- **PostgreSQL Production Backend**: Production persistence via `KALYX_DATABASE_URL` with ordered SQL migrations (`migrations/postgres/`), advisory locks for concurrent ledger operations, connection pooling, and fail-closed validation (`KALYX_ENV=production`).
+## 11. Agent Economy
 
-## Phase 10 — Consequential Execution & Settlement Boundary
+Kalyx features a dynamic, self-regulating internal economy:
 
-`src/execution/consequential.py` and `src/settlement/` establish an authoritative execution and economic settlement boundary:
-- **Authoritative State Machine**: `CREATED -> AUTHORIZED -> ESCROWED -> SUBMITTED -> SUCCEEDED / UNKNOWN / FAILED -> RECONCILING -> RECONCILED`.
-- **Fail-Closed Escrow Atomicity**: In-flight operations lock credits from `TREASURY` into `ESCROW`. On network timeouts or uncertain provider states (`UNKNOWN`), escrow remains locked until independent reconciliation verifies provider ground truth.
-- **Durable Reconciliation Engine**: `ReconciliationService` queries provider ground truth, enforces tenant/org isolation, and performs exactly-once terminal settlement (`ESCROW -> EXTERNAL_SINK` on success, `ESCROW -> TREASURY` on failure).
-- **Independent Auditor Verification**: `Auditor.verify_consequential_operation` cryptographically verifies proposal fingerprints, HMAC token validity, operation binding, provider evidence, and double-entry ledger transactions.
-- **Multi-Tenant Operations API**: Exposes tenant-isolated endpoints for listing operations, inspecting status, and triggering reconciliation (`/api/organisations/{org_id}/operations`).
-- **Simulated Consequential Provider**: Provides realistic external provider simulation with independent state and fault injection without real-money custody.
+### Multi-Dimensional Performance Tracking
+Agents do not hold a static trust rating. The engine continuously measures:
+- **Performance**: Task success rate and deliverable quality.
+- **Reliability**: Consistency and adherence to timeouts.
+- **Resource Efficiency**: Ratio of credits utilized vs budget reserved.
+- **Policy Compliance**: Clean proposal rate without policy rejection.
 
-## Economic benchmark
+### Evidence-Driven Lifecycle
+State transitions are deterministic and backed by cryptographic evidence logs:
+```text
+ACTIVE ⟷ PROBATION ⟷ RESTRICTED ⟷ SUSPENDED ──▶ RETIRED
+```
+Agents experiencing elevated policy failures or resource overruns automatically transition to `PROBATION` or `RESTRICTED` status, shrinking their allowed budget caps until performance recovers.
 
-`src/economy/experiment.py` compares STATIC, PERFORMANCE and ADAPTIVE allocation across multiple workload scenarios and seeds. Results are generated empirically rather than hardcoding the desired winner.
+### Adaptive Resource Allocation
+The `ResourceAllocator` distributes mission budgets across the workforce using one of three strategies:
+- `STATIC`: Equal allocation across operational agents (baseline).
+- `PERFORMANCE`: Proportional distribution indexed to agent composite scores.
+- `ADAPTIVE`: Dynamic allocation combining composite scores with organisation treasury scarcity damping.
 
-## Project status
+---
 
-- [x] Phase 1 — Deterministic foundation
-- [x] Phase 2 — Agent architecture & orchestration
-- [x] Phase 3 — Persistence & independent verification
-- [x] Phase 3.5 — Cryptographic & policy hardening
-- [x] Phase 4 — Agent economy & controlled execution
-- [x] Phase 4 hardening — escrow atomicity, DNS SSRF validation, ledger authority, empirical benchmark
-- [x] Phase 5 — Foundation, packaging, production containerisation, CI test environments
-- [x] Phase 6 — Command Centre API/UI, operational controls, security headers, container healthcheck
-- [x] Phase 7 — Mission lifecycle state machine, deterministic Judge Demo Mode, live telemetry
-- [x] Phase 8 — Security hardening: durable token consumption, idempotency journal, capability enforcement
-- [x] Phase 9 — Identity, tenancy & organisation isolation: RBAC roles, tenant-scoped ledger, fail-closed auth
-- [x] Phase 9.5 — Dual-backend persistence (SQLite + PostgreSQL), connection pooling, fail-closed gate
-- [x] Phase 10 — Consequential execution & settlement boundary (state machine, escrow atomicity, reconciliation, auditor verification)
+## 12. Command Centre
 
-## Quickstart
+Kalyx features a browser-based Command Centre built with zero external frontend framework dependencies:
+
+- **Mission Operations**: Real-time visualization of mission stages, active proposals, and execution events.
+- **Treasury Telemetry**: Live double-entry balance breakdown, escrow holdings, and real-time credit conservation checks.
+- **Workforce Monitor**: Agent status, lifecycle state badges, reputation scores, and capability permissions.
+- **Audit Log Inspector**: Live visual inspection of the cryptographic hash chain and individual receipt signatures.
+- **B2B Marketplace Portal**: Active orders, claimed tasks, deliverable verification statuses, and dual-sided settlement logs.
+- **Operator Emergency Controls**: Human-in-the-loop pause and resume toggles protected by constant-time API key verification.
+
+---
+
+## 13. Live Demos
+
+Kalyx includes two live interactive demonstration experiences accessible directly via the Command Centre UI:
+
+### 1. Guided Mission Governance Demo
+Walks through a complete end-to-end execution of an autonomous mission:
+$$\text{INITIALIZE} \longrightarrow \text{PLAN} \longrightarrow \text{PROPOSE} \longrightarrow \text{AUTHORIZE} \longrightarrow \text{EXECUTE} \longrightarrow \text{VERIFY} \longrightarrow \text{SETTLE} \longrightarrow \text{AUDIT}$$
+
+Each stage surfaces authentic cryptographic tokens, ledger entries, and audit logs.
+
+### 2. Marketplace Live Governance Session
+Runs a real Kalyx mission through the same governed execution boundaries used by the main Live Demo, with marketplace-oriented economic context. 
+
+The underlying cross-DAO commerce follows the six-stage business loop:
+$$\text{ORDER\_PROPOSED} \longrightarrow \text{CAPABILITY\_EXPANSION} \longrightarrow \text{ORBIO\_EXECUTION} \longrightarrow \text{INDEPENDENT\_AUDIT} \longrightarrow \text{ESCROW\_SETTLEMENT} \longrightarrow \text{MISSION\_CHAINING}$$
+
+**Demo Controls & Modes:**
+- **Guided Mode**: Steps through each stage with configurable pacing (~6 seconds per stage) including live countdown progress bars and an instantaneous "Advance Now →" capability.
+- **Judge Mode**: Pauses at stage boundaries, allowing judges and developers to inspect intermediate state, examine proofs, and advance transitions manually.
+
+---
+
+## 14. Quickstart
+
+### Prerequisites
+- Python 3.11 or higher
+- Git
+
+### Local Setup
 
 ```bash
+# 1. Clone the repository
 git clone https://github.com/A-Nuel/kalyx-mao-engine.git
 cd kalyx-mao-engine
+
+# 2. Create and activate virtual environment
 python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# 3. Install dependencies in editable mode
 pip install -e ".[dev]"
+
+# 4. Run the fast demonstration script
 python scripts/run_demo.py --fast
 ```
 
-Start the command centre:
+### Starting the Command Centre
 
 ```bash
-uvicorn src.api.server:app --host 127.0.0.1 --port 8000
+# Start the FastAPI engine
+uvicorn src.api.server:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-Open `http://127.0.0.1:8000` after running a demo against the same `KALYX_DB` database.
+Navigate to `http://127.0.0.1:8000`:
+- **Landing Page**: Overview of the Kalyx primitive and architecture.
+- **Command Centre (`/command-centre`)**: Real-time management interface, live telemetry, and interactive demo launchers.
 
-For a production-style container:
+### Running with Docker
 
 ```bash
+# Build the production container
 docker build -t kalyx .
+
+# Run container with mounted data volume
 docker run --rm -p 8000:8000 \
-  -e KALYX_OPERATOR_KEY="replace-with-a-strong-secret" \
+  -e KALYX_OPERATOR_KEY="your-operator-secret-key" \
   -v kalyx-data:/app/data \
   kalyx
 ```
 
-Run tests locally:
+### Full Stack Deployment (Docker Compose)
 
 ```bash
-python -m pip check
-python -m compileall -q src tests
+# Starts Kalyx application and PostgreSQL database with persistent volume
+docker compose up -d
+```
+
+---
+
+## 15. Configuration
+
+Kalyx is configured via environment variables. See [`.env.example`](.env.example) for the complete reference.
+
+| Variable | Type | Default | Description |
+|---|---|---|---|
+| `KALYX_ENV` | String | `demo` | Environment mode (`demo` or `production`). |
+| `KALYX_DATABASE_URL` | String | *None* | PostgreSQL connection string. Mandatory when `KALYX_ENV=production`. |
+| `KALYX_DB` | String | `kalyx.db` | SQLite database path (demo/development only). |
+| `KALYX_POLICY_SECRET` | String | *Dev Default* | Secret key for HMAC-SHA256 token authentication (min 32 chars in production). |
+| `KALYX_OPERATOR_KEY` | String | *None* | Bearer API key required for operator control endpoints. |
+| `KALYX_REQUIRE_OPERATOR_AUTH` | Boolean | `false` | When true, rejects unauthenticated pause/resume requests. |
+| `KALYX_CORS_ORIGINS` | String | `*` | Allowed CORS origins (comma-separated). |
+| `KALYX_PUBLIC_DEMO` | Boolean | `false` | Enables demo simulation endpoints (`/api/demo/*`). |
+| `KALYX_LIVE_DEMO_STAGE_DELAY` | Float | `6.0` | Default seconds per stage during guided demo playback. |
+| `KALYX_BLOCKCHAIN_RPC_URL` | String | *None* | Ethereum Sepolia RPC URL for Phase 12 on-chain settlement. |
+| `ORBIO_API_KEY` | String | *None* | Orbio API key for live model inference and gateway calls. |
+
+---
+
+## 16. Development Phases
+
+The repository reflects an 18-phase disciplined engineering progression:
+
+- **Phase 1 — Deterministic Foundation**: Pure functional state machines and domain primitives.
+- **Phase 2 — Agent Architecture & Orchestration**: CEO orchestrator and specialized agent roles.
+- **Phase 3 — Persistence & Independent Verification**: Double-entry ledger, cryptographic hash chains.
+- **Phase 3.5 — Cryptographic & Policy Hardening**: HMAC authorization tokens, policy versioning.
+- **Phase 4 — Agent Economy & Controlled Execution**: Escrow atomicity, outbound SSRF guards.
+- **Phase 5 — Command Centre & Settlement Boundary**: FastAPI read/control interface, web dashboard.
+- **Phase 6 — Product Hardening**: Constant-time key comparison, security headers, CI build matrix.
+- **Phase 7 — Mission Lifecycle**: State machine transitions, durable mission events, Judge Demo Mode.
+- **Phase 8 — Security & Reliability Hardening**: Token consumption store, idempotency journals.
+- **Phase 9 — Multi-Tenancy & Organisation Isolation**: RBAC roles, tenant-namespaced ledgers.
+- **Phase 9.5 — Dual-Backend Persistence**: Unified database abstractions (SQLite + PostgreSQL).
+- **Phase 10 — Consequential Execution & Settlement**: Provider state machines, durable reconciliation.
+- **Phase 11 — Production Hardening**: Disaster recovery, process crash restarts, advisory locks.
+- **Phase 12 — Real Blockchain Settlement**: Ethereum Sepolia EIP-1559 settlement, isolated signing.
+- **Phase 13 — Adaptive Economics**: Multi-dimensional scoring, counterfactual allocation benchmarks.
+- **Phase 14 — Orbio Integration**: Autonomous inference purchasing, MCP bridge, simulated exchange.
+- **Phase 15 — Self-Sustaining Loop**: Autonomous compute replenishment, surplus accounting.
+- **Phase 16 — Multi-Agent Coordination**: Inter-agent task handoffs, Orbio gateway adapters.
+- **Phase 17 — Autonomous Enterprise & B2B Marketplace**: 6-stage cross-DAO marketplace, capability evolution.
+- **Phase 18 — Credit Collateral**: On-chain `CollateralVault.sol`, verifier-settled obligation locks.
+
+---
+
+## 17. Tests / CI
+
+Reliability is backed by a comprehensive automated test suite across multiple testing tiers:
+
+```bash
+# Run the test suite
 python -m pytest -q
+
+# Run specific test tiers
+python -m pytest tests/unit/ -q              # Unit tests
+python -m pytest tests/integration/ -q       # Integration tests
+python -m pytest tests/trust_boundaries/ -q  # Adversarial security tests
 ```
 
-GitHub Actions repeats these checks on pushes to `main`, pull requests, and manual workflow dispatches.
+### Test Architecture
+- **Unit (`tests/unit/`)**: Verifies state transitions, policy rules, cryptography bindings, and ledger balance derivation in isolation.
+- **Integration (`tests/integration/`)**: Evaluates multi-step mission workflows, demo API endpoints, database persistence, and crash recovery.
+- **Trust Boundary & Adversarial (`tests/trust_boundaries/`)**: Explicitly attempts unauthorized executions, token replay, SSRF escapes, cross-tenant data leakage, and escrow tampering.
+- **CI Quality Gate**: GitHub Actions runs automated matrix testing on Python 3.11 and 3.12, enforces `pip check`, verifies source compilation (`compileall`), and tests container builds on every push and PR.
 
-## What Kalyx is trying to prove
+---
 
-The thesis is not that "AI can run a company" today.
+## 18. Tech Stack
 
-The narrower engineering claim is:
+- **Runtime**: Python 3.11+
+- **API Framework**: FastAPI, Uvicorn, Starlette
+- **Data Validation**: Pydantic v2
+- **Persistence**: PostgreSQL (production), SQLite (development/testing)
+- **Cryptography**: `cryptography` (HMAC-SHA256, Ed25519)
+- **Web3 / Blockchain**: `web3.py`, `eth-account`, `eth-abi`
+- **Smart Contracts**: Solidity ^0.8.20, Foundry
+- **HTTP / Networking**: HTTPX
+- **Frontend**: Vanilla ECMAScript, CSS3, HTML5 (Zero bundler or node_modules dependencies)
+- **Containerization**: Docker, Docker Compose
+- **Testing**: pytest, pytest-asyncio
 
-> **AI agents can operate as an economically constrained organisation when delegation, authority, execution and verification are explicit system primitives rather than prompt instructions.**
+---
 
-## Phase 12: Real Blockchain Settlement Boundary (Ethereum Sepolia & Simulated EVM)
+## 19. Contributing
 
-Kalyx implements a real blockchain settlement adapter behind the Phase 10 consequential execution boundary:
+We welcome contributions to the Kalyx MAO Engine. Please follow these guidelines:
 
-```text
-Autonomous Organisation
-         │
-         ▼
-   Agent Proposal (Typed Intent)
-         │
-         ▼
-   Policy Decision (RULE-BC-01..05)
-         │
-         ▼
-Authorization Capability (HMAC Token)
-         │
-         ▼
-Consequential Operation (Escrow Locked)
-         │
-         ▼
-Settlement Adapter (LocalKeySigner + NonceManager)
-         │
-         ▼
-Blockchain Transaction (EIP-1559 on Ethereum Sepolia)
-         │
-         ▼
-Independent Verification (Authoritative RPC Receipt)
-         │
-         ▼
-  Audit Evidence (Cryptographic Log & Conservation)
-```
+1. **Fork & Branch**: Create a feature branch from `main` (`git checkout -b feature/your-feature-name`).
+2. **Adhere to Invariants**: Ensure your changes do not violate the core invariant (`AGENTS PROPOSE → POLICIES AUTHORIZE → EXECUTORS EXECUTE → AUDITORS VERIFY`).
+3. **Verify Integrity**:
+   ```bash
+   python -m pip check
+   python -m compileall -q src tests
+   python -m pytest -q
+   ```
+4. **Submit PR**: Open a pull request against `main` describing your changes, motivation, and verification steps.
 
-- **Isolated Signing Boundary**: Autonomous agents and browser clients possess zero private keys. Keys are loaded into `LocalKeySigner` and redacted from all logs and representations.
-- **Deterministic Policy Rules**: Enforces `RULE-BC-01` (Allowed Chains), `RULE-BC-02` (Recipient Allowlist), `RULE-BC-03` (Amount Ceilings), `RULE-BC-04` (Gas Exposure Caps), and `RULE-BC-05` (Intent Parameter Matching).
-- **Crash & Drop Recovery**: Network timeouts transition operations to `UNKNOWN` with escrow preserved. Post-recovery reconciliation queries on-chain receipts and commits or refunds escrow atomically.
-- **Auditor Verification**: The `Auditor` independently verifies on-chain receipts against node RPC data and asserts double-entry credit conservation.
+---
 
-### Testnet Milestone Execution
+## 20. License
 
-Run the controlled on-chain milestone script:
-
-```bash
-# Simulated EVM dry-run verification
-python scripts/execute_testnet_settlement.py --simulate
-
-# Live Ethereum Sepolia execution
-export KALYX_BLOCKCHAIN_RPC_URL="https://eth-sepolia.g.alchemy.com/v2/your-api-key"
-export KALYX_BLOCKCHAIN_PRIVATE_KEY="0x..."
-python scripts/execute_testnet_settlement.py --recipient 0x70997970C51812dc3A010C7d01b50e0d17dc79C8 --amount-credits 1
-```
-
-> [!WARNING]
-> **Operational Warning**: Kalyx is **NOT** production-ready for real-money settlement merely because a testnet transaction succeeds. Production deployment requires HSM/KMS-backed keys, MPC co-signing, audited smart contracts, and multi-signature human approval gates.
-
-## Phase 13: Adaptive Organisational Economics & Agent Performance
-
-Kalyx closes the operational loop through continuous measurement and resource allocation:
-
-```text
-MISSION → PLAN → EXECUTE → AUDIT → MEASURE → ALLOCATE → NEXT MISSION
-```
-
-- **Multi-Dimensional Performance Model**: Separately tracks and exposes Performance, Reliability, Resource Efficiency, and Policy Compliance before computing a deterministic composite score.
-- **Deterministic Resource Allocator**: Supports `STATIC` (control group), `PERFORMANCE` (proportional to score), and `ADAPTIVE` (dynamic weighting with treasury scarcity damping).
-- **Resource Conservation**: Total allocations strictly respect $\sum_i \text{budget}_i \le \text{treasury\_balance}$ with direct double-entry ledger integration and zero unbacked credit creation.
-- **Evidence-Driven Lifecycle**: Deterministic state transitions (`ACTIVE ⟷ PROBATION ⟷ RESTRICTED ⟷ SUSPENDED ⟶ RETIRED`) with immutable cryptographic evidence hashes.
-- **Counterfactual Experiment Engine**: Multi-scenario benchmark framework (`STEADY_STATE`, `HIGH_RISK_MARKET`, `TREASURY_SHOCK`) evaluating strategies against identical workloads and pseudorandom seeds without cherry-picking.
-
-## Verification & Test Coverage
-
-The automated test suite contains **622 tests** spanning unit, integration, and security/isolation suites:
-- **617 passed** in offline/local execution.
-- **5 skipped** (live PostgreSQL integration tests when `KALYX_DATABASE_URL` is unconfigured; verified in container and CI).
-
-```bash
-================== 617 passed, 5 skipped in 7.11s ===================
-```
-
-- **Phase 13 Adaptive Economics**: `test_phase13_adaptive_economics.py`, `test_economic_experiment.py`, `test_agent_performance.py`, `test_agent_lifecycle.py`, `test_resource_allocator.py`, `test_economy_security_adversarial.py`.
-- **Phase 12 Blockchain Settlement**: `test_blockchain_intent.py`, `test_blockchain_policy_rules.py`, `test_blockchain_signer.py`, `test_blockchain_settlement_lifecycle.py`, `test_blockchain_security_adversarial.py`.
-- **Phase 11 Production Hardening**: `test_phase11_production_hardening.py`, `test_disaster_recovery.py`.
-- **Phase 10 Consequential Execution**: `test_phase10_state_machine.py`, `test_phase10_simulated_provider.py`, `test_phase10_escrow.py`, `test_phase10_reconciliation.py`, `test_phase10_auditor.py`, `test_phase10_api.py`, `test_phase10_consequential_execution.py`.
-- **Tenancy & Isolation**: `test_account_namespace.py`, `test_tenancy.py`, `test_tenant_scoped_ledger.py`, `test_phase9_identity.py`, `test_phase9_organisation_ledger.py`, `test_phase9_api_identity.py`, `test_phase9_api_ledger_isolation.py`.
-- **Security & Idempotency**: `test_phase8_security.py`, `test_phase8_tenancy.py`, `test_token_consumption.py`, `test_adversarial.py`, `test_execution_atomicity.py`, `test_ssrf_and_network_security.py`.
-- **Missions & API**: `test_phase7_missions.py`, `test_phase5_api.py`, `test_phase5_operator_controls.py`, `test_phase6_hardening.py`.
-- **Audit & Ledger Invariants**: `test_auditor.py`, `test_hash_chain.py`, `test_ledger.py`, `test_treasury_source_of_truth.py`, `test_audit_tamper_exhaustive.py`.
-- **Persistence & Bootstrap**: `test_persistence_config.py`, `test_production_bootstrap.py`, `test_sqlite_persistence.py`, `test_postgres_persistence.py`.
-
-## License
-
-MIT License. Designed and architected for autonomous organisation infrastructure.
-
+This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
