@@ -247,6 +247,9 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans
           <div>
             <span class="demo-kicker">JUDGE MODE / REAL CHECKPOINT</span>
             <strong id="judgeControlMessage">Waiting for the engine to reach a checkpoint.</strong>
+            <div class="demo-countdown-bar-wrap">
+              <div id="judgeCountdownBar" class="demo-countdown-bar-fill"></div>
+            </div>
           </div>
           <span id="judgeCountdown" class="judge-countdown"></span>
           <button id="judgeContinueBtn" type="button" onclick="App.continueJudgeDemo()" disabled>Waiting for engine…</button>
@@ -309,15 +312,15 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans
       </section>
 
       
-  <!-- Marketplace live governance session: same real engine trace as Judge Mode, auto-paced. -->
+  <!-- 6-Stage Cross-DAO Marketplace Loop Session: genuine Phase 17 B2B Commerce & Surplus Chaining -->
   <div id="marketDemoModal" class="market-demo-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="marketDemoTitle">
     <div class="market-demo-backdrop" onclick="App.closeMarketplaceDemo()"></div>
     <div class="market-demo-dialog">
       <div class="market-demo-head">
         <div>
-          <span class="demo-kicker">MARKETPLACE / LIVE GOVERNANCE SESSION</span>
-          <h2 id="marketDemoTitle">Watch the market loop execute</h2>
-          <p>One real Kalyx mission is progressing through the same proposal, policy, authorization, execution, verification, settlement and audit boundaries used by the Live Demo.</p>
+          <span class="demo-kicker">CROSS-DAO COMMERCE / 6-STAGE AUTONOMOUS LOOP</span>
+          <h2 id="marketDemoTitle">6-Stage B2B Marketplace & Surplus Chaining</h2>
+          <p>Two autonomous organizations execute cross-DAO trade: Client locks 300 USDG in escrow, Provider evolves capability (94.5 > 80), executes productive work on Orbio Gateway, verifies with HMAC-SHA256, settles with 80/20 surplus split, and funds Mission 2 entirely from surplus.</p>
         </div>
         <div class="market-demo-head-actions">
           <span id="marketDemoStatus" class="demo-status">READY</span>
@@ -326,10 +329,10 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans
       </div>
 
       <div class="live-demo-proofbar market-demo-proofbar">
-        <div><span>EXTERNAL EXECUTION</span><strong>SIMULATED / CONTROLLED GATEWAY</strong></div>
-        <div><span>AUTHORITY</span><strong>POLICY ENGINE</strong></div>
-        <div><span>EVIDENCE</span><strong>PERSISTED EVENT STORE</strong></div>
-        <div><span>ECONOMICS</span><strong>DOUBLE-ENTRY LEDGER</strong></div>
+        <div><span>ESCROW COMMITMENT</span><strong>300 USDG LOCKED (CONSERVED)</strong></div>
+        <div><span>GOVERNED EVOLUTION</span><strong>SCORE 94.5 > 80 (POLICY EVALUATED)</strong></div>
+        <div><span>ORBIO COMPUTATION</span><strong>1,000 CREDITS (COMPUTATION)</strong></div>
+        <div><span>INDEPENDENT AUDIT</span><strong>HMAC-SHA256 + 80/20 SURPLUS</strong></div>
       </div>
 
       <div class="market-demo-session-line">
@@ -337,31 +340,43 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans
         <span id="marketDemoCurrentStage">Preparing control plane…</span>
       </div>
 
+      <div id="marketControlPanel" class="market-demo-control-row">
+        <div>
+          <span class="demo-kicker">CROSS-DAO COMMERCE / DELIBERATE PACING</span>
+          <strong id="marketControlMessage">Initializing 6-stage B2B marketplace loop...</strong>
+          <div class="demo-countdown-bar-wrap">
+            <div id="marketCountdownBar" class="demo-countdown-bar-fill"></div>
+          </div>
+        </div>
+        <span id="marketCountdownText" class="market-countdown-text">STAGE PACED</span>
+        <button id="marketAdvanceBtn" type="button" class="market-advance-btn" onclick="App.continueMarketplaceDemo()">Advance Now →</button>
+      </div>
+
       <div class="live-demo-grid market-demo-grid">
         <section class="live-demo-panel live-demo-stages-panel">
           <div class="live-demo-panel-head">
-            <div><span class="demo-kicker">CONTROL LOOP</span><h2>What Kalyx is doing</h2></div>
+            <div><span class="demo-kicker">COMMERCE LOOP</span><h2>6-Stage Execution</h2></div>
           </div>
           <div id="marketDemoStages" class="live-demo-stages"></div>
         </section>
 
         <section class="live-demo-panel live-demo-evidence-panel">
           <div class="live-demo-panel-head">
-            <div><span class="demo-kicker">EVIDENCE</span><h2>What actually happened</h2></div>
+            <div><span class="demo-kicker">DUAL-LEDGER EVIDENCE</span><h2>Cryptographic Verification</h2></div>
             <span class="live-demo-live-mark">● LIVE</span>
           </div>
           <div id="marketDemoEvidence" class="live-demo-evidence">
-            <div class="demo-empty">Starting the real engine session…</div>
+            <div class="demo-empty">Starting the 6-stage cross-DAO engine session…</div>
           </div>
         </section>
       </div>
 
       <div class="market-demo-footer">
         <div>
-          <span class="demo-kicker">ORBIO / ECONOMIC BOUNDARY</span>
-          <strong>Controlled inference economy — simulation / explicit gateway boundary</strong>
+          <span class="demo-kicker">ECONOMIC BOUNDARY / REVENUE TO SURPLUS</span>
+          <strong>Dual-ledger conservation, independent HMAC verification, and 80/20 reserve split</strong>
         </div>
-        <span>~90 sec automatic walkthrough</span>
+        <span>~2 mins deliberate pacing (~20s / stage) · Click Advance Now to skip</span>
       </div>
     </div>
   </div>
@@ -636,7 +651,7 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans
       <div class="kalyx-guide-foot"><span>DEMO PROVENANCE</span><b>SIMULATED</b><button onclick="App.closeLoopGuide();App.runDemo()">Run the simulated path →</button></div>
     </div>
   </div>
-  <script src="/assets/api.js?v=20260920-2"></script>
-  <script src="/assets/app.js?v=20260921-2"></script>
+  <script src="/assets/api.js?v=20260922-1"></script>
+  <script src="/assets/app.js?v=20260922-1"></script>
 </body>
 </html>

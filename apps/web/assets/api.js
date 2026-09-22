@@ -256,6 +256,15 @@ const API = (() => {
     async getLiveDemo(sessionId) {
       return request('/api/demo/live/' + encodeURIComponent(sessionId));
     },
+    async startMarketplaceDemo(live = false) {
+      return request('/api/demo/marketplace/start?live=' + (live ? 'true' : 'false'), { method: 'POST' });
+    },
+    async getMarketplaceDemo(sessionId) {
+      return request('/api/demo/marketplace/' + encodeURIComponent(sessionId));
+    },
+    async continueMarketplaceDemo(sessionId) {
+      return request('/api/demo/marketplace/' + encodeURIComponent(sessionId) + '/continue', { method: 'POST' });
+    },
   };
 
 })();

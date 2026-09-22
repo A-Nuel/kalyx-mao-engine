@@ -22,6 +22,19 @@ const App = (() => {
     ['AUDIT', 'Audit', 'The completed chronology remains inspectable'],
   ];
 
+  const MARKETPLACE_DEMO_STAGES = [
+    ['ORDER_PROPOSED', 'Order & Escrow Lock', 'Client locks 300 USDG in escrow for market capability'],
+    ['CAPABILITY_EXPANSION', 'Capability Evolution', 'Provider worker evaluated (94.5 > 80) & granted capability'],
+    ['ORBIO_EXECUTION', 'Orbio Work Execution', 'Productive computation via Orbio Gateway (1,000 credits)'],
+    ['INDEPENDENT_AUDIT', 'Independent Audit', 'Cryptographic HMAC verification & deliverable audit'],
+    ['ESCROW_SETTLEMENT', 'Settlement & Surplus Split', 'Escrow released with 80/20 mission surplus allocation'],
+    ['MISSION_CHAINING', 'Mission Chaining', 'Mission 2 funded strictly from verified surplus (<= 240 USDG)'],
+  ];
+
+  let marketplaceDemoSessionId = null;
+  let marketplaceDemoPollTimer = null;
+  let marketplaceCountdownTimer = null;
+
   // Agent inspector is always populated from the authoritative API. No fictional fallback registry.
   const AGENT_REGISTRY = Object.freeze({});
 
@@ -1213,10 +1226,11 @@ const App = (() => {
     const sessionLabel = $(ids.sessionLabel);
     if (!stageRoot) return;
 
-    const currentKey = snapshot?.current_stage || 'INITIALIZE';
+    const stages = ids.stages || LIVE_DEMO_STAGES;
+    const currentKey = snapshot?.current_stage || (stages[0] ? stages[0][0] : 'INITIALIZE');
     const history = snapshot?.history || [];
     const completedKeys = new Set(history.map(item => item.key));
-    stageRoot.innerHTML = LIVE_DEMO_STAGES.map(([key, title, desc], index) => {
+    stageRoot.innerHTML = stages.map(([key, title, desc], index) => {
       const isCurrent = currentKey === key;
       const isComplete = completedKeys.has(key) || currentKey === 'COMPLETE';
       const cls = isCurrent ? 'demo-stage-current' : (isComplete ? 'demo-stage-complete' : '');
@@ -1265,6 +1279,53 @@ const App = (() => {
         } else if (latest.key === 'AUDIT') {
           const r = evidence.review || {};
           rows = [['MISSION', evidence.organisation_id || 'completed'], ['REVIEW', r.summary || r.status || 'recorded'], ['STATE', 'COMPLETED']];
+        } else if (latest.key === 'ORDER_PROPOSED') {
+          rows = [
+            ['ORDER ID', evidence.order_id],
+            ['CLIENT ORG', evidence.client_org_id],
+            ['ESCROW LOCKED', (evidence.escrow_locked_usdg || 300) + ' USDG'],
+            ['CAPABILITY', evidence.required_capability],
+            ['CONSERVATION', evidence.ledger_conserved ? 'BALANCED' : 'VERIFIED'],
+          ];
+        } else if (latest.key === 'CAPABILITY_EXPANSION') {
+          rows = [
+            ['PROVIDER ORG', evidence.provider_org_id],
+            ['WORKER AGENT', evidence.worker_id],
+            ['SCORE', evidence.worker_performance_score + ' (> ' + evidence.score_threshold + ')'],
+            ['POLICY RULE', evidence.governed_rule],
+            ['STATUS', evidence.policy_decision],
+          ];
+        } else if (latest.key === 'ORBIO_EXECUTION') {
+          rows = [
+            ['BACKEND', evidence.backend],
+            ['PROVENANCE', evidence.provenance],
+            ['CREDITS CONSUMED', evidence.orbio_credits_consumed],
+            ['DELIVERABLE ID', evidence.deliverable_id],
+            ['EXECUTION', evidence.execution_status],
+          ];
+        } else if (latest.key === 'INDEPENDENT_AUDIT') {
+          rows = [
+            ['VERIFIER', evidence.verifier],
+            ['HMAC SIGNATURE', evidence.hmac_signature_verified ? 'VERIFIED (MATCH)' : 'UNVERIFIED'],
+            ['AUDIT VERDICT', evidence.audit_verdict],
+            ['SPEC COMPLIANCE', evidence.spec_compliance],
+          ];
+        } else if (latest.key === 'ESCROW_SETTLEMENT') {
+          rows = [
+            ['ESCROW RELEASED', (evidence.client_escrow_released || 300) + ' USDG'],
+            ['NET SURPLUS', (evidence.net_surplus_usdg || 240) + ' USDG'],
+            ['MISSION ALLOCATION (80%)', (evidence.mission_budget_allocated_80pct || 192) + ' USDG'],
+            ['SURPLUS RESERVE (20%)', (evidence.surplus_reserve_allocated_20pct || 48) + ' USDG'],
+            ['CONSERVATION', evidence.conservation_verified ? 'BALANCED' : 'VERIFIED'],
+          ];
+        } else if (latest.key === 'MISSION_CHAINING') {
+          rows = [
+            ['CHAINED MISSION', evidence.chained_mission_id],
+            ['FUNDING SOURCE', evidence.funding_source],
+            ['MISSION 2 BUDGET', evidence.mission_2_budget_bounty + ' USDG'],
+            ['SURPLUS INVARIANT', evidence.invariant_holds ? 'HELD (<= SURPLUS)' : 'VIOLATED'],
+            ['LINEAGE VERIFIED', evidence.cryptographic_lineage_verified ? 'CRYPTOGRAPHIC MATCH' : 'PENDING'],
+          ];
         } else {
           rows = Object.entries(evidence)
             .filter(([k, v]) => v !== null && v !== undefined && typeof v !== 'object')
@@ -1283,6 +1344,7 @@ const App = (() => {
 
   function renderLiveDemoSnapshot(snapshot) {
     renderDemoSnapshot(snapshot, {
+      stages: LIVE_DEMO_STAGES,
       stageRoot: 'liveDemoStages',
       evidenceRoot: 'liveDemoEvidence',
       currentBadge: 'liveDemoCurrentStage',
@@ -1293,6 +1355,7 @@ const App = (() => {
 
   function renderMarketplaceDemoSnapshot(snapshot) {
     renderDemoSnapshot(snapshot, {
+      stages: MARKETPLACE_DEMO_STAGES,
       stageRoot: 'marketDemoStages',
       evidenceRoot: 'marketDemoEvidence',
       currentBadge: 'marketDemoCurrentStage',
@@ -1308,16 +1371,25 @@ const App = (() => {
     }
   }
 
+  function clearMarketplaceCountdown() {
+    if (marketplaceCountdownTimer) {
+      clearInterval(marketplaceCountdownTimer);
+      marketplaceCountdownTimer = null;
+    }
+  }
+
   function renderJudgeControls(snapshot) {
     const panel = $('judgeControlPanel');
     const message = $('judgeControlMessage');
     const action = $('judgeContinueBtn');
     const countdown = $('judgeCountdown');
+    const judgeBar = $('judgeCountdownBar');
     if (!panel) return;
     clearLiveDemoCountdown();
     const judge = liveDemoMode === 'judge' || snapshot?.mode === 'judge';
     if (!judge || !snapshot || snapshot.status !== 'running') {
       panel.classList.add('hidden');
+      if (judgeBar) judgeBar.style.width = '0%';
       return;
     }
     panel.classList.remove('hidden');
@@ -1350,16 +1422,71 @@ const App = (() => {
     }
     if (countdown) {
       countdown.textContent = '';
+      const autoSecs = snapshot.auto_advance_seconds || 20;
       if (waiting && snapshot.auto_advance_at) {
         const tick = () => {
-          const remaining = Math.max(0, Math.ceil((new Date(snapshot.auto_advance_at).getTime() - Date.now()) / 1000));
-          countdown.textContent = remaining > 0 ? 'AUTO-ADVANCE ' + remaining + 's' : 'ADVANCING…';
+          const remaining = Math.max(0, (new Date(snapshot.auto_advance_at).getTime() - Date.now()) / 1000);
+          const pct = Math.max(0, Math.min(100, (1 - (remaining / autoSecs)) * 100));
+          if (judgeBar) judgeBar.style.width = pct + '%';
+          countdown.textContent = remaining > 0 ? 'AUTO-ADVANCE ' + Math.ceil(remaining) + 's' : 'ADVANCING…';
         };
         tick();
-        liveDemoCountdownTimer = setInterval(tick, 250);
+        liveDemoCountdownTimer = setInterval(tick, 200);
       } else if (waiting) {
         countdown.textContent = 'JUDGE CHECKPOINT';
+        if (judgeBar) judgeBar.style.width = '100%';
+      } else {
+        if (judgeBar) judgeBar.style.width = '0%';
       }
+    }
+  }
+
+  function renderMarketplaceDemoControls(snapshot) {
+    clearMarketplaceCountdown();
+    const message = $('marketControlMessage');
+    const action = $('marketAdvanceBtn');
+    const countdown = $('marketCountdownText');
+    const bar = $('marketCountdownBar');
+
+    if (!snapshot || snapshot.status !== 'running') {
+      if (bar) bar.style.width = snapshot?.status === 'completed' ? '100%' : '0%';
+      if (action) {
+        action.disabled = snapshot?.status !== 'running';
+        action.textContent = snapshot?.status === 'completed' ? 'Loop Complete ✓' : 'Advance Now →';
+      }
+      if (countdown) {
+        countdown.textContent = snapshot?.status === 'completed' ? 'COMPLETED' : 'IDLE';
+      }
+      if (message && snapshot?.current_description) {
+        message.textContent = snapshot.current_description;
+      }
+      return;
+    }
+
+    if (message) {
+      message.textContent = snapshot.control_message || snapshot.current_description || 'Autonomous loop running...';
+    }
+
+    if (action) {
+      action.disabled = false;
+      action.textContent = 'Advance Now →';
+    }
+
+    if (snapshot.auto_advance_at) {
+      const autoSecs = snapshot.auto_advance_seconds || 20;
+      const tick = () => {
+        const remaining = Math.max(0, (new Date(snapshot.auto_advance_at).getTime() - Date.now()) / 1000);
+        const pct = Math.max(0, Math.min(100, (1 - (remaining / autoSecs)) * 100));
+        if (bar) bar.style.width = pct + '%';
+        if (countdown) {
+          countdown.textContent = remaining > 0 ? 'AUTO-ADVANCE ' + Math.ceil(remaining) + 's' : 'ADVANCING…';
+        }
+      };
+      tick();
+      marketplaceCountdownTimer = setInterval(tick, 200);
+    } else {
+      if (bar) bar.style.width = '50%';
+      if (countdown) countdown.textContent = 'STAGE PACED';
     }
   }
 
@@ -1376,15 +1503,23 @@ const App = (() => {
     }
   }
 
+  async function continueMarketplaceDemo() {
+    if (!marketplaceDemoSessionId) return;
+    const button = $('marketAdvanceBtn');
+    if (button) button.disabled = true;
+    try {
+      await API.continueMarketplaceDemo(marketplaceDemoSessionId);
+      await pollMarketplaceDemo();
+    } catch (err) {
+      if (button) button.disabled = false;
+    }
+  }
+
   async function pollLiveDemo() {
     if (!liveDemoSessionId) return;
     try {
       const snapshot = await API.getLiveDemo(liveDemoSessionId);
-      if (liveDemoMode === 'marketplace') {
-        renderMarketplaceDemoSnapshot(snapshot);
-      } else {
-        renderLiveDemoSnapshot(snapshot);
-      }
+      renderLiveDemoSnapshot(snapshot);
       renderJudgeControls(snapshot);
       if (snapshot.result?.organisation_id) {
         activeOrgId = snapshot.result.organisation_id;
@@ -1395,46 +1530,61 @@ const App = (() => {
         liveDemoPollTimer = null;
         if (snapshot.status === 'completed' && activeOrgId) {
           await loadOrganisations();
-          if (liveDemoMode === 'marketplace') {
-            await refreshMarketplace();
-          } else {
-            setTxt('liveDemoCompletionNote', 'The walkthrough is complete. Use View Full Trace to inspect the persisted system state.');
-          }
+          setTxt('liveDemoCompletionNote', 'The walkthrough is complete. Use View Full Trace to inspect the persisted system state.');
         }
       }
     } catch (err) {
       const failure = { status: 'failed', current_stage: 'ERROR', current_title: 'Unable to read demo session', history: [], error: err.message };
-      if (liveDemoMode === 'marketplace') {
-        renderMarketplaceDemoSnapshot(failure);
-      } else {
-        renderLiveDemoSnapshot(failure);
-      }
+      renderLiveDemoSnapshot(failure);
       liveDemoPollTimer = null;
     }
   }
 
-  async function startMarketplaceDemo() {
-    if (liveDemoPollTimer) {
-      clearTimeout(liveDemoPollTimer);
-      liveDemoPollTimer = null;
+  async function pollMarketplaceDemo() {
+    if (!marketplaceDemoSessionId) return;
+    try {
+      const snapshot = await API.getMarketplaceDemo(marketplaceDemoSessionId);
+      renderMarketplaceDemoSnapshot(snapshot);
+      renderMarketplaceDemoControls(snapshot);
+      if (snapshot.status === 'running') {
+        marketplaceDemoPollTimer = setTimeout(pollMarketplaceDemo, 350);
+      } else {
+        marketplaceDemoPollTimer = null;
+        if (snapshot.status === 'completed') {
+          await refreshMarketplace();
+        }
+      }
+    } catch (err) {
+      const failure = { status: 'failed', current_stage: 'ERROR', current_title: 'Unable to read marketplace demo session', history: [], error: err.message };
+      renderMarketplaceDemoSnapshot(failure);
+      renderMarketplaceDemoControls(failure);
+      marketplaceDemoPollTimer = null;
     }
-    clearLiveDemoCountdown();
-    liveDemoMode = 'marketplace';
+  }
+
+  async function startMarketplaceDemo() {
+    if (marketplaceDemoPollTimer) {
+      clearTimeout(marketplaceDemoPollTimer);
+      marketplaceDemoPollTimer = null;
+    }
+    clearMarketplaceCountdown();
     const overlay = $('marketDemoModal');
     if (overlay) overlay.classList.remove('hidden');
     renderMarketplaceDemoSnapshot(null);
+    renderMarketplaceDemoControls(null);
     const button = $('btnTriggerLoopDemo');
     if (button) {
       button.disabled = true;
       button.classList.add('opacity-60');
     }
     try {
-      const started = await API.startLiveDemo('marketplace');
-      liveDemoSessionId = started.session_id;
-      liveDemoMode = 'marketplace';
-      await pollLiveDemo();
+      const started = await API.startMarketplaceDemo(false);
+      marketplaceDemoSessionId = started.session_id;
+      await pollMarketplaceDemo();
     } catch (err) {
-      renderMarketplaceDemoSnapshot({ status: 'failed', current_stage: 'ERROR', current_title: 'Unable to start marketplace demo', history: [], error: err.message });
+      const failure = { status: 'failed', current_stage: 'ERROR', current_title: 'Unable to start marketplace demo', history: [], error: err.message };
+      renderMarketplaceDemoSnapshot(failure);
+      renderMarketplaceDemoControls(failure);
     } finally {
       if (button) {
         button.disabled = false;
@@ -1444,6 +1594,11 @@ const App = (() => {
   }
 
   function closeMarketplaceDemo() {
+    if (marketplaceDemoPollTimer) {
+      clearTimeout(marketplaceDemoPollTimer);
+      marketplaceDemoPollTimer = null;
+    }
+    clearMarketplaceCountdown();
     const overlay = $('marketDemoModal');
     if (overlay) overlay.classList.add('hidden');
   }
@@ -1776,6 +1931,7 @@ return {
     runDemo,
     startLiveDemo,
     startMarketplaceDemo,
+    continueMarketplaceDemo,
     closeMarketplaceDemo,
     startJudgeDemo,
     continueJudgeDemo,

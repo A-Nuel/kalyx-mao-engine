@@ -122,7 +122,11 @@ _latest_experiment_report = None
 # lets the browser reveal those persisted boundaries progressively.
 _live_demo_sessions: Dict[str, Dict[str, Any]] = {}
 _live_demo_lock = threading.Lock()
-_LIVE_DEMO_STAGE_DELAY = 1.35
+_LIVE_DEMO_STAGE_DELAY = float(os.getenv("KALYX_LIVE_DEMO_STAGE_DELAY", "20.0"))
+
+_mkt_demo_sessions: Dict[str, Dict[str, Any]] = {}
+_mkt_demo_lock = threading.Lock()
+_MKT_DEMO_STAGE_DELAY = float(os.getenv("KALYX_MARKETPLACE_DEMO_STAGE_DELAY", "20.0"))
 
 
 def _live_demo_json(value: Any) -> Any:
@@ -185,24 +189,34 @@ def _record_live_demo_stage(session_id: str, stage: str, evidence: Dict[str, Any
         session["updated_at"] = item["timestamp"]
         session["history"].append(item)
         mode = session.get("mode", "guided")
+        session["checkpoint_counter"] = int(session.get("checkpoint_counter", 0)) + 1
+        current_step = session["checkpoint_counter"]
+        session["active_checkpoint"] = current_step
+        session["can_continue"] = True
+
         if mode == "judge" and key in {"PROPOSE", "AUTHORIZE", "EXECUTE", "VERIFY", "SETTLE", "AUDIT"}:
-            session["checkpoint_counter"] = int(session.get("checkpoint_counter", 0)) + 1
-            checkpoint = session["checkpoint_counter"]
-            session["active_checkpoint"] = checkpoint
-            auto_seconds = (
-                max(0.0, min(60.0, float(os.getenv("KALYX_JUDGE_PROPOSAL_AUTO_SECONDS", "15"))))
-                if key == "PROPOSE"
-                else 0.0
-            )
+            checkpoint = current_step
+            if key == "PROPOSE":
+                auto_seconds = max(0.0, min(60.0, float(os.getenv("KALYX_JUDGE_PROPOSAL_AUTO_SECONDS", "20.0"))))
+            else:
+                auto_seconds = max(0.0, min(60.0, float(os.getenv("KALYX_JUDGE_AUTO_SECONDS", "0.0"))))
             session["waiting_for_judge"] = True
-            session["can_continue"] = True
             session["auto_advance_seconds"] = auto_seconds
             session["auto_advance_at"] = time.time() + auto_seconds if auto_seconds > 0 else None
             session["control_message"] = (
                 f"Agent proposal submitted. Automatically advancing to policy review in {int(auto_seconds)}s."
                 if key == "PROPOSE" and auto_seconds > 0
-                else "Judge checkpoint reached. Continue when ready."
+                else f"Judge checkpoint: {title}. Continue when ready."
             )
+        else:
+            session["waiting_for_judge"] = False
+            if mode == "marketplace":
+                stage_delay = max(0.0, min(60.0, float(os.getenv("KALYX_MARKETPLACE_DEMO_STAGE_DELAY", "20.0"))))
+            else:
+                stage_delay = max(0.0, min(60.0, float(os.getenv("KALYX_LIVE_DEMO_STAGE_DELAY", str(_LIVE_DEMO_STAGE_DELAY)))))
+            session["auto_advance_seconds"] = stage_delay
+            session["auto_advance_at"] = time.time() + stage_delay if stage_delay > 0 else None
+            session["control_message"] = f"Observing {title}. Auto-advancing in {int(stage_delay)}s or advance now."
 
     if checkpoint:
         deadline = time.time() + auto_seconds if auto_seconds > 0 else None
@@ -226,16 +240,95 @@ def _record_live_demo_stage(session_id: str, stage: str, evidence: Dict[str, Any
         return
 
     if mode == "marketplace":
-        delay = max(
-            0.0,
-            min(20.0, float(os.getenv("KALYX_MARKETPLACE_DEMO_STAGE_DELAY", "9.0"))),
-        )
+        delay = max(0.0, min(60.0, float(os.getenv("KALYX_MARKETPLACE_DEMO_STAGE_DELAY", "20.0"))))
     else:
-        delay = max(
-            0.0,
-            min(5.0, float(os.getenv("KALYX_LIVE_DEMO_STAGE_DELAY", str(_LIVE_DEMO_STAGE_DELAY)))),
+        delay = max(0.0, min(60.0, float(os.getenv("KALYX_LIVE_DEMO_STAGE_DELAY", str(_LIVE_DEMO_STAGE_DELAY)))))
+    deadline = time.time() + delay
+    while time.time() < deadline:
+        with _live_demo_lock:
+            session = _live_demo_sessions.get(session_id)
+            if not session or int(session.get("released_checkpoint", 0)) >= current_step:
+                break
+        time.sleep(0.05)
+
+
+def _record_mkt_demo_stage(session_id: str, stage: str, evidence: Dict[str, Any]) -> None:
+    stage_meta = {
+        "ORDER_PROPOSED": ("ORDER_PROPOSED", "Order & Escrow Lock", "Client Org Alpha proposes B2B order; policy locks 300 USDG in escrow."),
+        "CAPABILITY_EXPANSION": ("CAPABILITY_EXPANSION", "Capability Evolution", "Provider Org Beta discovers order; policy evaluates worker score (94.5 > 80) and grants capability."),
+        "ORBIO_EXECUTION": ("ORBIO_EXECUTION", "Orbio Work Execution", "Productive computation via Orbio Gateway (1,000 compute credits consumed)."),
+        "INDEPENDENT_AUDIT": ("INDEPENDENT_AUDIT", "Independent Audit & Verification", "Auditor verifies deliverable against work order & HMAC cryptographic signature."),
+        "ESCROW_SETTLEMENT": ("ESCROW_SETTLEMENT", "Settlement & Surplus Split", "Escrow released; provider treasury receives 300 USDG with 80/20 surplus split."),
+        "MISSION_CHAINING": ("MISSION_CHAINING", "Autonomous Mission Chaining", "Mission 2 formulated and funded strictly from verified surplus (200 <= 240 USDG)."),
+    }
+    key, title, description = stage_meta.get(stage, (stage, stage.replace("_", " ").title(), "Marketplace loop state advanced."))
+    item = {
+        "key": key,
+        "source_event": stage,
+        "title": title,
+        "description": description,
+        "evidence": _live_demo_json(_redact_live_demo(evidence)),
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+    }
+    delay = max(0.0, min(60.0, float(os.getenv("KALYX_MARKETPLACE_DEMO_STAGE_DELAY", str(_MKT_DEMO_STAGE_DELAY)))))
+    with _mkt_demo_lock:
+        session = _mkt_demo_sessions.get(session_id)
+        if not session:
+            return
+        session["current_stage"] = key
+        session["current_title"] = title
+        session["current_description"] = description
+        session["updated_at"] = item["timestamp"]
+        session["history"].append(item)
+        session["checkpoint_counter"] = int(session.get("checkpoint_counter", 0)) + 1
+        current_step = session["checkpoint_counter"]
+        session["active_checkpoint"] = current_step
+        session["can_continue"] = True
+        session["auto_advance_seconds"] = delay
+        session["auto_advance_at"] = time.time() + delay if delay > 0 else None
+        session["control_message"] = f"{title}. Auto-advancing in {int(delay)}s or continue when ready."
+
+    deadline = time.time() + delay
+    while time.time() < deadline:
+        with _mkt_demo_lock:
+            session = _mkt_demo_sessions.get(session_id)
+            if not session or int(session.get("released_checkpoint", 0)) >= current_step:
+                break
+        time.sleep(0.05)
+
+
+def _run_marketplace_demo_session(session_id: str, live_mode: bool) -> None:
+    try:
+        from src.api.marketplace_demo_service import run_marketplace_loop_demo
+        result = run_marketplace_loop_demo(
+            session_id=session_id,
+            stage_callback=lambda stage, evidence: _record_mkt_demo_stage(session_id, stage, evidence),
+            live_mode=live_mode,
         )
-    time.sleep(delay)
+        with _mkt_demo_lock:
+            session = _mkt_demo_sessions.get(session_id)
+            if session:
+                session["status"] = "completed"
+                session["current_stage"] = "COMPLETE"
+                session["current_title"] = "6-Stage Commerce Loop Complete"
+                session["current_description"] = "Cross-DAO B2B order executed, verified, settled, and chained into next mission."
+                session["result"] = _live_demo_json(_redact_live_demo(result))
+                session["updated_at"] = datetime.utcnow().isoformat() + "Z"
+                session["can_continue"] = False
+                session["auto_advance_seconds"] = 0
+                session["auto_advance_at"] = None
+    except Exception as exc:
+        logger.exception("Marketplace loop demo failed")
+        with _mkt_demo_lock:
+            session = _mkt_demo_sessions.get(session_id)
+            if session:
+                session["status"] = "failed"
+                session["current_stage"] = "ERROR"
+                session["current_title"] = "Marketplace Demo Failed"
+                session["current_description"] = f"{type(exc).__name__}: {exc}"
+                session["can_continue"] = False
+                session["auto_advance_seconds"] = 0
+                session["auto_advance_at"] = None
 
 
 def _run_live_demo_session(session_id: str, tenant_id: str) -> None:
@@ -1281,22 +1374,88 @@ def get_live_demo(session_id: str) -> Dict[str, Any]:
 
 @app.post("/api/demo/live/{session_id}/continue")
 def continue_live_demo(session_id: str) -> Dict[str, Any]:
-    """Release one real orchestration checkpoint in Judge Mode."""
+    """Release one orchestration checkpoint or advance current stage."""
     if os.getenv("KALYX_PUBLIC_DEMO", "false").strip().lower() != "true":
         raise HTTPException(status_code=404, detail="Public demo is disabled")
     with _live_demo_lock:
         session = _live_demo_sessions.get(session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Live demo session not found")
-        if session.get("mode") != "judge":
-            raise HTTPException(status_code=409, detail="Session is not running in Judge Mode")
-        if not session.get("waiting_for_judge"):
-            return _live_demo_json(session)
         checkpoint = int(session.get("active_checkpoint", 0))
         if checkpoint <= 0:
-            raise HTTPException(status_code=409, detail="Judge checkpoint is unavailable")
-        session["released_checkpoint"] = checkpoint
-        session["control_message"] = "Judge released the checkpoint. Advancing to the next real engine boundary."
+            return _live_demo_json(session)
+        session["released_checkpoint"] = max(checkpoint, int(session.get("released_checkpoint", 0)) + 1)
+        session["control_message"] = "Advancing to the next real engine boundary."
+        return _live_demo_json(session)
+
+
+@app.post("/api/demo/marketplace/start")
+def start_marketplace_demo(
+    live: bool = Query(default=False),
+) -> Dict[str, Any]:
+    """Start the 6-stage autonomous economic loop demo."""
+    if os.getenv("KALYX_PUBLIC_DEMO", "false").strip().lower() != "true":
+        raise HTTPException(status_code=404, detail="Public demo is disabled")
+    session_id = f"mkt-demo-{uuid.uuid4().hex[:12]}"
+    with _mkt_demo_lock:
+        _mkt_demo_sessions[session_id] = {
+            "session_id": session_id,
+            "status": "running",
+            "current_stage": "ORDER_PROPOSED",
+            "current_title": "Starting 6-Stage Marketplace Loop",
+            "current_description": "Cross-DAO B2B commerce initialization.",
+            "history": [],
+            "result": None,
+            "error": None,
+            "can_continue": True,
+            "auto_advance_seconds": 20,
+            "auto_advance_at": None,
+            "control_message": "Initializing commerce loop...",
+            "checkpoint_counter": 0,
+            "active_checkpoint": 0,
+            "released_checkpoint": 0,
+            "updated_at": datetime.utcnow().isoformat() + "Z",
+        }
+    worker = threading.Thread(
+        target=_run_marketplace_demo_session,
+        args=(session_id, live),
+        name=f"kalyx-mkt-demo-{session_id[-6:]}",
+        daemon=True,
+    )
+    worker.start()
+    return {
+        "session_id": session_id,
+        "status": "running",
+        "poll_ms": 350,
+    }
+
+
+@app.get("/api/demo/marketplace/{session_id}")
+def get_marketplace_demo(session_id: str) -> Dict[str, Any]:
+    """Return the read-only telemetry snapshot of the marketplace demo."""
+    if os.getenv("KALYX_PUBLIC_DEMO", "false").strip().lower() != "true":
+        raise HTTPException(status_code=404, detail="Public demo is disabled")
+    with _mkt_demo_lock:
+        session = _mkt_demo_sessions.get(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Marketplace demo session not found")
+        return _live_demo_json(session)
+
+
+@app.post("/api/demo/marketplace/{session_id}/continue")
+def continue_marketplace_demo(session_id: str) -> Dict[str, Any]:
+    """Advance the current stage checkpoint immediately in marketplace demo."""
+    if os.getenv("KALYX_PUBLIC_DEMO", "false").strip().lower() != "true":
+        raise HTTPException(status_code=404, detail="Public demo is disabled")
+    with _mkt_demo_lock:
+        session = _mkt_demo_sessions.get(session_id)
+        if not session:
+            raise HTTPException(status_code=404, detail="Marketplace demo session not found")
+        checkpoint = int(session.get("active_checkpoint", 0))
+        if checkpoint <= 0:
+            return _live_demo_json(session)
+        session["released_checkpoint"] = max(checkpoint, int(session.get("released_checkpoint", 0)) + 1)
+        session["control_message"] = "Advancing to the next commerce boundary."
         return _live_demo_json(session)
 
 

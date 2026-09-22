@@ -145,3 +145,58 @@ def test_marketplace_mode_uses_real_live_boundaries(tmp_path, monkeypatch):
     assert "Kalyx Marketplace" in snapshot["result"]["mission"]
     sources = {item["source_event"] for item in snapshot["history"]}
     assert {"PROPOSAL_SUBMITTED", "POLICY_EVALUATED", "ACTION_EXECUTED", "VERIFIED", "SETTLED", "MISSION_COMPLETED"} <= sources
+
+
+def test_six_stage_b2b_marketplace_loop_demo(tmp_path, monkeypatch):
+    monkeypatch.setenv("KALYX_DB", str(tmp_path / "mkt_loop.db"))
+    monkeypatch.setenv("KALYX_PUBLIC_DEMO", "true")
+    monkeypatch.setenv("KALYX_RATE_LIMIT_ENABLED", "false")
+    monkeypatch.setenv("KALYX_MARKETPLACE_DEMO_STAGE_DELAY", "0")
+
+    client = TestClient(server.app)
+    started = client.post("/api/demo/marketplace/start")
+    assert started.status_code == 200, started.text
+    session_id = started.json()["session_id"]
+    assert session_id.startswith("mkt-demo-")
+
+    deadline = time.time() + 15
+    snapshot = {}
+    while time.time() < deadline:
+        res = client.get(f"/api/demo/marketplace/{session_id}")
+        assert res.status_code == 200, res.text
+        snapshot = res.json()
+        if snapshot["status"] in {"completed", "failed"}:
+            break
+        time.sleep(0.05)
+
+    assert snapshot.get("status") == "completed", snapshot
+    assert snapshot.get("current_stage") == "COMPLETE"
+
+    stages = [item["source_event"] for item in snapshot.get("history", [])]
+    expected_stages = [
+        "ORDER_PROPOSED",
+        "CAPABILITY_EXPANSION",
+        "ORBIO_EXECUTION",
+        "INDEPENDENT_AUDIT",
+        "ESCROW_SETTLEMENT",
+        "MISSION_CHAINING",
+    ]
+    for expected in expected_stages:
+        assert expected in stages, f"Missing stage: {expected} in {stages}"
+
+    # Verify cryptographic and dual-ledger evidence
+    audit_item = next(i for i in snapshot["history"] if i["source_event"] == "INDEPENDENT_AUDIT")
+    assert audit_item["evidence"]["hmac_signature_verified"] is True
+    assert "VERIFIED" in audit_item["evidence"]["audit_verdict"]
+
+    settle_item = next(i for i in snapshot["history"] if i["source_event"] == "ESCROW_SETTLEMENT")
+    assert settle_item["evidence"]["client_escrow_released"] == 300
+    assert settle_item["evidence"]["conservation_verified"] is True
+
+    chain_item = next(i for i in snapshot["history"] if i["source_event"] == "MISSION_CHAINING")
+    assert chain_item["evidence"]["invariant_holds"] is True
+    assert chain_item["evidence"]["cryptographic_lineage_verified"] is True
+
+    # Test continue endpoint
+    cont_res = client.post(f"/api/demo/marketplace/{session_id}/continue")
+    assert cont_res.status_code == 200, cont_res.text
