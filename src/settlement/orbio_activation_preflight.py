@@ -1,17 +1,19 @@
 """Phase 20B — Read-only preflight for CREDIT.activate (no broadcast).
 
-Performs safe RPC views and records audit evidence. Never sends a transaction.
+All critical RPC views are hard-fail. Never sends a transaction.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Protocol
 
+from eth_abi import encode as eth_abi_encode
+from eth_hash.auto import keccak
+
 from src.domain.orbio_activation import (
     ORBIO_ACTIVATION_CHAIN_ID,
     ORBIO_CREDIT_ACTIVATION_CONTRACT,
     OrbioCreditActivationIntent,
-    encode_activate_calldata,
 )
 
 
@@ -24,39 +26,42 @@ class ReadOnlyRpc(Protocol):
     def get_balance(self, address: str) -> int: ...
 
 
-# ERC-20 balanceOf(address) selector
 _BALANCE_OF_SELECTOR = "0x70a08231"
-# previewActivation(uint256) — from official ABI name; selector derived at runtime if needed
-_PREVIEW_SELECTOR = None  # computed lazily
-_FEE_BPS_SELECTOR = None
-
-
-def _sel(sig: str) -> str:
-    from eth_hash.auto import keccak
-    return "0x" + keccak(sig.encode()).hex()[:8]
+_PREVIEW_SELECTOR = keccak(b"previewActivation(uint256)")[:4]
+_FEE_BPS_SELECTOR = keccak(b"activationFeeBps()")[:4]
 
 
 def _encode_balance_of(owner: str) -> str:
-    from eth_abi import encode
     owner_clean = owner.lower().replace("0x", "").zfill(64)
     return _BALANCE_OF_SELECTOR + owner_clean
 
 
 def _encode_preview(amount: int) -> str:
-    from eth_abi import encode
-    from eth_hash.auto import keccak
-    sel = keccak(b"previewActivation(uint256)")[:4]
-    return "0x" + (sel + encode(["uint256"], [amount])).hex()
+    return "0x" + (_PREVIEW_SELECTOR + eth_abi_encode(["uint256"], [amount])).hex()
 
 
 def _encode_fee_bps() -> str:
-    from eth_hash.auto import keccak
-    return "0x" + keccak(b"activationFeeBps()")[:4].hex()
+    return "0x" + _FEE_BPS_SELECTOR.hex()
+
+
+def _parse_hex_word(data: str, index: int = 0) -> Optional[int]:
+    """Parse the index-th 32-byte word from an eth_call hex response."""
+    if not data or data in ("0x", "0x0"):
+        return None
+    hex_body = data[2:] if data.startswith("0x") else data
+    if len(hex_body) < (index + 1) * 64:
+        return None
+    chunk = hex_body[index * 64 : (index + 1) * 64]
+    try:
+        return int(chunk, 16)
+    except ValueError:
+        return None
 
 
 @dataclass
 class ActivationPreflightResult:
     ok: bool
+    requested_amount: int = 0
     chain_id: Optional[int] = None
     contract_has_code: bool = False
     operator_credit_balance: Optional[int] = None
@@ -73,23 +78,30 @@ class ActivationPreflightResult:
     def to_audit_dict(self) -> Dict[str, Any]:
         return {
             "ok": self.ok,
-            "chain_id": self.chain_id,
-            "contract_has_code": self.contract_has_code,
-            "operator_credit_balance": self.operator_credit_balance,
+            "requested_amount": self.requested_amount,
             "preview_credited": self.preview_credited,
             "preview_fee_atoms": self.preview_fee_atoms,
             "activation_fee_bps": self.activation_fee_bps,
+            "chain_id": self.chain_id,
+            "contract_has_code": self.contract_has_code,
+            "operator_credit_balance": self.operator_credit_balance,
             "nonce": self.nonce,
             "gas_estimate": self.gas_estimate,
             "operator_eth_balance": self.operator_eth_balance,
             "calldata": self.calldata,
             "errors": list(self.errors),
             "broadcast": False,
+            # Explicit: this is a preview only; API balance is not claimed increased.
+            "api_balance_confirmed": False,
         }
 
 
 class OrbioActivationPreflight:
-    """Read-only checks before any authorization/execution of activation."""
+    """Read-only checks before any authorization/execution of activation.
+
+    Every critical view is hard-fail. previewActivation conservation:
+    credited + feeAtoms == requested amount.
+    """
 
     def __init__(self, rpc: ReadOnlyRpc, operator_address: str):
         self.rpc = rpc
@@ -97,8 +109,13 @@ class OrbioActivationPreflight:
 
     def run(self, intent: OrbioCreditActivationIntent) -> ActivationPreflightResult:
         errors: list = []
-        result = ActivationPreflightResult(ok=False, calldata=intent.encode_calldata())
+        result = ActivationPreflightResult(
+            ok=False,
+            requested_amount=intent.amount,
+            calldata=intent.encode_calldata(),
+        )
 
+        # 1. chain id
         try:
             chain_id = int(self.rpc.get_chain_id())
             result.chain_id = chain_id
@@ -113,6 +130,7 @@ class OrbioActivationPreflight:
         if contract != ORBIO_CREDIT_ACTIVATION_CONTRACT:
             errors.append(f"credit_contract not allowlisted: {contract}")
 
+        # 2. bytecode
         try:
             code = self.rpc.get_code(contract) or "0x"
             result.contract_has_code = code not in ("0x", "0x0", "")
@@ -121,47 +139,72 @@ class OrbioActivationPreflight:
         except Exception as exc:
             errors.append(f"eth_getCode failed: {exc}")
 
+        # 3. balanceOf
         try:
             bal_hex = self.rpc.eth_call(contract, _encode_balance_of(self.operator_address))
-            bal = int(bal_hex, 16) if bal_hex else 0
-            result.operator_credit_balance = bal
-            if bal < intent.amount:
-                errors.append(
-                    f"insufficient CREDIT: balance={bal}, required={intent.amount}"
-                )
+            bal = _parse_hex_word(bal_hex, 0)
+            if bal is None:
+                errors.append("balanceOf returned empty or malformed response")
+            else:
+                result.operator_credit_balance = bal
+                if bal < intent.amount:
+                    errors.append(
+                        f"insufficient CREDIT: balance={bal}, required={intent.amount}"
+                    )
         except Exception as exc:
             errors.append(f"balanceOf failed: {exc}")
 
+        # 4. previewActivation — hard fail + conservation
         try:
             preview_hex = self.rpc.eth_call(contract, _encode_preview(intent.amount))
-            if preview_hex and preview_hex != "0x":
-                # returns (uint256 credited, uint256 feeAtoms)
-                raw = bytes.fromhex(preview_hex[2:].zfill(128))
-                result.preview_credited = int.from_bytes(raw[0:32], "big")
-                result.preview_fee_atoms = int.from_bytes(raw[32:64], "big")
+            credited = _parse_hex_word(preview_hex, 0)
+            fee_atoms = _parse_hex_word(preview_hex, 1)
+            if credited is None or fee_atoms is None:
+                errors.append("previewActivation returned empty or malformed response")
+            else:
+                result.preview_credited = credited
+                result.preview_fee_atoms = fee_atoms
+                if fee_atoms > intent.amount:
+                    errors.append(
+                        f"preview feeAtoms {fee_atoms} exceeds requested amount {intent.amount}"
+                    )
+                if credited + fee_atoms != intent.amount:
+                    errors.append(
+                        f"preview conservation failed: credited({credited}) + feeAtoms({fee_atoms}) "
+                        f"!= requested({intent.amount})"
+                    )
         except Exception as exc:
-            # preview is optional if node/call fails; record but do not hard-fail alone
-            result.raw["preview_error"] = str(exc)
+            errors.append(f"previewActivation failed: {exc}")
 
+        # 5. activationFeeBps — hard fail
         try:
             fee_hex = self.rpc.eth_call(contract, _encode_fee_bps())
-            if fee_hex and fee_hex != "0x":
-                result.activation_fee_bps = int(fee_hex, 16)
+            bps = _parse_hex_word(fee_hex, 0)
+            if bps is None:
+                errors.append("activationFeeBps returned empty or malformed response")
+            else:
+                result.activation_fee_bps = bps
         except Exception as exc:
-            result.raw["fee_bps_error"] = str(exc)
+            errors.append(f"activationFeeBps failed: {exc}")
 
+        # 6. nonce
         try:
             result.nonce = self.rpc.get_transaction_count(self.operator_address, "pending")
         except Exception as exc:
             errors.append(f"nonce failed: {exc}")
 
+        # 7. native balance
         try:
-            result.operator_eth_balance = self.rpc.get_balance(self.operator_address)
-            if result.operator_eth_balance is not None and result.operator_eth_balance == 0:
+            eth_bal = self.rpc.get_balance(self.operator_address)
+            result.operator_eth_balance = eth_bal
+            if eth_bal is None:
+                errors.append("get_balance returned None")
+            elif eth_bal == 0:
                 errors.append("operator ETH balance is zero; cannot pay gas")
         except Exception as exc:
             errors.append(f"get_balance failed: {exc}")
 
+        # 8. gas estimate
         try:
             gas = self.rpc.estimate_gas(
                 {

@@ -1,6 +1,21 @@
 """Phase 20B — Independent verification of CREDIT.activate receipts.
 
-Success requires receipt status + Activated event evidence, not mere broadcast.
+Official Orbio CREDIT ABI (https://www.orbio.so/protocol/abi/credit.json):
+
+  event Activated(
+      uint256 indexed activationId,
+      address indexed from,
+      bytes32 indexed beneficiary,
+      uint256 amount              // non-indexed → log data
+  );
+
+  event ActivationFeeCharged(
+      uint256 indexed activationId,
+      uint256 feeAtoms            // non-indexed → log data
+  );
+
+Fail closed: missing receipt.to, missing expected_sender, missing/mismatched
+Activated event → REJECTED. Success is never inferred from broadcast alone.
 """
 from __future__ import annotations
 
@@ -56,6 +71,15 @@ def _topic_uint(topic: str) -> int:
     return int(topic, 16)
 
 
+def _data_uint(data: str) -> Optional[int]:
+    if not data or data in ("0x", "0x0", ""):
+        return None
+    try:
+        return int(data, 16)
+    except ValueError:
+        return None
+
+
 class OrbioCreditActivationVerifier:
     """Fail closed if Activated event is missing or mismatched."""
 
@@ -69,6 +93,14 @@ class OrbioCreditActivationVerifier:
     ) -> ActivationVerificationReport:
         reasons: List[str] = []
 
+        # expected_sender is mandatory for first production path
+        if not expected_sender:
+            return ActivationVerificationReport(
+                result=ActivationVerificationResult.REJECTED,
+                reasons=["expected_sender is required for production activation verification"],
+                tx_hash=receipt.get("transactionHash"),
+            )
+
         if chain_id != ORBIO_ACTIVATION_CHAIN_ID:
             reasons.append(f"chain_id {chain_id} != {ORBIO_ACTIVATION_CHAIN_ID}")
 
@@ -77,61 +109,98 @@ class OrbioCreditActivationVerifier:
         if not is_success:
             reasons.append(f"receipt status not success: {status}")
 
-        to_addr = (receipt.get("to") or "").lower()
-        if to_addr and to_addr != intent.credit_contract.lower():
-            reasons.append(f"tx.to {to_addr} != credit_contract {intent.credit_contract}")
+        # receipt.to is mandatory and must equal CREDIT allowlist
+        if "to" not in receipt or receipt.get("to") is None or receipt.get("to") == "":
+            reasons.append("receipt.to is missing")
+        else:
+            to_addr = str(receipt["to"]).lower()
+            if to_addr != ORBIO_CREDIT_ACTIVATION_CONTRACT:
+                reasons.append(
+                    f"receipt.to {to_addr} != allowlisted CREDIT {ORBIO_CREDIT_ACTIVATION_CONTRACT}"
+                )
+            if to_addr != intent.credit_contract.lower():
+                reasons.append(
+                    f"receipt.to {to_addr} != intent.credit_contract {intent.credit_contract}"
+                )
+
         if intent.credit_contract.lower() != ORBIO_CREDIT_ACTIVATION_CONTRACT:
             reasons.append("intent credit_contract not mainnet allowlist")
 
         logs = receipt.get("logs") or []
-        activated = None
-        fee_atoms = None
+        activated: Optional[Dict[str, Any]] = None
+        fee_atoms: Optional[int] = None
+
         for log in logs:
             topics = log.get("topics") or []
             if not topics:
                 continue
-            t0 = topics[0].lower() if isinstance(topics[0], str) else topics[0]
-            if isinstance(t0, str) and t0.lower() == ACTIVATED_EVENT_TOPIC0.lower():
-                # topics: [sig, activationId, from, beneficiary]
-                activation_id = _topic_uint(topics[1]) if len(topics) > 1 else None
-                sender = _topic_addr(topics[2]) if len(topics) > 2 else None
-                beneficiary = topics[3].lower() if len(topics) > 3 else None
-                # data is non-indexed amount
-                data = log.get("data") or "0x"
-                amount = int(data, 16) if data not in ("0x", "") else None
+            t0 = topics[0]
+            if not isinstance(t0, str):
+                continue
+            t0_l = t0.lower()
+
+            if t0_l == ACTIVATED_EVENT_TOPIC0.lower():
+                # topics: [sig, activationId, from, beneficiary]; data: amount
+                if len(topics) < 4:
+                    reasons.append("Activated event has fewer than 4 topics (malformed)")
+                    continue
                 log_addr = (log.get("address") or "").lower()
-                if log_addr and log_addr != intent.credit_contract.lower():
-                    reasons.append(f"Activated log address {log_addr} mismatch")
+                if not log_addr:
+                    reasons.append("Activated log missing address")
+                    continue
+                if log_addr != ORBIO_CREDIT_ACTIVATION_CONTRACT:
+                    reasons.append(
+                        f"Activated log address {log_addr} != allowlisted CREDIT"
+                    )
+                    continue
+                if log_addr != intent.credit_contract.lower():
+                    reasons.append(
+                        f"Activated log address {log_addr} != intent.credit_contract"
+                    )
+                    continue
+
+                amount = _data_uint(log.get("data") or "0x")
+                if amount is None:
+                    reasons.append("Activated event amount data missing or malformed")
+                    continue
+
                 activated = {
-                    "activation_id": activation_id,
-                    "from": sender,
-                    "beneficiary": beneficiary,
+                    "activation_id": _topic_uint(topics[1]),
+                    "from": _topic_addr(topics[2]),
+                    "beneficiary": topics[3].lower(),
                     "amount": amount,
                 }
-            if isinstance(t0, str) and t0.lower() == ACTIVATION_FEE_EVENT_TOPIC0.lower():
-                fee_atoms = _topic_uint(topics[1]) if len(topics) > 1 else None
-                if log.get("data") and log.get("data") not in ("0x", ""):
-                    # feeAtoms may be in data depending on layout; topic form preferred
-                    pass
+
+            elif t0_l == ACTIVATION_FEE_EVENT_TOPIC0.lower():
+                # topics: [sig, activationId]; data: feeAtoms (non-indexed)
+                fee_atoms = _data_uint(log.get("data") or "0x")
 
         if activated is None:
             reasons.append("Activated event missing from receipt logs")
             return ActivationVerificationReport(
                 result=ActivationVerificationResult.REJECTED,
                 reasons=reasons,
+                fee_atoms=fee_atoms,
                 tx_hash=receipt.get("transactionHash"),
             )
 
-        if activated["amount"] is not None and activated["amount"] != intent.amount:
+        # amount: exact match, no tolerance
+        if activated["amount"] != intent.amount:
             reasons.append(
                 f"Activated.amount {activated['amount']} != intent.amount {intent.amount}"
             )
 
-        if expected_sender and activated["from"]:
-            if activated["from"].lower() != expected_sender.lower():
-                reasons.append(
-                    f"Activated.from {activated['from']} != expected_sender {expected_sender}"
-                )
+        # sender: mandatory compare
+        if not activated.get("from"):
+            reasons.append("Activated.from missing")
+        elif activated["from"].lower() != expected_sender.lower():
+            reasons.append(
+                f"Activated.from {activated['from']} != expected_sender {expected_sender}"
+            )
+
+        # activationId must be present (uint, including 0)
+        if activated.get("activation_id") is None:
+            reasons.append("Activated.activationId missing")
 
         if reasons:
             return ActivationVerificationReport(
