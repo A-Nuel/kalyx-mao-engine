@@ -48,6 +48,8 @@ class ActionType(str, Enum):
     EXTERNAL_INFERENCE = "EXTERNAL_INFERENCE"
     # Phase 14B — governed on-chain purchase + activation of Orbio CREDIT
     ORBIO_CREDIT_PURCHASE = "ORBIO_CREDIT_PURCHASE"
+    # Phase 20B — governed activation of already-held CREDIT (no purchase)
+    ORBIO_CREDIT_ACTIVATION = "ORBIO_CREDIT_ACTIVATION"
     # Phase 15 — productive work execution and revenue collection
     EXECUTE_WORK_ORDER = "EXECUTE_WORK_ORDER"
     COLLECT_REVENUE = "COLLECT_REVENUE"
@@ -102,4 +104,3 @@ class SolvencyRegime(str, Enum):
     EXPANSION = "EXPANSION"
     AUSTERE = "AUSTERE"
     STANDBY = "STANDBY"
-
