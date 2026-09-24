@@ -24,11 +24,6 @@ if sys.platform == "win32":
 # Ensure src is importable
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass
 
 from src.domain.entities import ActionProposal, AgentRecord, Organisation
 from src.domain.enums import ActionType, AgentRole, OperationState, OrgState, PolicyResult
@@ -404,6 +399,12 @@ def run_preflight(
 
 
 def main() -> None:
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except ImportError:
+        pass
+
     parser = argparse.ArgumentParser(description="Kalyx Phase 12 Blockchain Settlement Milestone")
     parser.add_argument("--mode", type=str, choices=["testnet", "simulate"], default=None, help="Execution mode ('testnet' requires credentials; 'simulate' is dry-run)")
     parser.add_argument("--simulate", action="store_true", help="Force simulated EVM RPC mode")
