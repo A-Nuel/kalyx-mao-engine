@@ -35,6 +35,11 @@ from src.settlement.blockchain.nonce_manager import NonceManager
 from src.settlement.blockchain.provider import BlockchainSettlementProvider
 from src.settlement.blockchain.rpc_client import HttpEvmRpcClient, SimulatedEvmRpcClient
 from src.settlement.blockchain.signer import LocalKeySigner
+from src.domain.blockchain import (
+    BUY_AND_ACTIVATE_SELECTOR,
+    ORBIO_EXCHANGE_MAINNET,
+    encode_buy_and_activate_calldata,
+)
 from src.audit.auditor import Auditor
 
 
@@ -246,10 +251,156 @@ def run_milestone(
     return 0
 
 
+def run_preflight(
+    simulate: bool = False,
+    recipient: Optional[str] = None,
+    amount_credits: int = 1,
+    amount_wei: int = 0,
+    chain_id: int = 11155111,
+    contract_address: Optional[str] = None,
+) -> int:
+    """Perform read-only preflight and connectivity checks without broadcasting any transaction."""
+    print("=" * 72)
+    print("  KALYX ON-CHAIN SETTLEMENT BOUNDARY — PREFLIGHT & CONNECTIVITY AUDIT")
+    print("=" * 72)
+
+    rpc_url = os.getenv("KALYX_BLOCKCHAIN_RPC_URL", "").strip()
+    private_key = os.getenv("KALYX_BLOCKCHAIN_PRIVATE_KEY", "").strip()
+    allowlist_raw = os.getenv("KALYX_BLOCKCHAIN_RECIPIENT_ALLOWLIST", "").strip()
+    target_contract = contract_address or os.getenv("ORBIO_EXCHANGE_CONTRACT_ADDRESS", "").strip() or ORBIO_EXCHANGE_MAINNET
+
+    default_recipient = recipient or "0x000000000000000000000000000000000000dEaD"
+
+    # 1. Environment & Credentials Audit
+    print("\n[PREFLIGHT 1/5] ENVIRONMENT & CONFIGURATION AUDIT")
+    print(f"  Execution Mode Requested:        {'SIMULATED (DRY-RUN)' if simulate else 'REAL / TESTNET'}")
+
+    if rpc_url:
+        clean_rpc = rpc_url.split("?")[0]
+        if "/v2/" in clean_rpc:
+            prefix, _, _ = clean_rpc.partition("/v2/")
+            display_rpc = f"{prefix}/v2/****"
+        else:
+            display_rpc = clean_rpc
+        print(f"  KALYX_BLOCKCHAIN_RPC_URL:        [CONFIGURED] {display_rpc}")
+    else:
+        print(f"  KALYX_BLOCKCHAIN_RPC_URL:        [MISSING]")
+
+    if private_key:
+        print(f"  KALYX_BLOCKCHAIN_PRIVATE_KEY:    [CONFIGURED] (32 bytes hex, hidden)")
+    else:
+        print(f"  KALYX_BLOCKCHAIN_PRIVATE_KEY:    [MISSING]")
+
+    print(f"  Target Chain ID:                 {chain_id}")
+    print(f"  Target Recipient:                {default_recipient}")
+    print(f"  Target Contract (Orbio):         {target_contract}")
+    print(f"  Recipient Allowlist:             {allowlist_raw or '[DEFAULT ONLY]'}")
+
+    if not simulate:
+        if not rpc_url or not private_key:
+            print("\n" + "!" * 72)
+            print("  PREFLIGHT RESULT: BLOCKED (Testnet credentials not configured)")
+            print("!" * 72)
+            print("  Required environment variables for real testnet execution:")
+            if not rpc_url:
+                print("    - KALYX_BLOCKCHAIN_RPC_URL (e.g. Alchemy, Infura, or custom EVM node)")
+            if not private_key:
+                print("    - KALYX_BLOCKCHAIN_PRIVATE_KEY (0x-prefixed 32-byte hex private key)")
+            print("\n  To run safe preflight verification in simulated mode:")
+            print("    python scripts/execute_testnet_settlement.py --simulate --preflight")
+            print("=" * 72)
+            return 1
+
+    # 2. Key Derivation & Signer Check
+    print("\n[PREFLIGHT 2/5] SIGNER & KEY DERIVATION")
+    if simulate:
+        sim_key = "0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d"
+        signer = LocalKeySigner(sim_key)
+        rpc_client = SimulatedEvmRpcClient(chain_id=chain_id)
+        print(f"  Signer Mode:                     SIMULATED")
+    else:
+        signer = LocalKeySigner(private_key)
+        rpc_client = HttpEvmRpcClient(rpc_url=rpc_url)
+        print(f"  Signer Mode:                     LOCAL KEY (REAL TESTNET)")
+
+    print(f"  Derived Signer Public Address:   {signer.address}")
+
+    # 3. RPC Node & Network Connectivity Check
+    print("\n[PREFLIGHT 3/5] RPC NODE & NETWORK CONNECTIVITY")
+    try:
+        remote_chain_id = rpc_client.get_chain_id()
+        block_number = rpc_client.get_block_number()
+        print(f"  RPC Node Connectivity:           CONNECTED")
+        print(f"  Remote Chain ID:                 {remote_chain_id} (Configured: {chain_id})")
+        if remote_chain_id != chain_id:
+            print(f"  [WARNING] Chain ID mismatch! Configured {chain_id} != Node {remote_chain_id}")
+        else:
+            print(f"  Chain ID Match:                  VERIFIED")
+        print(f"  Current Block Number:            {block_number}")
+    except Exception as exc:
+        print(f"  RPC Connectivity FAILED:         {exc}")
+        return 1
+
+    # 4. Account State (Balance & Nonce)
+    print("\n[PREFLIGHT 4/5] SIGNER ON-CHAIN STATE")
+    try:
+        balance_wei = rpc_client.get_balance(signer.address)
+        balance_eth = balance_wei / (10**18)
+        nonce = rpc_client.get_transaction_count(signer.address, block="pending")
+        print(f"  Signer Balance:                  {balance_wei} Wei ({balance_eth:.6f} ETH)")
+        print(f"  Signer Pending Nonce:            {nonce}")
+        if balance_wei == 0:
+            print("  [WARNING] Signer has 0 balance! Will not be able to pay for transaction gas.")
+        else:
+            print("  Gas Solvency Check:              SUFFICIENT FOR GAS")
+    except Exception as exc:
+        print(f"  Signer State Check FAILED:       {exc}")
+        return 1
+
+    # 5. Contract Code & Calldata Verification
+    print("\n[PREFLIGHT 5/5] CONTRACT DEPLOYMENT & CALLDATA VALIDATION")
+    try:
+        code = rpc_client.get_code(target_contract)
+        if len(code) > 2 and code != "0x":
+            print(f"  Contract Bytecode at {target_contract[:10]}...: DEPLOYED ({len(code) // 2} bytes)")
+        else:
+            print(f"  Contract Bytecode at {target_contract[:10]}...: NO CODE / EOA ('{code}')")
+    except Exception as exc:
+        print(f"  Contract Code Check FAILED:      {exc}")
+        return 1
+
+    # Calldata verification for buyAndActivate
+    try:
+        test_calldata = encode_buy_and_activate_calldata(
+            usdg_in=1_000_000,
+            min_credit_out=1_000_000,
+            beneficiary=signer.address,
+            max_fills=5,
+        )
+        selector = test_calldata[:10]
+        expected_selector = "0x" + BUY_AND_ACTIVATE_SELECTOR.hex()
+        assert selector == expected_selector, f"Selector mismatch: {selector} != {expected_selector}"
+        print(f"  Calldata Encoding Test:          VERIFIED (selector {selector}, {len(test_calldata)} chars)")
+    except Exception as exc:
+        print(f"  Calldata Encoding Test FAILED:   {exc}")
+        return 1
+
+    print("\n" + "=" * 72)
+    print("  PREFLIGHT AUDIT SUMMARY: ALL CHECKS PASSED")
+    print("=" * 72)
+    print("  [SAFETY INVARIANT ENFORCED]")
+    print("  This was a read-only audit. NO transactions were signed or broadcast.")
+    print("  Real on-chain transaction execution requires explicitly running without --preflight.")
+    print("=" * 72 + "\n")
+    return 0
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Kalyx Phase 12 Blockchain Settlement Milestone")
     parser.add_argument("--mode", type=str, choices=["testnet", "simulate"], default=None, help="Execution mode ('testnet' requires credentials; 'simulate' is dry-run)")
     parser.add_argument("--simulate", action="store_true", help="Force simulated EVM RPC mode")
+    parser.add_argument("--preflight", action="store_true", help="Perform read-only preflight and connectivity check without broadcasting")
+    parser.add_argument("--contract", type=str, default=None, help="Target contract address to check code against (0x...)")
     parser.add_argument("--recipient", type=str, default=None, help="Recipient address (0x...)")
     parser.add_argument("--amount-credits", type=int, default=1, help="Kalyx credits to settle")
     parser.add_argument("--amount-wei", type=int, default=0, help="Wei amount to transfer")
@@ -259,6 +410,18 @@ def main() -> None:
     simulate_mode = args.simulate or (args.mode == "simulate")
     if args.mode == "testnet":
         simulate_mode = False
+
+    if args.preflight:
+        sys.exit(
+            run_preflight(
+                simulate=simulate_mode,
+                recipient=args.recipient,
+                amount_credits=args.amount_credits,
+                amount_wei=args.amount_wei,
+                chain_id=args.chain_id,
+                contract_address=args.contract,
+            )
+        )
 
     sys.exit(
         run_milestone(

@@ -25,6 +25,9 @@ class IEvmRpcClient(Protocol):
     def get_balance(self, address: str, block: str = "latest") -> int:
         ...
 
+    def get_code(self, address: str, block: str = "latest") -> str:
+        ...
+
     def send_raw_transaction(self, raw_tx_bytes: bytes) -> str:
         ...
 
@@ -68,6 +71,10 @@ class HttpEvmRpcClient:
         res = self._call("eth_getBalance", [Web3.to_checksum_address(address), block])
         return int(res, 16) if isinstance(res, str) else int(res)
 
+    def get_code(self, address: str, block: str = "latest") -> str:
+        res = self._call("eth_getCode", [Web3.to_checksum_address(address), block])
+        return str(res) if res is not None else "0x"
+
     def send_raw_transaction(self, raw_tx_bytes: bytes) -> str:
         hex_data = "0x" + raw_tx_bytes.hex()
         res = self._call("eth_sendRawTransaction", [hex_data])
@@ -91,6 +98,7 @@ class SimulatedEvmRpcClient:
         self.block_number = initial_block
         self._balances: Dict[str, int] = {}
         self._nonces: Dict[str, int] = {}
+        self._deployed_codes: Dict[str, str] = {}
         self._transactions: Dict[str, Dict[str, Any]] = {}
         self._receipts: Dict[str, Dict[str, Any]] = {}
 
@@ -105,6 +113,9 @@ class SimulatedEvmRpcClient:
 
     def set_balance(self, address: str, balance_wei: int) -> None:
         self._balances[address.lower()] = balance_wei
+
+    def set_code(self, address: str, code: str) -> None:
+        self._deployed_codes[address.lower()] = code
 
     def set_timeout_rule(self, tx_hash: str) -> None:
         self._timeout_hashes.add(tx_hash.lower())
@@ -138,6 +149,15 @@ class SimulatedEvmRpcClient:
 
     def get_balance(self, address: str, block: str = "latest") -> int:
         return self._balances.get(address.lower(), 10**18)  # Default 1 ETH
+
+    def get_code(self, address: str, block: str = "latest") -> str:
+        clean = address.lower()
+        if clean in self._deployed_codes:
+            return self._deployed_codes[clean]
+        if clean == "0x0000000000000000000000000000000000000000":
+            return "0x"
+        # Standard mock contract bytecode
+        return "0x608060405234801561001057600080fd5b50"
 
     def send_raw_transaction(self, raw_tx_bytes: bytes) -> str:
         # Compute tx hash deterministically via EVM Keccak-256
