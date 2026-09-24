@@ -24,6 +24,12 @@ if sys.platform == "win32":
 # Ensure src is importable
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from src.domain.entities import ActionProposal, AgentRecord, Organisation
 from src.domain.enums import ActionType, AgentRole, OperationState, OrgState, PolicyResult
 from src.economy.ledger import ESCROW, EXTERNAL_SINK, TREASURY
@@ -51,7 +57,7 @@ def run_milestone(
     chain_id: int = 11155111,
 ) -> int:
     print("=" * 72)
-    print("  KALYX ON-CHAIN SETTLEMENT BOUNDARY — MILESTONE EXECUTION")
+    print("  KALYX PHASE 19 — BLOCKCHAIN INFRASTRUCTURE SMOKE TEST")
     print("=" * 72)
 
     rpc_url = os.getenv("KALYX_BLOCKCHAIN_RPC_URL", "").strip()
@@ -88,7 +94,7 @@ def run_milestone(
         signer = LocalKeySigner(private_key)
         print(f"  Kalyx Signer Address: {signer.address}")
         rpc_client = HttpEvmRpcClient(rpc_url=rpc_url)
-        wait_seconds = 4.0
+        wait_seconds = 35.0
 
     print(f"  Target Recipient: {default_recipient}")
     print(f"  Requested Credits: {amount_credits}")
@@ -212,6 +218,8 @@ def run_milestone(
     print(f"  Receipt Status: {receipt.http_status}")
     tx_hash = receipt.raw_output.get("transaction_hash") or receipt.raw_output.get("tx_hash")
     print(f"  Transaction Hash: {tx_hash}")
+    if tx_hash and chain_id == 11155111:
+        print(f"  Sepolia Explorer: https://sepolia.etherscan.io/tx/{tx_hash}")
     print(f"  Post-execution Treasury: {ledger.get_balance(TREASURY)} credits")
     print(f"  Post-execution Escrow:   {ledger.get_balance(ESCROW)} credits")
     print(f"  Post-execution Sink:     {ledger.get_balance(EXTERNAL_SINK)} credits")

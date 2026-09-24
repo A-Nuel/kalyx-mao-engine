@@ -129,15 +129,19 @@ class BlockchainSettlementProvider(ConsequentialProviderAdapter):
         # Transaction submitted successfully
         tx_ref = broadcast_tx_hash or tx_hash
 
-        # Check receipt
-        if self.wait_for_receipt_seconds > 0:
-            time.sleep(self.wait_for_receipt_seconds)
-
+        # Check receipt with polling if wait_for_receipt_seconds is specified
         receipt = None
-        try:
-            receipt = self.rpc_client.get_transaction_receipt(tx_ref)
-        except Exception:
-            receipt = None
+        deadline = time.time() + self.wait_for_receipt_seconds
+        while True:
+            try:
+                receipt = self.rpc_client.get_transaction_receipt(tx_ref)
+                if receipt is not None:
+                    break
+            except Exception:
+                receipt = None
+            if time.time() >= deadline:
+                break
+            time.sleep(min(2.0, max(0.1, deadline - time.time())))
 
         if receipt is None:
             # Transaction is pending on-chain or confirmation not yet available: PRESERVE UNKNOWN

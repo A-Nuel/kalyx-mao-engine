@@ -38,10 +38,53 @@ class IEvmRpcClient(Protocol):
         ...
 
 
+_DNS_CACHE: Dict[str, str] = {}
+_DOH_INSTALLED = False
+
+
+def _ensure_doh_installed() -> None:
+    """Ensure socket.getaddrinfo has a DNS-over-HTTPS (DoH) fallback for restrictive firewalls."""
+    global _DOH_INSTALLED
+    if _DOH_INSTALLED:
+        return
+    import socket
+
+    orig_gai = socket.getaddrinfo
+
+    def doh_gai(host: Any, port: Any, *args: Any, **kwargs: Any) -> Any:
+        try:
+            return orig_gai(host, port, *args, **kwargs)
+        except socket.gaierror:
+            host_str = str(host)
+            if host_str in ("localhost", "127.0.0.1", "::1", "testserver") or "." not in host_str:
+                raise
+            if host_str in _DNS_CACHE:
+                return orig_gai(_DNS_CACHE[host_str], port, *args, **kwargs)
+            try:
+                with httpx.Client(timeout=4.0, verify=False) as client:
+                    r = client.get(
+                        f"https://1.1.1.1/dns-query?name={host_str}&type=A",
+                        headers={"accept": "application/dns-json"},
+                    )
+                    if r.status_code == 200:
+                        for a in r.json().get("Answer", []):
+                            if a.get("type") == 1:
+                                ip = a.get("data")
+                                _DNS_CACHE[host_str] = ip
+                                return orig_gai(ip, port, *args, **kwargs)
+            except Exception:
+                pass
+            raise
+
+    socket.getaddrinfo = doh_gai
+    _DOH_INSTALLED = True
+
+
 class HttpEvmRpcClient:
     """Standard HTTP JSON-RPC client for live EVM networks (e.g. Sepolia)."""
 
     def __init__(self, rpc_url: str, timeout: float = 15.0):
+        _ensure_doh_installed()
         self.rpc_url = rpc_url.strip()
         self.timeout = timeout
 
