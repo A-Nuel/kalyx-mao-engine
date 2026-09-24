@@ -1,16 +1,50 @@
+from enum import Enum
 import os
 from typing import List
 
 
+class RuntimeMode(str, Enum):
+    DEVELOPMENT = "development"
+    DEMO = "demo"
+    TEST = "test"
+    TESTNET = "testnet"
+    PRODUCTION = "production"
+
+
+def runtime_mode() -> RuntimeMode:
+    raw = os.getenv("KALYX_ENV", "demo").strip().lower()
+    if raw in {"production", "prod"}:
+        return RuntimeMode.PRODUCTION
+    if raw in {"testnet", "sepolia"}:
+        return RuntimeMode.TESTNET
+    if raw in {"test", "testing"}:
+        return RuntimeMode.TEST
+    if raw in {"development", "dev", "local"}:
+        return RuntimeMode.DEVELOPMENT
+    return RuntimeMode.DEMO
+
+
 def environment() -> str:
-    return os.getenv("KALYX_ENV", "demo").strip().lower()
+    return runtime_mode().value
+
+
+def is_production() -> bool:
+    return runtime_mode() == RuntimeMode.PRODUCTION
+
+
+def is_testnet() -> bool:
+    return runtime_mode() == RuntimeMode.TESTNET
+
+
+def is_live_execution() -> bool:
+    return runtime_mode() in {RuntimeMode.PRODUCTION, RuntimeMode.TESTNET}
 
 
 def cors_origins() -> List[str]:
     configured = os.getenv("KALYX_CORS_ORIGINS", "").strip()
     if configured:
         return [origin.strip() for origin in configured.split(",") if origin.strip()]
-    if environment() in {"production", "prod"}:
+    if is_production():
         return []
     return ["*"]
 
@@ -20,10 +54,12 @@ def operator_key() -> str:
 
 
 def require_operator_auth() -> bool:
-    return environment() in {"production", "prod"} or bool(operator_key())
+    return is_production() or is_testnet() or bool(operator_key())
 
 
 def blockchain_enabled() -> bool:
+    if is_testnet():
+        return True
     return os.getenv("KALYX_BLOCKCHAIN_ENABLED", "false").strip().lower() in {"1", "true", "yes", "on"}
 
 

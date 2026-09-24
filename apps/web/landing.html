@@ -8,6 +8,22 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/landing.css">
+<script>
+(function() {
+  try {
+    const saved = localStorage.getItem('kalyx_theme') || 'system';
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const resolved = saved === 'system' ? (prefersDark ? 'dark' : 'light') : saved;
+    document.documentElement.setAttribute('data-theme', resolved);
+    document.documentElement.setAttribute('data-theme-preference', saved);
+    if (resolved === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  } catch (e) {}
+})();
+</script>
 </head>
 <body>
 <div class="noise" aria-hidden="true"></div><div class="cursor-glow" aria-hidden="true"></div>

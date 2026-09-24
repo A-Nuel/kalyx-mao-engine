@@ -11,5 +11,7 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
-def disable_rate_limit_by_default(monkeypatch):
+def test_environment_defaults(monkeypatch):
     monkeypatch.setenv("KALYX_RATE_LIMIT_ENABLED", "false")
+    monkeypatch.setenv("KALYX_RECEIPT_SECRET_KEY", "test-receipt-secret-key-32-chars")
+    monkeypatch.setenv("KALYX_RUNTIME_MODE", "TEST")

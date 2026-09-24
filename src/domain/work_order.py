@@ -58,8 +58,13 @@ class WorkDeliverable:
         deliverable_id: Optional[str] = None,
     ) -> "WorkDeliverable":
         d_id = deliverable_id or f"deliv-{uuid.uuid4()}"
+        telemetry = dict(execution_telemetry or {})
+        # Cryptographic and operational invariant: simulated execution must never claim LIVE provenance
+        if telemetry.get("is_simulated") is True:
+            prov = str(telemetry.get("provenance", "")).upper()
+            if prov in {"LIVE", "LIVE_ORBIO"}:
+                raise ValueError("Provenance conflict: Simulated execution cannot be tagged as LIVE or LIVE_ORBIO.")
         c_hash = canonical_json_hash(content_payload)
-        telemetry = execution_telemetry or {}
         return cls(
             deliverable_id=d_id,
             work_order_id=work_order_id,

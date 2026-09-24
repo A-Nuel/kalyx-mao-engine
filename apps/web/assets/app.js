@@ -1717,6 +1717,98 @@ const App = (() => {
     await refreshCurrentView();
   }
 
+  // ==================== THEME SYSTEM (DARK / LIGHT / SYSTEM) ====================
+  let currentThemePreference = 'system';
+
+  function getThemePreference() {
+    try {
+      return localStorage.getItem('kalyx_theme') || 'system';
+    } catch {
+      return 'system';
+    }
+  }
+
+  function resolveEffectiveTheme(pref) {
+    if (pref === 'dark' || pref === 'light') return pref;
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+
+  function applyTheme(pref) {
+    currentThemePreference = ['dark', 'light', 'system'].includes(pref) ? pref : 'system';
+    const effective = resolveEffectiveTheme(currentThemePreference);
+
+    document.documentElement.setAttribute('data-theme', effective);
+    document.documentElement.setAttribute('data-theme-preference', currentThemePreference);
+    if (effective === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    updateThemeUI();
+  }
+
+  function setTheme(pref) {
+    if (!['dark', 'light', 'system'].includes(pref)) return;
+    try {
+      localStorage.setItem('kalyx_theme', pref);
+    } catch (e) {
+      console.warn('Could not persist theme to localStorage', e);
+    }
+    applyTheme(pref);
+  }
+
+  function cycleTheme() {
+    const pref = getThemePreference();
+    const cycle = { system: 'dark', dark: 'light', light: 'system' };
+    const next = cycle[pref] || 'dark';
+    setTheme(next);
+  }
+
+  function updateThemeUI() {
+    const pref = getThemePreference();
+    const effective = resolveEffectiveTheme(pref);
+
+    // Update settings segmented switcher active state
+    document.querySelectorAll('.kc-theme-choice[data-theme-choice]').forEach(btn => {
+      const choice = btn.getAttribute('data-theme-choice');
+      btn.classList.toggle('active', choice === pref);
+    });
+
+    // Update settings badge
+    const badge = $('activeThemeBadge');
+    if (badge) {
+      badge.textContent = pref.toUpperCase();
+    }
+
+    // Update topbar button
+    const toggleLabel = $('themeToggleLabel');
+    const toggleIcon = $('themeToggleIcon');
+    if (toggleLabel) {
+      if (pref === 'system') toggleLabel.textContent = 'AUTO';
+      else if (pref === 'dark') toggleLabel.textContent = 'DARK';
+      else toggleLabel.textContent = 'LIGHT';
+    }
+    if (toggleIcon) {
+      if (pref === 'system') toggleIcon.textContent = 'contrast';
+      else if (pref === 'dark') toggleIcon.textContent = 'dark_mode';
+      else toggleIcon.textContent = 'light_mode';
+    }
+  }
+
+  function initTheme() {
+    const pref = getThemePreference();
+    applyTheme(pref);
+
+    if (window.matchMedia) {
+      const mql = window.matchMedia('(prefers-color-scheme: dark)');
+      mql.addEventListener('change', () => {
+        if (getThemePreference() === 'system') {
+          applyTheme('system');
+        }
+      });
+    }
+  }
+
   // Initialize application
   async function init() {
     // Defensive cleanup: the tour is the only component allowed to lock
@@ -1724,6 +1816,8 @@ const App = (() => {
     // previous overlay state can never make the command centre start frozen.
     document.documentElement.classList.remove('overflow-hidden');
     document.body.classList.remove('overflow-hidden');
+
+    initTheme();
 
     // 1. Health check
     try {
@@ -1960,6 +2054,10 @@ return {
     refreshMarketplaceView: refreshMarketplace,
     runB2BMarketplaceLoop,
     renderJudgeControls,
+    setTheme,
+    cycleTheme,
+    initTheme,
+    getThemePreference,
   };
 })();
 

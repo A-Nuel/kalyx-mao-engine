@@ -18,12 +18,7 @@ DEMO_POLICY_SECRETS = {
 }
 
 
-def environment() -> str:
-    return os.getenv("KALYX_ENV", "demo").strip().lower()
-
-
-def is_production() -> bool:
-    return environment() in {"production", "prod"}
+from src.api.config import is_production, is_testnet, environment, runtime_mode
 
 
 def policy_secret() -> str:
@@ -72,8 +67,29 @@ def validate_production_config() -> None:
         raise RuntimeError("Production configuration invalid: " + "; ".join(errors))
 
 
+def validate_testnet_config() -> None:
+    """Raise RuntimeError if testnet mode is configured without required blockchain RPC or signer."""
+    if not is_testnet():
+        return
+
+    errors: List[str] = []
+    from src.api.config import blockchain_rpc_url, blockchain_private_key
+    rpc = blockchain_rpc_url()
+    if not rpc or not (rpc.startswith("http://") or rpc.startswith("https://")):
+        errors.append("KALYX_BLOCKCHAIN_RPC_URL must be a valid HTTP/HTTPS URL in testnet mode")
+
+    key = blockchain_private_key()
+    if not key:
+        errors.append("KALYX_BLOCKCHAIN_PRIVATE_KEY is required for signing transactions in testnet mode")
+
+    if errors:
+        raise RuntimeError("Testnet configuration invalid: " + "; ".join(errors))
+
+
 def ensure_started() -> None:
     """Call once at application import/startup."""
     validate_production_config()
+    validate_testnet_config()
     from src.api.config import validate_blockchain_config
     validate_blockchain_config()
+

@@ -56,27 +56,34 @@ def run_milestone(
     default_recipient = recipient or "0x000000000000000000000000000000000000dEaD"
 
     # Decide execution mode
-    is_live = not simulate and bool(rpc_url) and bool(private_key)
-
-    if is_live:
-        print("[MODE] LIVE ETHEREUM SEPOLIA EXECUTION")
-        print(f"  RPC Endpoint: {rpc_url.split('?')[0]}")
-        print(f"  Target Chain ID: {chain_id}")
-        signer = LocalKeySigner(private_key)
-        print(f"  Kalyx Signer Address: {signer.address}")
-        rpc_client = HttpEvmRpcClient(rpc_url=rpc_url, chain_id=chain_id)
-        wait_seconds = 4.0
-    else:
+    if simulate:
         print("[MODE] SIMULATED EVM EXECUTION (Verification & Dry-Run Mode)")
-        if not simulate and (not rpc_url or not private_key):
-            print("  (Note: KALYX_BLOCKCHAIN_RPC_URL or KALYX_BLOCKCHAIN_PRIVATE_KEY not provided;")
-            print("   defaulting safely to SimulatedEvmRpcClient.)")
-        # Deterministic dummy key for simulation
         sim_key = "0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d"
         signer = LocalKeySigner(sim_key)
         print(f"  Simulated Signer Address: {signer.address}")
         rpc_client = SimulatedEvmRpcClient(chain_id=chain_id)
         wait_seconds = 0.0
+    else:
+        # TESTNET / LIVE mode requires valid RPC and private key (no silent fallback)
+        if not rpc_url or not private_key:
+            print("[ERROR] Testnet execution requested, but required credentials are not configured.")
+            print("  Missing required environment variables:")
+            if not rpc_url:
+                print("    - KALYX_BLOCKCHAIN_RPC_URL (e.g., https://eth-sepolia.g.alchemy.com/v2/YOUR_API_KEY)")
+            if not private_key:
+                print("    - KALYX_BLOCKCHAIN_PRIVATE_KEY (0x-prefixed 32-byte hex private key)")
+            print("\n  To run in safe local simulated dry-run mode, pass:")
+            print("    python scripts/execute_testnet_settlement.py --simulate")
+            print("=" * 72)
+            return 1
+
+        print("[MODE] LIVE ETHEREUM SEPOLIA TESTNET EXECUTION")
+        print(f"  RPC Endpoint: {rpc_url.split('?')[0]}")
+        print(f"  Target Chain ID: {chain_id}")
+        signer = LocalKeySigner(private_key)
+        print(f"  Kalyx Signer Address: {signer.address}")
+        rpc_client = HttpEvmRpcClient(rpc_url=rpc_url)
+        wait_seconds = 4.0
 
     print(f"  Target Recipient: {default_recipient}")
     print(f"  Requested Credits: {amount_credits}")
@@ -241,6 +248,7 @@ def run_milestone(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Kalyx Phase 12 Blockchain Settlement Milestone")
+    parser.add_argument("--mode", type=str, choices=["testnet", "simulate"], default=None, help="Execution mode ('testnet' requires credentials; 'simulate' is dry-run)")
     parser.add_argument("--simulate", action="store_true", help="Force simulated EVM RPC mode")
     parser.add_argument("--recipient", type=str, default=None, help="Recipient address (0x...)")
     parser.add_argument("--amount-credits", type=int, default=1, help="Kalyx credits to settle")
@@ -248,9 +256,13 @@ def main() -> None:
     parser.add_argument("--chain-id", type=int, default=11155111, help="EVM Chain ID (default Sepolia: 11155111)")
     args = parser.parse_args()
 
+    simulate_mode = args.simulate or (args.mode == "simulate")
+    if args.mode == "testnet":
+        simulate_mode = False
+
     sys.exit(
         run_milestone(
-            simulate=args.simulate,
+            simulate=simulate_mode,
             recipient=args.recipient,
             amount_credits=args.amount_credits,
             amount_wei=args.amount_wei,

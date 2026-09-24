@@ -24,7 +24,8 @@ class OpenRouterAgentAdapter(IAgentAdapter):
         base_url: str = "https://openrouter.ai/api/v1",
         fallback_adapter: Optional[IAgentAdapter] = None,
         fallback_on_error: bool = False,
-        mock_transport: Optional[Callable[[str, dict], dict]] = None
+        mock_transport: Optional[Callable[[str, dict], dict]] = None,
+        allow_mock_fallback: bool = False,
     ):
         self.api_key = api_key or os.getenv("OPENROUTER_API_KEY")
         self.model = model
@@ -32,6 +33,7 @@ class OpenRouterAgentAdapter(IAgentAdapter):
         self.fallback_adapter = fallback_adapter
         self.fallback_on_error = fallback_on_error
         self.mock_transport = mock_transport
+        self.allow_mock_fallback = allow_mock_fallback
 
     def _clean_json_content(self, text: str) -> str:
         """Strip markdown code fence blocks if present."""
@@ -47,7 +49,12 @@ class OpenRouterAgentAdapter(IAgentAdapter):
         schema: Type[T],
         system_prompt: Optional[str] = None
     ) -> T:
+        is_live_env = os.getenv("KALYX_ENV", "demo").strip().lower() in {"production", "prod", "testnet", "sepolia"}
         if not self.api_key and not self.mock_transport:
+            if is_live_env and not self.allow_mock_fallback:
+                raise RuntimeError(
+                    "OPENROUTER_API_KEY is required in PRODUCTION/TESTNET mode; silent fallback to mock is forbidden."
+                )
             if self.fallback_adapter:
                 return self.fallback_adapter.generate_structured(prompt, schema, system_prompt)
             raise ValueError(
@@ -94,9 +101,11 @@ class OpenRouterAgentAdapter(IAgentAdapter):
 
         except (ValidationError, json.JSONDecodeError, KeyError) as e:
             if self.fallback_adapter and self.fallback_on_error:
-                return self.fallback_adapter.generate_structured(prompt, schema, system_prompt)
+                if not (is_live_env and not self.allow_mock_fallback):
+                    return self.fallback_adapter.generate_structured(prompt, schema, system_prompt)
             raise LLMOutputValidationError(f"Malformed or schema-invalid LLM response: {str(e)}") from e
         except Exception as e:
             if self.fallback_adapter and self.fallback_on_error:
-                return self.fallback_adapter.generate_structured(prompt, schema, system_prompt)
+                if not (is_live_env and not self.allow_mock_fallback):
+                    return self.fallback_adapter.generate_structured(prompt, schema, system_prompt)
             raise LLMOutputValidationError(f"Upstream LLM execution failed: {str(e)}") from e

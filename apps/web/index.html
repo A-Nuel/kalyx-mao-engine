@@ -14,6 +14,22 @@
 tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans-serif'],mono:['JetBrains Mono','monospace']}}}};
 </script>
 <link rel="stylesheet" href="/assets/app.css?v=20260921-2">
+<script>
+(function() {
+  try {
+    const saved = localStorage.getItem('kalyx_theme') || 'system';
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const resolved = saved === 'system' ? (prefersDark ? 'dark' : 'light') : saved;
+    document.documentElement.setAttribute('data-theme', resolved);
+    document.documentElement.setAttribute('data-theme-preference', saved);
+    if (resolved === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  } catch (e) {}
+})();
+</script>
 </head>
 <body class="kalyx-shell">
   <div class="kalyx-noise" aria-hidden="true"></div>
@@ -35,6 +51,10 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans
     <div class="kalyx-top-actions">
       <button id="btnTour" type="button" class="kalyx-quiet-btn" onclick="App.startTour()">? Guide</button>
       <button id="btnLoopGuide" type="button" class="kalyx-quiet-btn kalyx-quiet-accent" onclick="App.startLoopGuide()">Follow the loop</button>
+      <button id="btnThemeToggle" type="button" class="kalyx-quiet-btn" onclick="App.cycleTheme()" title="Toggle theme (Light / Dark / System)" aria-label="Toggle theme">
+        <span id="themeToggleIcon" class="material-symbols-outlined" style="font-size:14px;vertical-align:middle;">contrast</span>
+        <span id="themeToggleLabel">AUTO</span>
+      </button>
       <button id="circuitBreakerBtn" type="button" class="kalyx-status-btn" onclick="App.toggleCircuitBreaker()">
         <span class="kalyx-live-dot"></span><span id="circuitBreakerLabel">PAUSE</span>
       </button>
@@ -304,7 +324,7 @@ tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans
       </section>
 
       <section id="view-settings" class="view-panel hidden">
-<div class="kc-page"><div class="kc-hero"><div><span class="kc-kicker">11 / SYSTEM</span><h1>System Configuration</h1><p>Runtime boundaries and environment facts. Settings describe the control plane; consequential behavior remains governed by policy.</p></div><span class="kc-chip">READ-ONLY CORE</span></div><div class="kc-grid-3"><article class="kc-metric"><span>RUNTIME VERSION</span><strong id="settingVersion">—</strong><small>Engine release</small></article><article class="kc-metric"><span>POLICY FINGERPRINT</span><strong id="settingPolicyHash">—</strong><small>Active policy engine hash</small></article><article class="kc-metric"><span>ENVIRONMENT</span><strong>PRODUCTION</strong><small>External execution is explicitly simulated where noted</small></article></div><div class="kc-grid-2"><section class="kc-panel"><div class="kc-panel-head"><div><span class="kc-kicker">SYSTEM BOUNDARIES</span><h3>Operating posture</h3></div></div><div class="kc-rule-list"><div><span>EXECUTION</span><b>GOVERNED</b></div><div><span>AGENT AUTHORITY</span><b>BOUNDED BY POLICY</b></div><div><span>EXTERNAL ORBIO</span><b>SIMULATED WHERE MARKED</b></div><div><span>UNKNOWN OUTCOME</span><b>RECONCILE — NEVER BLIND RETRY</b></div><div><span>AUDIT</span><b>INDEPENDENT EVIDENCE</b></div></div></section><section class="kc-panel"><div class="kc-panel-head"><div><span class="kc-kicker">SYSTEM HEALTH</span><h3>Control-plane checks</h3></div></div><div class="kc-system-checks"><div><span class="kc-live"></span><b>ENGINE</b><small>Health endpoint</small></div><div><span class="kc-live"></span><b>DATABASE</b><small>Live state queried</small></div><div><span class="kc-live"></span><b>POLICY ENGINE</b><small>Authorization fingerprint available</small></div><div><span class="kc-live warning"></span><b>EXTERNAL ECONOMY</b><small>Simulation / explicit boundary</small></div></div></section></div><div class="kc-danger-zone"><div><span class="kc-kicker">EMERGENCY CONTROL</span><h3>Circuit breaker</h3><p>For emergency use, the global PAUSE control in the Command Centre top bar freezes autonomous execution.</p></div><button class="kc-btn kc-btn-danger" onclick="App.toggleCircuitBreaker()">Pause autonomous execution</button></div></div>
+<div class="kc-page"><div class="kc-hero"><div><span class="kc-kicker">11 / SYSTEM</span><h1>System Configuration</h1><p>Runtime boundaries and environment facts. Settings describe the control plane; consequential behavior remains governed by policy.</p></div><span class="kc-chip">READ-ONLY CORE</span></div><div class="kc-grid-3"><article class="kc-metric"><span>RUNTIME VERSION</span><strong id="settingVersion">—</strong><small>Engine release</small></article><article class="kc-metric"><span>POLICY FINGERPRINT</span><strong id="settingPolicyHash">—</strong><small>Active policy engine hash</small></article><article class="kc-metric"><span>ENVIRONMENT</span><strong>PRODUCTION</strong><small>External execution is explicitly simulated where noted</small></article></div><section class="kc-panel" style="margin-bottom: 24px;"><div class="kc-panel-head"><div><span class="kc-kicker">APPEARANCE & THEME</span><h3>Interface theme mode</h3></div><span id="activeThemeBadge" class="kc-chip">SYSTEM</span></div><div style="padding: 20px;"><p style="font-size: 13px; color: var(--kc-muted); margin-top: 0; margin-bottom: 16px;">Select your preferred appearance. System sync dynamically tracks your operating system light and dark schedule in real time.</p><div class="kc-theme-switcher" role="radiogroup" aria-label="Theme mode"><button type="button" class="kc-theme-choice" data-theme-choice="dark" onclick="App.setTheme('dark')"><span class="material-symbols-outlined" style="font-size:18px;">dark_mode</span><span>Dark (Obsidian)</span></button><button type="button" class="kc-theme-choice" data-theme-choice="light" onclick="App.setTheme('light')"><span class="material-symbols-outlined" style="font-size:18px;">light_mode</span><span>Light (Clean)</span></button><button type="button" class="kc-theme-choice" data-theme-choice="system" onclick="App.setTheme('system')"><span class="material-symbols-outlined" style="font-size:18px;">brightness_auto</span><span>System (Dynamic)</span></button></div></div></section><div class="kc-grid-2"><section class="kc-panel"><div class="kc-panel-head"><div><span class="kc-kicker">SYSTEM BOUNDARIES</span><h3>Operating posture</h3></div></div><div class="kc-rule-list"><div><span>EXECUTION</span><b>GOVERNED</b></div><div><span>AGENT AUTHORITY</span><b>BOUNDED BY POLICY</b></div><div><span>EXTERNAL ORBIO</span><b>SIMULATED WHERE MARKED</b></div><div><span>UNKNOWN OUTCOME</span><b>RECONCILE — NEVER BLIND RETRY</b></div><div><span>AUDIT</span><b>INDEPENDENT EVIDENCE</b></div></div></section><section class="kc-panel"><div class="kc-panel-head"><div><span class="kc-kicker">SYSTEM HEALTH</span><h3>Control-plane checks</h3></div></div><div class="kc-system-checks"><div><span class="kc-live"></span><b>ENGINE</b><small>Health endpoint</small></div><div><span class="kc-live"></span><b>DATABASE</b><small>Live state queried</small></div><div><span class="kc-live"></span><b>POLICY ENGINE</b><small>Authorization fingerprint available</small></div><div><span class="kc-live warning"></span><b>EXTERNAL ECONOMY</b><small>Simulation / explicit boundary</small></div></div></section></div><div class="kc-danger-zone"><div><span class="kc-kicker">EMERGENCY CONTROL</span><h3>Circuit breaker</h3><p>For emergency use, the global PAUSE control in the Command Centre top bar freezes autonomous execution.</p></div><button class="kc-btn kc-btn-danger" onclick="App.toggleCircuitBreaker()">Pause autonomous execution</button></div></div>
       </section>
 
       <section id="view-marketplace" class="view-panel hidden space-y-6">
