@@ -13,7 +13,19 @@ from src.persistence.database import Database
 from src.persistence.repositories import SqliteRepository
 
 
+def _seed_tenants(db):
+    db.conn.executemany(
+        "INSERT OR IGNORE INTO tenants (id, name, status, created_at) VALUES (?, ?, ?, datetime('now'))",
+        [
+            ("tenant-a", "Tenant A", "active"),
+            ("tenant-b", "Tenant B", "active"),
+        ],
+    )
+    db.conn.commit()
+
+
 def _seed_orgs(db):
+    _seed_tenants(db)
     repo = SqliteRepository(db)
     repo.save_organisation(Organisation(id="org-a", tenant_id="tenant-a", mission="A"))
     repo.save_organisation(Organisation(id="org-b", tenant_id="tenant-b", mission="B"))
@@ -43,6 +55,7 @@ def test_org_lookup_is_tenant_scoped_when_trusted_context_exists():
 def test_org_lookup_is_organisation_scoped_within_tenant():
     db = Database(":memory:")
     try:
+        _seed_tenants(db)
         repo = SqliteRepository(db)
         repo.save_organisation(Organisation(id="org-a", tenant_id="tenant-a", mission="A"))
         repo.save_organisation(Organisation(id="org-c", tenant_id="tenant-a", mission="C"))
