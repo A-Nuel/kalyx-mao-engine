@@ -17,6 +17,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from src.api.bootstrap import ensure_started, is_production, policy_secret
 from src.api.config import cors_origins, operator_key, require_operator_auth
 from src.api.identity_auth import require_identity_for_org, require_identity_for_tenant, require_write_permission
+from src.identity.execution_context import ExecutionContext
 from src.api.mission_service import run_mission
 from src.api.security_middleware import CorrelationIdMiddleware, RateLimitMiddleware, RequestBodyLimitMiddleware
 from src.persistence.factory import create_database, create_scoped_ledger
@@ -524,6 +525,16 @@ class IdentityAuthorizationMiddleware(BaseHTTPMiddleware):
                 elif len(parts) >= org_idx + 2:
                     target_org_id = parts[org_idx + 1]
                     context = require_identity_for_org(db, target_org_id, principal, tenant, authorization=auth_header, x_api_key=api_key)
+
+                # Publish one canonical trusted execution context for downstream handlers.
+                # The context is derived only after identity/membership authorization succeeds.
+                if context is not None:
+                    request.state.identity_context = context
+                    request.state.execution_context = ExecutionContext.from_identity(
+                        context,
+                        organisation_id=(target_org_id if len(parts) >= org_idx + 2 else None),
+                        request_id=getattr(request.state, "request_id", None),
+                    )
 
                 # Check write permissions on mutation actions (pause, resume, reconcile, work orders, daemon step)
                 if request.method in {"POST", "PUT", "DELETE", "PATCH"}:
