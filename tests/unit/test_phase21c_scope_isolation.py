@@ -1,7 +1,7 @@
 import pytest
 
 from src.api.server import _org_id_or_404
-from src.domain.organisation import Organisation
+from src.domain.entities import Organisation
 from src.identity.context import IdentityContext
 from src.identity.execution_context import (
     ExecutionContext,
