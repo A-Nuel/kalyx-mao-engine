@@ -39,7 +39,11 @@ from src.execution.orbio_activation import OrbioCreditActivationBridge
 from src.governance.orbio_activation_rules import OrbioCreditActivationPolicy
 from src.settlement.blockchain.provider import BlockchainSettlementProvider
 from src.settlement.blockchain.rpc_client import HttpEvmRpcClient
-from src.settlement.blockchain.signer import LocalKeySigner
+from src.settlement.blockchain.signer import (
+    ExternalTransactionSigner,
+    IBlockchainSigner,
+    LocalKeySigner,
+)
 from src.settlement.orbio_activation_preflight import OrbioActivationPreflight
 from src.settlement.orbio_activation_runtime import OrbioMainnetActivationRuntime
 from src.settlement.orbio_activation_verifier import (
@@ -58,10 +62,15 @@ class ActivationDriverError(SystemExit):
 
 @dataclass(frozen=True)
 class DriverConfig:
-    private_key: str
+    signer_mode: str
     rpc_url: str
     confirm: bool
     dry_run: bool
+    private_key: Optional[str] = None
+    operator_address: str = EXPECTED_OPERATOR
+    signed_raw_tx_hex: Optional[str] = None
+    export_unsigned: bool = False
+    reconcile_tx_hash: Optional[str] = None
 
 
 def _redact_key(_key: str) -> str:
@@ -69,36 +78,84 @@ def _redact_key(_key: str) -> str:
 
 
 def load_config(args: argparse.Namespace) -> DriverConfig:
-    pk = os.getenv("KALYX_BLOCKCHAIN_PRIVATE_KEY", "").strip()
+    pk = os.getenv("KALYX_BLOCKCHAIN_PRIVATE_KEY", "").strip() or None
     rpc = os.getenv("KALYX_BLOCKCHAIN_RPC_URL", "").strip()
-    if not pk:
-        raise ActivationDriverError(
-            "FAIL CLOSED: KALYX_BLOCKCHAIN_PRIVATE_KEY is not set"
-        )
     if not rpc:
         raise ActivationDriverError(
             "FAIL CLOSED: KALYX_BLOCKCHAIN_RPC_URL is not set"
         )
-    if not args.confirm_mainnet_activation:
+    if not getattr(args, "confirm_mainnet_activation", False):
         raise ActivationDriverError(
             "FAIL CLOSED: missing required flag --confirm-mainnet-activation"
         )
+
+    signer_mode = getattr(args, "signer_mode", None)
+    if signer_mode is None:
+        if pk:
+            signer_mode = "local"
+        elif getattr(args, "reconcile_tx", None) or getattr(args, "export_unsigned_tx", False) or getattr(args, "signed_tx_hex", None):
+            signer_mode = "external"
+        else:
+            raise ActivationDriverError(
+                "FAIL CLOSED: KALYX_BLOCKCHAIN_PRIVATE_KEY is not set (pass --signer-mode external for non-exportable wallet)"
+            )
+
+    if signer_mode == "local" and not pk:
+        raise ActivationDriverError(
+            "FAIL CLOSED: KALYX_BLOCKCHAIN_PRIVATE_KEY is not set"
+        )
+
+    operator_addr = getattr(args, "operator_address", None) or os.getenv(
+        "KALYX_BLOCKCHAIN_OPERATOR_ADDRESS", EXPECTED_OPERATOR
+    )
+    if operator_addr.lower() != EXPECTED_OPERATOR.lower():
+        raise ActivationDriverError(
+            f"FAIL CLOSED: operator address {operator_addr} != required operator "
+            f"{EXPECTED_OPERATOR}"
+        )
+
     return DriverConfig(
-        private_key=pk,
+        signer_mode=signer_mode,
         rpc_url=rpc,
         confirm=True,
-        dry_run=bool(args.dry_run),
+        dry_run=bool(getattr(args, "dry_run", False)),
+        private_key=pk,
+        operator_address=operator_addr,
+        signed_raw_tx_hex=getattr(args, "signed_tx_hex", None),
+        export_unsigned=bool(getattr(args, "export_unsigned_tx", False)),
+        reconcile_tx_hash=getattr(args, "reconcile_tx", None),
     )
 
 
-def build_signer(private_key: str) -> LocalKeySigner:
-    signer = LocalKeySigner(private_key)
-    if signer.address.lower() != EXPECTED_OPERATOR.lower():
-        raise ActivationDriverError(
-            f"FAIL CLOSED: signer address {signer.address} != required operator "
-            f"{EXPECTED_OPERATOR}"
+def build_signer(cfg_or_pk: Any) -> IBlockchainSigner:
+    if isinstance(cfg_or_pk, str):
+        signer = LocalKeySigner(cfg_or_pk)
+        if signer.address.lower() != EXPECTED_OPERATOR.lower():
+            raise ActivationDriverError(
+                f"FAIL CLOSED: signer address {signer.address} != required operator "
+                f"{EXPECTED_OPERATOR}"
+            )
+        return signer
+
+    cfg: DriverConfig = cfg_or_pk
+    if cfg.signer_mode == "local":
+        if not cfg.private_key:
+            raise ActivationDriverError(
+                "FAIL CLOSED: KALYX_BLOCKCHAIN_PRIVATE_KEY is not set"
+            )
+        signer = LocalKeySigner(cfg.private_key)
+        if signer.address.lower() != EXPECTED_OPERATOR.lower():
+            raise ActivationDriverError(
+                f"FAIL CLOSED: signer address {signer.address} != required operator "
+                f"{EXPECTED_OPERATOR}"
+            )
+        return signer
+    elif cfg.signer_mode == "external":
+        return ExternalTransactionSigner(
+            cfg.operator_address, signed_raw_tx_hex=cfg.signed_raw_tx_hex
         )
-    return signer
+    else:
+        raise ActivationDriverError(f"FAIL CLOSED: unknown signer_mode {cfg.signer_mode}")
 
 
 def build_intent(
@@ -302,6 +359,79 @@ def execute_via_provider(
     return out
 
 
+def reconcile_via_tx_hash(
+    *,
+    rpc: HttpEvmRpcClient,
+    tx_hash: str,
+    intent: OrbioCreditActivationIntent,
+    operator_address: str,
+) -> Dict[str, Any]:
+    """Reconciles an already-broadcasted transaction hash against the authorized intent."""
+    clean_tx_hash = tx_hash.strip().lower()
+    tx = rpc.get_transaction_by_hash(clean_tx_hash)
+    if not tx:
+        raise ActivationDriverError(
+            f"FAIL CLOSED: transaction {clean_tx_hash} not found on Robinhood Chain mainnet"
+        )
+
+    tx_from = str(tx.get("from", "")).lower()
+    tx_to = str(tx.get("to", "")).lower()
+    tx_input = str(tx.get("input", "")).lower()
+
+    if tx_from != operator_address.lower():
+        raise ActivationDriverError(
+            f"FAIL CLOSED: transaction sender {tx_from} != required operator {operator_address}"
+        )
+    if tx_to != ORBIO_CREDIT_ACTIVATION_CONTRACT.lower():
+        raise ActivationDriverError(
+            f"FAIL CLOSED: transaction recipient {tx_to} != required contract {ORBIO_CREDIT_ACTIVATION_CONTRACT}"
+        )
+    if tx_input != EXPECTED_CALLDATA.lower():
+        raise ActivationDriverError(
+            f"FAIL CLOSED: transaction calldata mismatch:\n  got: {tx_input}\n  exp: {EXPECTED_CALLDATA}"
+        )
+
+    receipt = rpc.get_transaction_receipt(clean_tx_hash)
+    if not receipt:
+        return {
+            "outcome": "UNKNOWN",
+            "provider_reference": clean_tx_hash,
+            "state": "UNKNOWN_PENDING",
+            "note": "Transaction found on-chain but receipt pending confirmation",
+            "api_balance_confirmed": False,
+        }
+
+    status_val = receipt.get("status")
+    is_success = status_val in (1, "0x1", "1")
+    if not is_success:
+        return {
+            "outcome": "FAILURE",
+            "provider_reference": clean_tx_hash,
+            "state": "FAILED",
+            "error_message": "Transaction reverted on-chain",
+            "api_balance_confirmed": False,
+        }
+
+    report = OrbioCreditActivationVerifier().verify(
+        intent,
+        chain_id=ORBIO_ACTIVATION_CHAIN_ID,
+        receipt=receipt,
+        expected_sender=operator_address,
+    )
+    return {
+        "outcome": "SUCCESS",
+        "provider_reference": clean_tx_hash,
+        "state": (
+            "VERIFIED_ON_CHAIN"
+            if report.result == ActivationVerificationResult.VERIFIED
+            else "NOT_VERIFIED"
+        ),
+        "verification": report.to_audit_dict(),
+        "api_balance_confirmed": False,
+        "api_balance_note": "API BALANCE NOT YET CONFIRMED — ON-CHAIN ACTIVATION ONLY; Phase 21",
+    }
+
+
 def main(argv: Optional[list] = None) -> int:
     parser = argparse.ArgumentParser(
         description="Kalyx Phase 20B — 1 CREDIT Orbio mainnet activation (governed)"
@@ -316,13 +446,42 @@ def main(argv: Optional[list] = None) -> int:
         action="store_true",
         help="Validate config, policy, and preflight only; do not sign or broadcast",
     )
+    parser.add_argument(
+        "--signer-mode",
+        choices=["local", "external"],
+        default=None,
+        help="Signing mode: 'local' (private key) or 'external' (delegated / Robinhood Wallet)",
+    )
+    parser.add_argument(
+        "--operator-address",
+        type=str,
+        default=EXPECTED_OPERATOR,
+        help=f"Authorized operator public address (default: {EXPECTED_OPERATOR})",
+    )
+    parser.add_argument(
+        "--export-unsigned-tx",
+        action="store_true",
+        help="Export the exact governed EIP-1559 transaction payload for external signing",
+    )
+    parser.add_argument(
+        "--signed-tx-hex",
+        type=str,
+        default=None,
+        help="Raw signed transaction hex (0x02...) from external wallet for broadcast",
+    )
+    parser.add_argument(
+        "--reconcile-tx",
+        type=str,
+        default=None,
+        help="Transaction hash to verify and reconcile if already broadcast by wallet",
+    )
     args = parser.parse_args(argv)
 
     try:
         cfg = load_config(args)
-        signer = build_signer(cfg.private_key)
-        # Never print key
-        print(f"Operator (derived): {signer.address}")
+        signer = build_signer(cfg)
+        print(f"Signer Mode: {cfg.signer_mode}")
+        print(f"Operator Address: {signer.address}")
         print(f"RPC: {cfg.rpc_url.split('?')[0]}")
         print(f"Chain: {ORBIO_ACTIVATION_CHAIN_ID}")
         print(f"CREDIT: {ORBIO_CREDIT_ACTIVATION_CONTRACT}")
@@ -346,6 +505,26 @@ def main(argv: Optional[list] = None) -> int:
                 f"FAIL CLOSED: RPC chain_id {live_chain} != {ORBIO_ACTIVATION_CHAIN_ID}"
             )
 
+        if cfg.reconcile_tx_hash:
+            print(f"\nReconciling external transaction {cfg.reconcile_tx_hash}...")
+            out = reconcile_via_tx_hash(
+                rpc=rpc,
+                tx_hash=cfg.reconcile_tx_hash,
+                intent=intent,
+                operator_address=signer.address,
+            )
+            print(f"Outcome: {out.get('outcome')}")
+            print(f"State: {out.get('state')}")
+            print(f"Tx: {out.get('provider_reference')}")
+            print(f"Verification: {out.get('verification')}")
+            print(out.get("api_balance_note", "API balance not confirmed"))
+            if out.get("state") == "UNKNOWN_PENDING":
+                print(out.get("note"))
+                return 2
+            if out.get("state") != "VERIFIED_ON_CHAIN":
+                return 1
+            return 0
+
         preflight = run_preflight(rpc, signer.address, intent)
         audit = preflight.to_audit_dict()
         print(
@@ -359,8 +538,48 @@ def main(argv: Optional[list] = None) -> int:
         )
         print("api_balance_confirmed=False (preview only)")
 
+        if cfg.export_unsigned:
+            live_nonce = rpc.get_transaction_count(signer.address, "pending")
+            if isinstance(signer, ExternalTransactionSigner):
+                tx_payload = signer.build_transaction_payload(intent, live_nonce)
+            else:
+                tx_payload = {
+                    "type": 2,
+                    "chainId": intent.chain_id,
+                    "nonce": live_nonce,
+                    "maxFeePerGas": 25_000_000_000,
+                    "maxPriorityFeePerGas": 1_500_000_000,
+                    "gas": intent.gas_limit,
+                    "to": intent.credit_contract,
+                    "value": 0,
+                    "data": EXPECTED_CALLDATA,
+                }
+            import json
+            print("\n=== GOVERNED UNSIGNED TRANSACTION FOR EXTERNAL SIGNING ===")
+            print(json.dumps(tx_payload, indent=2))
+            print("============================================================")
+            print("\nWorkflow to complete execution:")
+            print("1. Sign the above exact transaction payload using Robinhood Wallet / external signer.")
+            print("2. If broadcasting via Kalyx:")
+            print("   python scripts/execute_orbio_activation_mainnet.py --confirm-mainnet-activation --signer-mode external --signed-tx-hex <SIGNED_RAW_HEX>")
+            print("3. If broadcast directly via wallet:")
+            print("   python scripts/execute_orbio_activation_mainnet.py --confirm-mainnet-activation --reconcile-tx <TX_HASH>")
+            return 0
+
         if cfg.dry_run:
             print("DRY-RUN complete — no sign, no broadcast")
+            return 0
+
+        if cfg.signer_mode == "external" and not cfg.signed_raw_tx_hex:
+            live_nonce = rpc.get_transaction_count(signer.address, "pending")
+            assert isinstance(signer, ExternalTransactionSigner)
+            tx_payload = signer.build_transaction_payload(intent, live_nonce)
+            import json
+            print("\n=== GOVERNED UNSIGNED TRANSACTION ===")
+            print(json.dumps(tx_payload, indent=2))
+            print("======================================")
+            print("To submit the signature, run with --signed-tx-hex <RAW_SIGNED_HEX>")
+            print("Or if broadcast via Robinhood Wallet, run with --reconcile-tx <TX_HASH>")
             return 0
 
         print("Broadcasting via BlockchainSettlementProvider (single attempt)...")

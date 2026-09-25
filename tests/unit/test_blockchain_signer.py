@@ -84,3 +84,133 @@ def test_nonce_manager_sequential_and_idempotent():
         on_chain_nonce_fetcher=lambda: 5,
     )
     assert nonce2 == 6
+
+
+def test_external_signer_initialization_and_validation():
+    from src.settlement.blockchain.signer import ExternalTransactionSigner
+    from web3 import Web3
+
+    signer = ExternalTransactionSigner(EXPECTED_ADDRESS.lower())
+    assert signer.address == Web3.to_checksum_address(EXPECTED_ADDRESS)
+    assert "***REDACTED***" not in repr(signer)  # No secret to redact
+    assert EXPECTED_ADDRESS in repr(signer)
+
+    with pytest.raises(ValueError, match="Invalid Ethereum address"):
+        ExternalTransactionSigner("not-an-address")
+
+
+def test_external_signer_build_transaction_payload():
+    from src.settlement.blockchain.signer import ExternalTransactionSigner
+
+    signer = ExternalTransactionSigner(EXPECTED_ADDRESS)
+    intent = BlockchainTransactionIntent(
+        tenant_id="tenant-alpha",
+        organisation_id="org-alpha",
+        operation_id="cop-ext-1",
+        chain_id=4663,
+        recipient="0xe33322da1380e61e5ae5dfb21e7f62924c73004c",
+        amount_wei=0,
+        amount_credits=1,
+        max_fee_per_gas=25_000_000_000,
+        max_priority_fee_per_gas=1_500_000_000,
+        gas_limit=150_000,
+        data_payload="0xb260c42a00000000000000000000000000000000000000000000000000000000000f4240",
+        idempotency_key="key-ext-1",
+        policy_decision_id="dec-1",
+        authorization_token_hash="auth-1",
+    )
+    payload = signer.build_transaction_payload(intent, nonce=3)
+    assert payload["type"] == 2
+    assert payload["chainId"] == 4663
+    assert payload["nonce"] == 3
+    assert payload["to"].lower() == "0xe33322da1380e61e5ae5dfb21e7f62924c73004c"
+    assert payload["data"] == "0xb260c42a00000000000000000000000000000000000000000000000000000000000f4240"
+    assert payload["value"] == 0
+    assert payload["gas"] == 150_000
+
+
+def test_external_signer_sign_transaction_valid():
+    from eth_account import Account
+    from src.settlement.blockchain.signer import ExternalTransactionSigner
+
+    acct = Account.create()
+    signer = ExternalTransactionSigner(acct.address)
+
+    intent = BlockchainTransactionIntent(
+        tenant_id="tenant-alpha",
+        organisation_id="org-alpha",
+        operation_id="cop-ext-2",
+        chain_id=4663,
+        recipient="0xe33322da1380e61e5ae5dfb21e7f62924c73004c",
+        amount_wei=0,
+        amount_credits=1,
+        max_fee_per_gas=25_000_000_000,
+        max_priority_fee_per_gas=1_500_000_000,
+        gas_limit=150_000,
+        data_payload="0xb260c42a00000000000000000000000000000000000000000000000000000000000f4240",
+        idempotency_key="key-ext-2",
+        policy_decision_id="dec-1",
+        authorization_token_hash="auth-1",
+    )
+    tx_dict = signer.build_transaction_payload(intent, nonce=0)
+    signed_tx = Account.sign_transaction(tx_dict, acct.key)
+    raw_hex = signed_tx.raw_transaction.hex()
+
+    signer.set_signed_raw_tx_hex(raw_hex)
+    raw_bytes, tx_hash = signer.sign_transaction(intent, nonce=0)
+
+    assert isinstance(raw_bytes, bytes)
+    expected_tx_hash = "0x" + signed_tx.hash.hex().lower()
+    assert tx_hash == expected_tx_hash
+
+
+def test_external_signer_sign_transaction_mismatched_address_raises():
+    from eth_account import Account
+    from src.settlement.blockchain.signer import ExternalTransactionSigner
+
+    acct_a = Account.create()
+    acct_b = Account.create()
+
+    # Signer expects acct_a
+    signer = ExternalTransactionSigner(acct_a.address)
+
+    intent = BlockchainTransactionIntent(
+        tenant_id="tenant-alpha",
+        organisation_id="org-alpha",
+        operation_id="cop-ext-3",
+        chain_id=4663,
+        recipient="0xe33322da1380e61e5ae5dfb21e7f62924c73004c",
+        amount_wei=0,
+        amount_credits=1,
+        idempotency_key="key-ext-3",
+        policy_decision_id="dec-1",
+        authorization_token_hash="auth-1",
+    )
+    tx_dict = signer.build_transaction_payload(intent, nonce=0)
+    # But transaction is signed by acct_b!
+    signed_by_b = Account.sign_transaction(tx_dict, acct_b.key)
+
+    signer.set_signed_raw_tx_hex(signed_by_b.raw_transaction.hex())
+    with pytest.raises(ValueError, match="Signer address mismatch"):
+        signer.sign_transaction(intent, nonce=0)
+
+
+def test_external_signer_missing_raw_tx_raises_with_payload():
+    from src.settlement.blockchain.signer import ExternalTransactionSigner
+
+    signer = ExternalTransactionSigner(EXPECTED_ADDRESS)
+    intent = BlockchainTransactionIntent(
+        tenant_id="tenant-alpha",
+        organisation_id="org-alpha",
+        operation_id="cop-ext-4",
+        chain_id=4663,
+        recipient="0xe33322da1380e61e5ae5dfb21e7f62924c73004c",
+        amount_wei=0,
+        amount_credits=1,
+        idempotency_key="key-ext-4",
+        policy_decision_id="dec-1",
+        authorization_token_hash="auth-1",
+    )
+    with pytest.raises(ValueError, match="External signature required"):
+        signer.sign_transaction(intent, nonce=1)
+

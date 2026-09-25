@@ -124,3 +124,131 @@ def test_simulation_runtime_rejected_by_policy():
     approval = policy.issue_human_approval(intent)
     d = policy.evaluate(intent, human_approval=approval, runtime_mode="simulation")
     assert not d.is_allowed()
+
+
+def test_load_config_external_mode_without_private_key(monkeypatch):
+    monkeypatch.delenv("KALYX_BLOCKCHAIN_PRIVATE_KEY", raising=False)
+    monkeypatch.setenv("KALYX_BLOCKCHAIN_RPC_URL", "https://example.invalid")
+    args = SimpleNamespace(
+        confirm_mainnet_activation=True,
+        dry_run=True,
+        signer_mode="external",
+        operator_address=driver.EXPECTED_OPERATOR,
+        signed_tx_hex=None,
+        export_unsigned_tx=False,
+        reconcile_tx=None,
+    )
+    cfg = driver.load_config(args)
+    assert cfg.signer_mode == "external"
+    assert cfg.private_key is None
+    assert cfg.operator_address == driver.EXPECTED_OPERATOR
+
+
+def test_load_config_external_mode_rejects_wrong_operator(monkeypatch):
+    monkeypatch.delenv("KALYX_BLOCKCHAIN_PRIVATE_KEY", raising=False)
+    monkeypatch.setenv("KALYX_BLOCKCHAIN_RPC_URL", "https://example.invalid")
+    args = SimpleNamespace(
+        confirm_mainnet_activation=True,
+        dry_run=True,
+        signer_mode="external",
+        operator_address="0x0000000000000000000000000000000000000001",
+        signed_tx_hex=None,
+        export_unsigned_tx=False,
+        reconcile_tx=None,
+    )
+    with pytest.raises(driver.ActivationDriverError, match="operator address"):
+        driver.load_config(args)
+
+
+def test_build_signer_external_mode():
+    from src.settlement.blockchain.signer import ExternalTransactionSigner
+
+    cfg = driver.DriverConfig(
+        signer_mode="external",
+        rpc_url="https://example.invalid",
+        confirm=True,
+        dry_run=True,
+        operator_address=driver.EXPECTED_OPERATOR,
+    )
+    signer = driver.build_signer(cfg)
+    assert isinstance(signer, ExternalTransactionSigner)
+    assert signer.address.lower() == driver.EXPECTED_OPERATOR.lower()
+
+
+def test_reconcile_via_tx_hash_valid():
+    class MockRpc:
+        def get_transaction_by_hash(self, tx_hash):
+            return {
+                "from": driver.EXPECTED_OPERATOR,
+                "to": ORBIO_CREDIT_ACTIVATION_CONTRACT,
+                "input": driver.EXPECTED_CALLDATA,
+            }
+
+        def get_transaction_receipt(self, tx_hash):
+            from src.domain.orbio_activation import ACTIVATED_EVENT_TOPIC0
+            return {
+                "status": 1,
+                "transactionHash": tx_hash,
+                "to": ORBIO_CREDIT_ACTIVATION_CONTRACT,
+                "logs": [
+                    {
+                        "address": ORBIO_CREDIT_ACTIVATION_CONTRACT,
+                        "topics": [
+                            ACTIVATED_EVENT_TOPIC0,
+                            "0x" + (42).to_bytes(32, "big").hex(),
+                            "0x" + "0" * 24 + driver.EXPECTED_OPERATOR[2:].lower(),
+                            "0x" + "0" * 64,
+                        ],
+                        "data": "0x" + (1_000_000).to_bytes(32, "big").hex(),
+                    }
+                ],
+            }
+
+    intent = driver.build_intent()
+    out = driver.reconcile_via_tx_hash(
+        rpc=MockRpc(),
+        tx_hash="0x" + "aa" * 32,
+        intent=intent,
+        operator_address=driver.EXPECTED_OPERATOR,
+    )
+    assert out["outcome"] == "SUCCESS"
+    assert out["state"] == "VERIFIED_ON_CHAIN"
+
+
+def test_reconcile_via_tx_hash_calldata_mismatch_fails_closed():
+    class MockRpc:
+        def get_transaction_by_hash(self, tx_hash):
+            return {
+                "from": driver.EXPECTED_OPERATOR,
+                "to": ORBIO_CREDIT_ACTIVATION_CONTRACT,
+                "input": "0xinvalid_calldata",
+            }
+
+    intent = driver.build_intent()
+    with pytest.raises(driver.ActivationDriverError, match="calldata mismatch"):
+        driver.reconcile_via_tx_hash(
+            rpc=MockRpc(),
+            tx_hash="0x" + "bb" * 32,
+            intent=intent,
+            operator_address=driver.EXPECTED_OPERATOR,
+        )
+
+
+def test_reconcile_via_tx_hash_sender_mismatch_fails_closed():
+    class MockRpc:
+        def get_transaction_by_hash(self, tx_hash):
+            return {
+                "from": "0x0000000000000000000000000000000000000002",
+                "to": ORBIO_CREDIT_ACTIVATION_CONTRACT,
+                "input": driver.EXPECTED_CALLDATA,
+            }
+
+    intent = driver.build_intent()
+    with pytest.raises(driver.ActivationDriverError, match="transaction sender"):
+        driver.reconcile_via_tx_hash(
+            rpc=MockRpc(),
+            tx_hash="0x" + "cc" * 32,
+            intent=intent,
+            operator_address=driver.EXPECTED_OPERATOR,
+        )
+
