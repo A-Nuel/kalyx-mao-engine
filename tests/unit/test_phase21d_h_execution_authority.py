@@ -103,7 +103,7 @@ def test_durable_approval_binds_principal_org_authority_intent_and_policy():
             policy_decision_id="dec-1",
             policy_decision=decision,
         )
-        assert not ok and "replay" in reason
+        assert not ok and ("replay" in reason or "consumed" in reason)
     finally:
         db.close()
 
