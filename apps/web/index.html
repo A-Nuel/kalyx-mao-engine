@@ -14,6 +14,23 @@
 tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans-serif'],mono:['JetBrains Mono','monospace']}}}};
 </script>
 <link rel="stylesheet" href="/assets/app.css?v=20260921-2">
+<style>html.auth-pending body{visibility:hidden}</style>
+<script>
+document.documentElement.classList.add('auth-pending');
+(async()=>{
+ const token=localStorage.getItem('kalyx_session');
+ const target='/command-centre';
+ if(!token){location.replace('/auth?next='+encodeURIComponent(target));return;}
+ try{
+   const r=await fetch('/api/v1/product/me',{headers:{Authorization:'Bearer '+token}});
+   if(!r.ok)throw new Error('unauthenticated');
+   document.documentElement.classList.remove('auth-pending');
+ }catch(_){
+   localStorage.removeItem('kalyx_session');
+   location.replace('/auth?next='+encodeURIComponent(target));
+ }
+})();
+</script>
 </head>
 <body class="kalyx-shell">
   <div class="kalyx-noise" aria-hidden="true"></div>
