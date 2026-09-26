@@ -190,13 +190,13 @@ def _tenant_for_user(db: Any, principal_id: str) -> str:
 
 
 def _require_org(db: Any, principal_id: str, org_id: str) -> tuple[str, dict]:
-    tenant_id = _tenant_for_user(db, principal_id)
     row = db.conn.execute(
-        "SELECT * FROM organisations WHERE id = ? AND tenant_id = ?",
-        (org_id, tenant_id),
+        "SELECT * FROM organisations WHERE id = ?",
+        (org_id,),
     ).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Organisation not found")
+    tenant_id = row["tenant_id"]
     membership = IdentityRepository(db).get_context(principal_id, tenant_id)
     if not membership:
         raise HTTPException(status_code=403, detail="Workspace membership required")
@@ -450,8 +450,6 @@ def create_organisation(
     try:
         ensure_product_schema(db)
         _, principal_id, _ = _authenticate(db, authorization)
-        if _tenant_for_user(db, principal_id) != tenant_id:
-            raise HTTPException(status_code=403, detail="Workspace membership required")
         context = IdentityRepository(db).get_context(principal_id, tenant_id)
         if not context or not context.can_write():
             raise HTTPException(status_code=403, detail="Workspace write permission required")
