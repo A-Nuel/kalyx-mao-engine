@@ -114,3 +114,70 @@ def test_wallet_signature_cannot_be_replayed(client):
     body = {"challenge_id": challenge["challenge_id"], "signature": signed.signature.hex()}
     assert client.post("/api/v1/product/auth/wallet/verify", json=body).status_code == 200
     assert client.post("/api/v1/product/auth/wallet/verify", json=body).status_code == 400
+
+
+def test_agent_credential_is_hash_only_and_revocable(client):
+    account = Account.create()
+    challenge = client.post("/api/v1/product/auth/wallet/challenge", json={"address": account.address}).json()
+    signed = Account.sign_message(encode_defunct(text=challenge["message"]), account.key)
+    token = client.post(
+        "/api/v1/product/auth/wallet/verify",
+        json={"challenge_id": challenge["challenge_id"], "signature": signed.signature.hex()},
+    ).json()["token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    tenant = client.get("/api/v1/product/me", headers=headers).json()["workspace"]["tenant_id"]
+    org = client.post(
+        f"/api/v1/product/workspaces/{tenant}/organisations",
+        headers=headers,
+        json={"name": "Key Org", "mission": "Test credentials"},
+    ).json()["organisation_id"]
+    agent = client.post(
+        f"/api/v1/product/organisations/{org}/agents",
+        headers=headers,
+        json={"name": "Researcher", "role": "RESEARCHER"},
+    ).json()["agent_id"]
+    key = client.post(f"/api/v1/product/organisations/{org}/agents/{agent}/keys", headers=headers).json()["key"]
+
+    who = client.get("/api/v1/product/agent/me", headers={"X-Kalyx-Agent-Key": key})
+    assert who.status_code == 200
+    assert who.json()["agent_id"] == agent
+
+    revoked = client.post(
+        f"/api/v1/product/organisations/{org}/agents/{agent}/keys/revoke",
+        headers=headers,
+    )
+    assert revoked.status_code == 200
+    assert client.get("/api/v1/product/agent/me", headers={"X-Kalyx-Agent-Key": key}).status_code == 401
+
+
+def test_policy_ceiling_blocks_over_budget_mission(client):
+    account = Account.create()
+    challenge = client.post("/api/v1/product/auth/wallet/challenge", json={"address": account.address}).json()
+    signed = Account.sign_message(encode_defunct(text=challenge["message"]), account.key)
+    token = client.post(
+        "/api/v1/product/auth/wallet/verify",
+        json={"challenge_id": challenge["challenge_id"], "signature": signed.signature.hex()},
+    ).json()["token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    tenant = client.get("/api/v1/product/me", headers=headers).json()["workspace"]["tenant_id"]
+    org = client.post(
+        f"/api/v1/product/workspaces/{tenant}/organisations",
+        headers=headers,
+        json={"name": "Governed Org", "mission": "Test limits"},
+    ).json()["organisation_id"]
+    client.post(
+        f"/api/v1/product/organisations/{org}/agents",
+        headers=headers,
+        json={"name": "CEO", "role": "CEO", "authority_ceiling": 25},
+    )
+    client.post(
+        f"/api/v1/product/organisations/{org}/policies",
+        headers=headers,
+        json={"name": "Strict", "spending_ceiling": 1, "per_agent_ceiling": 1, "human_approval_threshold": 1},
+    )
+    result = client.post(
+        f"/api/v1/product/organisations/{org}/missions",
+        headers=headers,
+        json={"objective": "Do something", "budget": 2},
+    )
+    assert result.status_code == 403
