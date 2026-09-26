@@ -1,7 +1,7 @@
 # Phase 21D–21H — Execution Authority, Wallet Boundary & Security Gate
 
 ## Status
-Implementation complete; CI is the final gate before merge.
+Implemented and merged after a green CI gate (GitHub Actions run #278).
 
 ## 21D — ExecutionAuthority
 Introduces an organisation-bound, provider-neutral authority boundary:
