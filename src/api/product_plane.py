@@ -98,6 +98,16 @@ CREATE TABLE IF NOT EXISTS provider_connections (
 );
 CREATE INDEX IF NOT EXISTS idx_provider_connections_scope
     ON provider_connections(tenant_id, organisation_id, provider);
+CREATE TABLE IF NOT EXISTS organisation_profiles (
+    organisation_id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    description TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_org_profiles_tenant ON organisation_profiles(tenant_id);
+
 CREATE TABLE IF NOT EXISTS organisation_policies (
     id TEXT PRIMARY KEY,
     tenant_id TEXT NOT NULL,
@@ -382,6 +392,21 @@ def me(authorization: Optional[str] = Header(default=None, alias="Authorization"
             "workspace": {"tenant_id": tenant_id},
             "organisations": [dict(o) for o in orgs],
         }
+    finally:
+        db.close()
+
+
+@router.get("/workspaces")
+def list_workspaces(authorization: Optional[str] = Header(default=None, alias="Authorization")) -> list[dict[str, Any]]:
+    db = create_database()
+    try:
+        ensure_product_schema(db)
+        _, principal_id, _ = _authenticate(db, authorization)
+        rows = db.conn.execute(
+            "SELECT t.id, t.name, t.status, m.role FROM tenants t JOIN tenant_memberships m ON m.tenant_id=t.id WHERE m.principal_id=? AND m.active=1 ORDER BY t.created_at",
+            (principal_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
     finally:
         db.close()
 
