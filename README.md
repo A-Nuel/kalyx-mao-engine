@@ -13,6 +13,27 @@
 
 ---
 
+## Current Release Status — September 2026
+
+Kalyx is being prepared as a standalone, deployable control-plane project. The repository currently has:
+
+- **Production configuration gates**: production mode requires PostgreSQL, non-demo governance secrets, operator authentication, and explicit identity authentication.
+- **Durable governance**: deterministic policy authorization, durable authorization consumption, tenant/organisation isolation, and tamper-evident audit records.
+- **Controlled execution boundaries**: provider adapters and signing remain outside agent authority; the 21D–21H security work adds an explicit organisation-bound execution authority and durable human execution approvals.
+- **Multi-organisation security boundaries**: execution context, authority, approval, ledger, and persistence paths are scoped to tenant and organisation boundaries.
+- **Real blockchain infrastructure**: EVM signing, nonce management, receipt verification, and a verified Sepolia infrastructure smoke test are implemented.
+- **Orbio integration**: live/testnet-aware gateway and CREDIT activation code paths exist, with explicit LIVE/SIMULATED provenance.
+
+### Important deployment boundary
+
+**Production-ready software infrastructure is not the same thing as autonomous economic execution with real funds.**
+
+Kalyx can be deployed as a standalone governed control plane, but live consequential providers must still be enabled deliberately and supplied with their own operational credentials. The repository does **not** claim that a live Orbio economic settlement has been completed: the verified Sepolia transaction was an infrastructure smoke test, and the Orbio CREDIT activation path has passed mainnet preflight but has not been broadcast through Kalyx.
+
+For production deployment, keep private keys/seed phrases outside Kalyx organisation data and agent configuration. In particular, do not place a wallet seed phrase or private key in Render environment variables merely to enable the 21D–21H architecture.
+
+---
+
 ## 1. What is Kalyx?
 
 **Kalyx** is an operating and governance runtime for **Machine Autonomous Organisations (MAOs)**.
@@ -154,7 +175,7 @@ PROPOSE ──▶ AUTHORIZE ──▶ EXECUTE ──▶ VERIFY ──▶ SETTLE
 
 ## 6. What is Actually Implemented
 
-Kalyx avoids placeholders. Every trust boundary is enforced in code:
+Kalyx distinguishes implemented execution paths from future/provider-specific integrations. The core governance and execution boundaries are enforced in code:
 
 ### Agents (`src/agents/`)
 - **`CEOOrchestrator`**: Ingests high-level objectives, decomposes missions into stage graphs, coordinates worker assignments, monitors execution outcomes, and triggers adaptive replanning upon policy rejections.
@@ -175,6 +196,11 @@ Kalyx avoids placeholders. Every trust boundary is enforced in code:
   $$\text{Token} = \text{HMAC}_{\text{secret}}(\text{OrgID} \parallel \text{ProposalHash} \parallel \text{DecisionID} \parallel \text{PolicyVersion} \parallel \text{Nonce} \parallel \text{Timestamps})$$
 - **`TokenConsumptionStore`**: Durable store recording consumed nonces. Prevents cross-restart token replay attacks.
 - **`CapabilityRegistry`**: Fine-grained role-based permission scopes (`EXECUTE_API`, `TRADE_MARKET`, `STAKE_COLLATERAL`).
+
+### Execution authority & wallet boundary (`src/execution/`, `src/identity/`, `src/governance/`)
+- **`ExecutionAuthority`**: Provider-neutral, organisation-bound authority that makes the permitted execution boundary explicit without giving agents signing capability.
+- **`WalletIdentity`**: Public wallet metadata only (tenant, organisation, chain, address, provider); no private key or seed phrase is stored in the identity model.
+- **`ExecutionApprovalManager`**: Durable, HMAC-authenticated human approval bound to the tenant, organisation, principal, execution authority, exact intent hash, and exact policy-decision hash, with expiry and atomic replay protection.
 
 ### Executors (`src/execution/`)
 - **`BaseExecutor`**: Foundation verifying pre-execution invariants: capability scope, authorization validity, token consumption, and escrow reservations.
@@ -416,7 +442,7 @@ Kalyx is configured via environment variables. See [`.env.example`](.env.example
 
 ## 16. Development Phases
 
-The repository reflects an 18-phase disciplined engineering progression:
+The repository reflects a disciplined engineering progression through Phase 21H:
 
 - **Phase 1 — Deterministic Foundation**: Pure functional state machines and domain primitives.
 - **Phase 2 — Agent Architecture & Orchestration**: CEO orchestrator and specialized agent roles.
@@ -438,6 +464,13 @@ The repository reflects an 18-phase disciplined engineering progression:
 - **Phase 16 — Multi-Agent Coordination**: Inter-agent task handoffs, Orbio gateway adapters.
 - **Phase 17 — Autonomous Enterprise & B2B Marketplace**: 6-stage cross-DAO marketplace, capability evolution.
 - **Phase 18 — Credit Collateral**: On-chain `CollateralVault.sol`, verifier-settled obligation locks.
+- **Phase 19 — Verified Testnet Infrastructure**: First verified Sepolia transaction and reconciliation/audit proof; explicitly an infrastructure smoke test, not Orbio economic settlement.
+- **Phase 20A — Orbio Testnet Discovery**: Verified deployment/network boundaries and fail-closed behavior when the target testnet does not expose the required Orbio contracts.
+- **Phase 20B — Orbio CREDIT Activation**: Hardened activation intent, policy, preflight, verifier, runtime, and external-signer boundary; live mainnet preflight completed without broadcasting.
+- **Phase 21A — Architecture Discovery**: Audited existing tenant, organisation, identity, wallet, and execution boundaries before platform expansion.
+- **Phase 21B — Canonical Execution Context**: Immutable principal/tenant/organisation/role/request context and context propagation.
+- **Phase 21C — Tenant & Organisation Isolation**: Trusted organisation scoping, context binding, and cross-scope leakage tests.
+- **Phase 21D–21H — Platform Security Boundary**: Organisation-bound execution authority, public-only wallet identity, durable human execution approvals, multi-organisation proof, and adversarial security coverage.
 
 ---
 
