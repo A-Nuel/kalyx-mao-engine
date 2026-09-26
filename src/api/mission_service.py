@@ -22,6 +22,7 @@ from src.economy.allocator import ResourceAllocator
 from src.economy.reputation import ReputationEngine
 from src.governance.human_gate import HumanGate
 from src.governance.policy_engine import PolicyEngine
+from src.api.product_plane import ConfiguredGovernanceRule, get_active_policy_config
 from src.orchestration.engine import OrchestrationEngine
 from src.persistence.economy_repo import EconomyRepository
 from src.persistence.factory import create_database, create_sqlite, create_scoped_ledger
@@ -109,7 +110,13 @@ def run_mission(
                 repo.save_agent(agent, org.id)
         event_store = SqliteEventStore(db, verify_on_startup=True)
         secret = policy_secret()
-        policy = PolicyEngine(signing_secret=secret)
+        policy_config = get_active_policy_config(db, org.id)
+        policy = PolicyEngine(
+            signing_secret=secret,
+            human_approval_threshold=int(policy_config.get("human_approval_threshold", 40)),
+        )
+        if policy_config:
+            policy.rules.insert(0, ConfiguredGovernanceRule(policy_config))
         executor = DurableControlledExternalExecutor(
             policy_engine=policy,
             ledger=ledger,
