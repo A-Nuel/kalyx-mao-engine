@@ -19,6 +19,7 @@ from typing import Any, Optional
 from cryptography.fernet import Fernet, InvalidToken
 from eth_account import Account
 from eth_account.messages import encode_defunct
+from eth_utils import to_checksum_address
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, Field
 
@@ -305,7 +306,7 @@ def social_providers() -> dict[str, Any]:
 def wallet_challenge(request: WalletChallengeRequest) -> dict[str, Any]:
     address = request.address
     try:
-        address = Account.to_checksum_address(address)
+        address = to_checksum_address(address)
     except Exception as exc:
         raise HTTPException(status_code=400, detail="Invalid EVM wallet address") from exc
 
@@ -351,7 +352,7 @@ def wallet_verify(request: WalletVerifyRequest) -> dict[str, Any]:
                 encode_defunct(text=row["message"]),
                 signature=request.signature,
             )
-            recovered = Account.to_checksum_address(recovered)
+            recovered = to_checksum_address(recovered)
         except Exception as exc:
             raise HTTPException(status_code=401, detail="Wallet signature verification failed") from exc
 
