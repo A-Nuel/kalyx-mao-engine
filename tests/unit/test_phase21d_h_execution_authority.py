@@ -11,6 +11,22 @@ from src.persistence.database import Database
 from src.settlement.blockchain.signer import ExternalTransactionSigner
 
 
+def _seed_scope(db, tenant="tenant-a", organisations=("org-a",)):
+    now = "2026-01-01T00:00:00+00:00"
+    db.conn.execute(
+        "INSERT INTO tenants (id, name, created_at) VALUES (?, ?, ?)",
+        (tenant, tenant.replace("-", " ").title(), now),
+    )
+    for org in organisations:
+        db.conn.execute(
+            """INSERT INTO organisations
+               (id, tenant_id, name, mission, treasury_balance, state, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (org, tenant, org.replace("-", " ").title(), "test", 0, "ACTIVE", now),
+        )
+    db.conn.commit()
+
+
 def _intent(tenant="tenant-a", org="org-a"):
     return OrbioCreditActivationIntent(
         tenant_id=tenant,
@@ -54,6 +70,7 @@ def test_wallet_identity_contains_no_signing_secret():
 def test_durable_approval_binds_principal_org_authority_intent_and_policy():
     db = Database(":memory:")
     try:
+        _seed_scope(db)
         manager = ExecutionApprovalManager(db, "test-secret")
         decision = {"decision_id": "dec-1", "result": "ALLOW"}
         approval = manager.issue(
@@ -94,8 +111,7 @@ def test_durable_approval_binds_principal_org_authority_intent_and_policy():
 def test_approval_cannot_cross_organisation_or_authority():
     db = Database(":memory:")
     try:
-        db.conn.execute("INSERT INTO tenants (id, name) VALUES ('tenant-a', 'Tenant A')")
-        db.conn.execute("INSERT INTO organisations (id, tenant_id, name) VALUES ('org-a', 'tenant-a', 'Org A')")
+        _seed_scope(db)
         manager = ExecutionApprovalManager(db, "test-secret")
         approval = manager.issue(
             tenant_id="tenant-a",
@@ -136,9 +152,7 @@ def test_approval_cannot_cross_organisation_or_authority():
 def test_multi_org_e2e_scope_separation():
     db = Database(":memory:")
     try:
-        db.conn.execute("INSERT INTO tenants (id, name) VALUES ('tenant-a', 'Tenant A')")
-        db.conn.execute("INSERT INTO organisations (id, tenant_id, name) VALUES ('org-a', 'tenant-a', 'Org A')")
-        db.conn.execute("INSERT INTO organisations (id, tenant_id, name) VALUES ('org-b', 'tenant-a', 'Org B')")
+        _seed_scope(db, organisations=("org-a", "org-b"))
         manager = ExecutionApprovalManager(db, "test-secret")
         for org in ("org-a", "org-b"):
             approval = manager.issue(
@@ -168,6 +182,7 @@ def test_multi_org_e2e_scope_separation():
 def test_approval_mutation_is_rejected():
     db = Database(":memory:")
     try:
+        _seed_scope(db)
         manager = ExecutionApprovalManager(db, "test-secret")
         approval = manager.issue(
             tenant_id="tenant-a",
