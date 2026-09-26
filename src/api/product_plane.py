@@ -129,8 +129,10 @@ def _now() -> str:
 
 
 def ensure_product_schema(db: Any) -> None:
+    statements = [s.strip() for s in PRODUCT_SCHEMA.split(";") if s.strip()]
     with db.conn:
-        db.conn.executescript(PRODUCT_SCHEMA)
+        for statement in statements:
+            db.conn.execute(statement)
 
 
 def _credential_fernet() -> Fernet:
@@ -250,7 +252,39 @@ class PolicyCreateRequest(BaseModel):
     max_prompt_chars: int = Field(default=20_000, ge=1_000, le=100_000)
 
 
-class ConfiguredGovernanceRule:\n    """Non-bypassable organisation-configured limits applied before execution."""\n    rule_id = "RULE-CONFIGURED-ORG"\n    description = "Organisation policy profile limits spend, actions, targets and providers"\n\n    def __init__(self, config: dict[str, Any]):\n        self.config = config\n\n    def evaluate(self, proposal: Any, agent: Any, org: Any, **kwargs: Any) -> Optional[str]:\n        ceiling = int(self.config.get("spending_ceiling", 25))\n        per_agent = int(self.config.get("per_agent_ceiling", ceiling))\n        if proposal.requested_credits > ceiling:\n            return f"Organisation policy ceiling exceeded: {proposal.requested_credits} > {ceiling}"\n        if proposal.requested_credits > per_agent:\n            return f"Agent policy ceiling exceeded: {proposal.requested_credits} > {per_agent}"\n        allowed_actions = set(self.config.get("allowed_actions") or [])\n        if allowed_actions and proposal.action_type.value not in allowed_actions:\n            return f"Action '{proposal.action_type.value}' is not allowed by the organisation policy profile"\n        allowed_targets = set(self.config.get("allowed_targets") or [])\n        if allowed_targets and proposal.target not in allowed_targets:\n            return f"Target '{proposal.target}' is not allowed by the organisation policy profile"\n        return None\n\n\ndef get_active_policy_config(db: Any, organisation_id: str) -> dict[str, Any]:\n    row = db.conn.execute(\n        "SELECT config_json FROM organisation_policies WHERE organisation_id = ? AND enabled = 1 ORDER BY version DESC LIMIT 1",\n        (organisation_id,),\n    ).fetchone()\n    return json.loads(row["config_json"]) if row else {}\n\n\nclass ProviderConnectionRequest(BaseModel):
+class ConfiguredGovernanceRule:
+    """Non-bypassable organisation-configured limits applied before execution."""
+    rule_id = "RULE-CONFIGURED-ORG"
+    description = "Organisation policy profile limits spend, actions, targets and providers"
+
+    def __init__(self, config: dict[str, Any]):
+        self.config = config
+
+    def evaluate(self, proposal: Any, agent: Any, org: Any, **kwargs: Any) -> Optional[str]:
+        ceiling = int(self.config.get("spending_ceiling", 25))
+        per_agent = int(self.config.get("per_agent_ceiling", ceiling))
+        if proposal.requested_credits > ceiling:
+            return f"Organisation policy ceiling exceeded: {proposal.requested_credits} > {ceiling}"
+        if proposal.requested_credits > per_agent:
+            return f"Agent policy ceiling exceeded: {proposal.requested_credits} > {per_agent}"
+        allowed_actions = set(self.config.get("allowed_actions") or [])
+        if allowed_actions and proposal.action_type.value not in allowed_actions:
+            return f"Action '{proposal.action_type.value}' is not allowed by the organisation policy profile"
+        allowed_targets = set(self.config.get("allowed_targets") or [])
+        if allowed_targets and proposal.target not in allowed_targets:
+            return f"Target '{proposal.target}' is not allowed by the organisation policy profile"
+        return None
+
+
+def get_active_policy_config(db: Any, organisation_id: str) -> dict[str, Any]:
+    row = db.conn.execute(
+        "SELECT config_json FROM organisation_policies WHERE organisation_id = ? AND enabled = 1 ORDER BY version DESC LIMIT 1",
+        (organisation_id,),
+    ).fetchone()
+    return json.loads(row["config_json"]) if row else {}
+
+
+class ProviderConnectionRequest(BaseModel):
     provider: str = Field(min_length=2, max_length=80)
     connection_type: str = Field(default="api_key", max_length=40)
     api_key: Optional[str] = Field(default=None, max_length=4096)
