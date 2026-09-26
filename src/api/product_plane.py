@@ -302,6 +302,26 @@ def social_providers() -> dict[str, Any]:
     return {"providers": configured_social_providers(), "mode": "oauth-oidc-adapter"}
 
 
+@router.get("/auth/wallet/config")
+def wallet_config() -> dict[str, Any]:
+    """Return public wallet-connector configuration; never expose private credentials."""
+    project_id = os.getenv("KALYX_REOWN_PROJECT_ID", "").strip()
+    return {
+        "walletconnect": {
+            "configured": bool(project_id),
+            "project_id": project_id,
+            "provider": "reown-appkit" if project_id else None,
+        },
+        "chain": {
+            "id": 4663,
+            "name": "Robinhood Chain",
+            "rpc_url": "https://rpc.mainnet.chain.robinhood.com",
+            "currency": "ETH",
+            "explorer": "https://robinhoodchain.blockscout.com",
+        },
+    }
+
+
 @router.post("/auth/wallet/challenge")
 def wallet_challenge(request: WalletChallengeRequest) -> dict[str, Any]:
     address = request.address
@@ -382,7 +402,7 @@ def wallet_verify(request: WalletVerifyRequest) -> dict[str, Any]:
             )
             db.conn.execute(
                 "INSERT INTO product_identities (id,user_id,kind,subject,metadata_json,created_at) VALUES (?,?,?,?,?,?)",
-                (f"ident_{uuid.uuid4().hex}", user_id, "wallet", recovered, json.dumps({"chain_id": 4663}), _now()),
+                (f"ident_{uuid.uuid4().hex}", user_id, "wallet", recovered, json.dumps({"chain_id": int(row["chain_id"])}), _now()),
             )
             db.conn.execute(
                 "INSERT INTO tenants (id,name,status,created_at) VALUES (?,?,?,?)",
@@ -409,6 +429,7 @@ def wallet_verify(request: WalletVerifyRequest) -> dict[str, Any]:
             "user": {"id": user_id, "principal_id": principal_id},
             "workspace": {"tenant_id": tenant_id},
             "wallet": recovered,
+            "chain_id": int(row["chain_id"]),
         }
     finally:
         db.close()
