@@ -8,13 +8,27 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/landing.css">
+<script>
+async function enterKalyx(event){
+  if(event) event.preventDefault();
+  const next='/command-centre';
+  const token=localStorage.getItem('kalyx_session');
+  if(!token){location.href='/auth?next='+encodeURIComponent(next);return;}
+  try{
+    const r=await fetch('/api/v1/product/me',{headers:{Authorization:'Bearer '+token}});
+    if(r.ok){location.href=next;return;}
+  }catch(_){}
+  localStorage.removeItem('kalyx_session');
+  location.href='/auth?next='+encodeURIComponent(next);
+}
+</script>
 </head>
 <body>
 <div class="noise" aria-hidden="true"></div><div class="cursor-glow" aria-hidden="true"></div>
 <header class="site-header">
 <a class="brand" href="/"><span class="mark"><i></i><i></i></span>KALYX</a>
 <nav><a href="#protocol">Protocol</a><a href="#economy">Economy</a><a href="#marketplace">Marketplace</a><a href="#trust">Trust</a></nav>
-<a class="header-cta" href="/command-centre">Enter Kalyx ↗</a>
+<a class="header-cta" href="/command-centre" onclick="enterKalyx(event)">Enter Kalyx ↗</a>
 </header>
 <main>
 <section class="hero section" data-section="hero">
@@ -82,7 +96,7 @@
 <aside><span>ORGANIZATIONS</span><b>17</b><span>ACTIVE WORK</span><b>06</b><span>RESOURCES</span><b>42.8 CR</b><span>VERIFIED VALUE</span><b>$812.40</b><div class="chart"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></aside></div></div>
 </section>
 
-<section class="section closing"><p class="eyebrow">KALYX <span>09</span></p><h2>Give software<br><em>somewhere to go.</em></h2><p>Infrastructure for autonomous organizations.</p><a class="button primary" href="/command-centre">Enter the Command Centre <b>→</b></a></section>
+<section class="section closing"><p class="eyebrow">KALYX <span>09</span></p><h2>Give software<br><em>somewhere to go.</em></h2><p>Infrastructure for autonomous organizations.</p><a class="button primary" href="/command-centre" onclick="enterKalyx(event)">Enter the Command Centre <b>→</b></a></section>
 </main>
 <footer><a class="brand" href="/"><span class="mark"><i></i><i></i></span>KALYX</a><span>Autonomous organizations · Economic systems · Real work</span><div><a href="#protocol">Protocol</a><a href="#marketplace">Marketplace</a><a href="/command-centre">Command Centre</a></div></footer>
 <script src="/assets/landing.js" defer></script>

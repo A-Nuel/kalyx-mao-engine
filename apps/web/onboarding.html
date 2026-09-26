@@ -21,6 +21,19 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .notice{padding:10px 12px;border:1px solid #263246;border-radius:10px;margin-top:10px;color:#aab6c8;font-size:12px;line-height:1.5}
 @media(max-width:720px){.grid{grid-template-columns:1fr}.wallets{grid-template-columns:1fr}}
 </style>
+<style>html.auth-pending body{visibility:hidden}</style>
+<script>
+document.documentElement.classList.add('auth-pending');
+(async()=>{
+ const token=localStorage.getItem('kalyx_session');
+ if(!token){location.replace('/auth?next='+encodeURIComponent('/onboarding'));return;}
+ try{
+  const r=await fetch('/api/v1/product/me',{headers:{Authorization:'Bearer '+token}});
+  if(!r.ok)throw new Error();
+  document.documentElement.classList.remove('auth-pending');
+ }catch(_){localStorage.removeItem('kalyx_session');location.replace('/auth?next='+encodeURIComponent('/onboarding'))}
+})();
+</script>
 </head>
 <body>
 <main>
@@ -102,7 +115,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
 <script>
 const $=id=>document.getElementById(id);
 let token=localStorage.getItem('kalyx_session')||'';
-let tenant='',org='',agent='',walletConnector=null,wagmiAdapter=null,appKit=null;
+let tenant='',org='',agent='',walletConnector=null,wagmiAdapter=null,appKit=null,wagmiCore=null;
 const auth=()=>token?{'Authorization':'Bearer '+token}:{};
 async function api(path,opts={}){
   const r=await fetch(path,{...opts,headers:{'Content-Type':'application/json',...auth(),...(opts.headers||{})}});
@@ -151,14 +164,17 @@ async function initWalletConnect(){
   try{
     const cdn='https://cdn.jsdelivr.net/npm/@reown/appkit-cdn@1.8.24/dist/appkit.min.js';
     const sdk=await import(cdn);
-    const {createAppKit,WagmiAdapter,WagmiCore}=sdk;
-    const network=WagmiCore.defineChain({
+    const {createAppKit,WagmiAdapter}=sdk;
+    const core=await import('https://cdn.jsdelivr.net/npm/@wagmi/core@2.18.1/+esm');
+    wagmiCore=core;
+    const network={
       id:cfg.chain.id,
       name:cfg.chain.name,
       nativeCurrency:{name:'Ether',symbol:'ETH',decimals:18},
       rpcUrls:{default:{http:[cfg.chain.rpc_url]}},
-      blockExplorers:{default:{name:'Robinhood Chain Explorer',url:cfg.chain.explorer}}
-    });
+      blockExplorers:{default:{name:'Robinhood Chain Explorer',url:cfg.chain.explorer}},
+      testnet:false
+    };
     wagmiAdapter=new WagmiAdapter({projectId:cfg.walletconnect.project_id,networks:[network]});
     appKit=createAppKit({
       adapters:[wagmiAdapter],
@@ -169,7 +185,7 @@ async function initWalletConnect(){
       metadata:{name:'Kalyx',description:'Governed autonomous organisations',url:location.origin,icons:[]},
       features:{analytics:false,email:false,socials:false}
     });
-    window.__kalyxWallet={appKit,wagmiAdapter,WagmiCore};
+    window.__kalyxWallet={appKit,wagmiAdapter,wagmiCore};
   }catch(e){
     $('walletConnect').disabled=true;
     out('walletConfig','WalletConnect failed to initialize: '+e.message);
@@ -183,15 +199,15 @@ $('walletConnect').onclick=async()=>{
     out('identity','Waiting for wallet approval…');
     let account=null;
     for(let i=0;i<50;i++){
-      account=window.__kalyxWallet.WagmiCore.getAccount(wagmiAdapter.wagmiConfig);
+      account=window.__kalyxWallet.wagmiCore.getAccount(wagmiAdapter.wagmiConfig);
       if(account?.isConnected&&account.address)break;
       await new Promise(r=>setTimeout(r,300));
     }
     if(!account?.address)throw new Error('Wallet connection was not completed.');
-    const chainId=window.__kalyxWallet.WagmiCore.getChainId(wagmiAdapter.wagmiConfig);
+    const chainId=window.__kalyxWallet.wagmiCore.getChainId(wagmiAdapter.wagmiConfig);
     const ch=await api('/api/v1/product/auth/wallet/challenge',{method:'POST',body:JSON.stringify({address:account.address,chain_id:chainId})});
     out('identity','Wallet connected · approve the Kalyx sign-in message in your wallet…');
-    const sig=await window.__kalyxWallet.WagmiCore.signMessage(wagmiAdapter.wagmiConfig,{message:ch.message});
+    const sig=await window.__kalyxWallet.wagmiCore.signMessage(wagmiAdapter.wagmiConfig,{message:ch.message});
     const v=await api('/api/v1/product/auth/wallet/verify',{method:'POST',body:JSON.stringify({challenge_id:ch.challenge_id,signature:sig})});
     token=v.token;localStorage.setItem('kalyx_session',token);
     setIdentity(v.wallet,v.chain_id,'WalletConnect');
