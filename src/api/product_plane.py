@@ -536,6 +536,37 @@ def create_agent_key(
         db.close()
 
 
+@router.get("/agent/me")
+def agent_me(x_kalyx_agent_key: Optional[str] = Header(default=None, alias="X-Kalyx-Agent-Key")) -> dict[str, Any]:
+    if not x_kalyx_agent_key:
+        raise HTTPException(status_code=401, detail="Kalyx agent credential required")
+    db = create_database()
+    try:
+        ensure_product_schema(db)
+        row = db.conn.execute(
+            "SELECT id,tenant_id,organisation_id,agent_id,scopes_json,expires_at FROM agent_credentials WHERE key_hash = ? AND revoked = 0",
+            (_hash_agent_key(x_kalyx_agent_key),),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=401, detail="Invalid or revoked Kalyx agent credential")
+        if row["expires_at"] is not None and time.time() > float(row["expires_at"]):
+            raise HTTPException(status_code=401, detail="Kalyx agent credential expired")
+        db.conn.execute(
+            "UPDATE agent_credentials SET last_used_at = ? WHERE id = ?",
+            (_now(), row["id"]),
+        )
+        db.conn.commit()
+        return {
+            "credential_id": row["id"],
+            "tenant_id": row["tenant_id"],
+            "organisation_id": row["organisation_id"],
+            "agent_id": row["agent_id"],
+            "scopes": json.loads(row["scopes_json"]),
+        }
+    finally:
+        db.close()
+
+
 @router.post("/organisations/{org_id}/agents/{agent_id}/keys/rotate")
 def rotate_agent_key(
     org_id: str,
