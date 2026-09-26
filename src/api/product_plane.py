@@ -217,6 +217,12 @@ class WorkspaceCreateRequest(BaseModel):
     name: str = Field(min_length=2, max_length=120)
 
 
+class MissionCreateRequest(BaseModel):
+    objective: str = Field(min_length=3, max_length=2_000)
+    budget: int = Field(default=25, ge=1, le=1_000)
+    live: bool = False
+
+
 class OrganisationCreateRequest(BaseModel):
     name: str = Field(min_length=2, max_length=120)
     mission: str = Field(min_length=3, max_length=2_000)
@@ -676,6 +682,40 @@ def list_policies(org_id: str, authorization: Optional[str] = Header(default=Non
             {**dict(r), "config": json.loads(r["config_json"] or "{}")}
             for r in rows
         ]
+    finally:
+        db.close()
+
+
+@router.post("/organisations/{org_id}/missions")
+def create_mission(
+    org_id: str,
+    request: MissionCreateRequest,
+    authorization: Optional[str] = Header(default=None, alias="Authorization"),
+) -> dict[str, Any]:
+    db = create_database()
+    try:
+        ensure_product_schema(db)
+        _, principal_id, _ = _authenticate(db, authorization)
+        tenant_id, _ = _require_org(db, principal_id, org_id)
+        policy = get_active_policy_config(db, org_id)
+        if not policy:
+            raise HTTPException(status_code=409, detail="Configure an organisation policy before creating missions")
+        ceo = db.conn.execute(
+            "SELECT id FROM agents WHERE org_id = ? AND upper(role) = 'CEO' AND status NOT IN ('SUSPENDED','RETIRED') LIMIT 1",
+            (org_id,),
+        ).fetchone()
+        if not ceo:
+            raise HTTPException(status_code=409, detail="Create an active CEO agent before creating missions")
+        if request.budget > int(policy.get("spending_ceiling", 25)):
+            raise HTTPException(status_code=403, detail="Mission budget exceeds organisation policy ceiling")
+        from src.api.mission_service import run_mission
+        return run_mission(
+            request.objective,
+            request.budget,
+            live=request.live,
+            tenant_id=tenant_id,
+            organisation_id=org_id,
+        )
     finally:
         db.close()
 
