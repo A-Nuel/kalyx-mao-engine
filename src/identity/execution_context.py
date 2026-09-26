@@ -7,6 +7,7 @@ for request/execution ownership without trusting client-supplied identifiers.
 
 from dataclasses import dataclass
 from typing import Optional
+from contextvars import ContextVar
 
 from src.identity.context import IdentityContext
 
@@ -55,3 +56,22 @@ class ExecutionContext:
 
     def can_administer(self) -> bool:
         return self.role in {"owner", "admin"}
+
+
+_current_execution_context: ContextVar[Optional[ExecutionContext]] = ContextVar(
+    "kalyx_execution_context", default=None
+)
+
+
+def set_current_execution_context(context: ExecutionContext):
+    """Bind trusted execution scope to the current request/task."""
+    return _current_execution_context.set(context)
+
+
+def reset_current_execution_context(token) -> None:
+    _current_execution_context.reset(token)
+
+
+def current_execution_context() -> Optional[ExecutionContext]:
+    """Return the trusted execution scope for the current request/task."""
+    return _current_execution_context.get()

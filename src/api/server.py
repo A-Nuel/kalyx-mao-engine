@@ -17,7 +17,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from src.api.bootstrap import ensure_started, is_production, policy_secret
 from src.api.config import cors_origins, operator_key, require_operator_auth
 from src.api.identity_auth import require_identity_for_org, require_identity_for_tenant, require_write_permission
-from src.identity.execution_context import ExecutionContext
+from src.identity.execution_context import ExecutionContext, current_execution_context, reset_current_execution_context, set_current_execution_context
 from src.api.mission_service import run_mission
 from src.api.security_middleware import CorrelationIdMiddleware, RateLimitMiddleware, RequestBodyLimitMiddleware
 from src.persistence.factory import create_database, create_scoped_ledger
@@ -535,6 +535,9 @@ class IdentityAuthorizationMiddleware(BaseHTTPMiddleware):
                         organisation_id=(target_org_id if len(parts) >= org_idx + 2 else None),
                         request_id=getattr(request.state, "request_id", None),
                     )
+                    execution_context_token = set_current_execution_context(request.state.execution_context)
+                else:
+                    execution_context_token = None
 
                 # Check write permissions on mutation actions (pause, resume, reconcile, work orders, daemon step)
                 if request.method in {"POST", "PUT", "DELETE", "PATCH"}:
@@ -546,6 +549,8 @@ class IdentityAuthorizationMiddleware(BaseHTTPMiddleware):
                 )
             return await call_next(request)
         finally:
+            if "execution_context_token" in locals() and execution_context_token is not None:
+                reset_current_execution_context(execution_context_token)
             db.close()
 
 
@@ -563,6 +568,16 @@ def _db():
 
 
 def _org_id_or_404(db, org_id: str) -> Dict[str, Any]:
+    context = current_execution_context()
+    if context is not None:
+        row = db.conn.execute(
+            "SELECT * FROM organisations WHERE id = ? AND tenant_id = ?",
+            (org_id, context.tenant_id),
+        ).fetchone()
+        if not row or (context.organisation_id is not None and row["id"] != context.organisation_id):
+            raise HTTPException(status_code=404, detail="Organisation not found")
+        return dict(row)
+
     row = db.conn.execute("SELECT * FROM organisations WHERE id = ?", (org_id,)).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Organisation not found")
