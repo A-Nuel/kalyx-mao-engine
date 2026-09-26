@@ -273,6 +273,11 @@ class ConfiguredGovernanceRule:
         allowed_targets = set(self.config.get("allowed_targets") or [])
         if allowed_targets and proposal.target not in allowed_targets:
             return f"Target '{proposal.target}' is not allowed by the organisation policy profile"
+        allowed_providers = set(self.config.get("allowed_providers") or [])
+        if allowed_providers:
+            provider = proposal.parameters.get("provider") or proposal.parameters.get("provider_name")
+            if not provider or provider not in allowed_providers:
+                return f"Provider '{provider or 'unspecified'}' is not allowed by the organisation policy profile"
         return None
 
 
