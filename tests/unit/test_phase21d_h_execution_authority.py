@@ -94,6 +94,8 @@ def test_durable_approval_binds_principal_org_authority_intent_and_policy():
 def test_approval_cannot_cross_organisation_or_authority():
     db = Database(":memory:")
     try:
+        db.conn.execute("INSERT INTO tenants (id, name) VALUES ('tenant-a', 'Tenant A')")
+        db.conn.execute("INSERT INTO organisations (id, tenant_id, name) VALUES ('org-a', 'tenant-a', 'Org A')")
         manager = ExecutionApprovalManager(db, "test-secret")
         approval = manager.issue(
             tenant_id="tenant-a",
@@ -134,6 +136,9 @@ def test_approval_cannot_cross_organisation_or_authority():
 def test_multi_org_e2e_scope_separation():
     db = Database(":memory:")
     try:
+        db.conn.execute("INSERT INTO tenants (id, name) VALUES ('tenant-a', 'Tenant A')")
+        db.conn.execute("INSERT INTO organisations (id, tenant_id, name) VALUES ('org-a', 'tenant-a', 'Org A')")
+        db.conn.execute("INSERT INTO organisations (id, tenant_id, name) VALUES ('org-b', 'tenant-a', 'Org B')")
         manager = ExecutionApprovalManager(db, "test-secret")
         for org in ("org-a", "org-b"):
             approval = manager.issue(
