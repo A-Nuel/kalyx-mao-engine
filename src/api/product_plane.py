@@ -246,6 +246,7 @@ class PolicyCreateRequest(BaseModel):
     per_agent_ceiling: int = Field(default=25, ge=0, le=1_000_000)
     daily_compute_budget: int = Field(default=100, ge=0, le=1_000_000)
     compute_call_limit: int = Field(default=8, ge=0, le=1_000)
+    per_agent_compute_call_limit: int = Field(default=3, ge=0, le=100)
     max_prompt_chars: int = Field(default=20_000, ge=1_000, le=100_000)
 
 
