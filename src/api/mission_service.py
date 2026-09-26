@@ -24,6 +24,7 @@ from src.governance.human_gate import HumanGate
 from src.governance.policy_engine import PolicyEngine
 from src.api.product_plane import ConfiguredGovernanceRule, get_active_policy_config
 from src.orchestration.engine import OrchestrationEngine
+from src.orchestration.budget import BudgetedAgentAdapter
 from src.persistence.economy_repo import EconomyRepository
 from src.persistence.factory import create_database, create_sqlite, create_scoped_ledger
 from src.persistence.repositories import SqliteEventStore, SqliteRepository
@@ -127,9 +128,20 @@ def run_mission(
         auditor = Auditor(verification_secret=secret)
         mock = MockAgentAdapter()
         adapter = (
-            OpenRouterAgentAdapter(fallback_adapter=mock, fallback_on_error=True)
+            OpenRouterAgentAdapter(
+                fallback_adapter=mock,
+                fallback_on_error=True,
+                max_output_tokens=int(os.getenv("KALYX_LLM_MAX_OUTPUT_TOKENS", "1024")),
+            )
             if live and os.getenv("OPENROUTER_API_KEY")
             else mock
+        )
+        # The CEO and every delegated agent share a bounded orchestration budget.
+        # A single agent cannot turn an LLM loop into unbounded provider spend.
+        adapter = BudgetedAgentAdapter(
+            adapter,
+            max_calls=int(policy_config.get("compute_call_limit", 8)),
+            max_prompt_chars=int(policy_config.get("max_prompt_chars", 20_000)),
         )
         # Initialize economy repository and run deterministic resource allocation with historical records
         economy_repo = EconomyRepository(db.conn)
