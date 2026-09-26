@@ -26,7 +26,7 @@ a{color:#9bb8ff;text-decoration:none}
 const $=id=>document.getElementById(id);let appKit=null,adapter=null,core=null;
 async function api(path,opts={}){const r=await fetch(path,{...opts,headers:{'Content-Type':'application/json',...(opts.headers||{})}});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Request failed');return d}
 function status(x){$('status').textContent=x}
-function go(v){localStorage.setItem('kalyx_session',v.token);location.href='/onboarding'}
+function go(v){localStorage.setItem('kalyx_session',v.token);const next=new URLSearchParams(location.search).get('next');location.href=next||'/onboarding'}
 async function init(){
  const cfg=await api('/api/v1/product/auth/wallet/config');
  if(!cfg.walletconnect.configured){$('walletConnect').disabled=true;status('WalletConnect is not configured on this deployment yet.\nUse Browser Wallet or configure KALYX_REOWN_PROJECT_ID.');return}
