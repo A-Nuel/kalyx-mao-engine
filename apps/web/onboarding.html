@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kalyx — Create Organisation</title>
+<style>
+:root{color-scheme:dark;font-family:Inter,system-ui,sans-serif;background:#07080b;color:#eef2f7}
+body{margin:0;min-height:100vh;background:radial-gradient(circle at 20% 0%,#172033 0,#07080b 45%);display:grid;place-items:center}
+main{width:min(920px,92vw);padding:36px 0}.brand{font:700 14px ui-monospace,monospace;letter-spacing:.18em;color:#8fb4ff}
+h1{font-size:clamp(32px,5vw,58px);margin:12px 0 8px}.sub{color:#9ca8ba;max-width:680px;line-height:1.6}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:28px}
+.card{background:#0c1017d9;border:1px solid #202936;border-radius:18px;padding:22px;box-shadow:0 20px 70px #0006}
+.card h2{font-size:16px;margin:0 0 8px}.muted{color:#7f8b9d;font-size:13px;line-height:1.5}
+input,select,button{width:100%;box-sizing:border-box;border-radius:11px;border:1px solid #2a3442;background:#090c11;color:#eef2f7;padding:12px;margin-top:10px}
+button{cursor:pointer;background:#dbe7ff;color:#0a0d12;font-weight:700}.secondary{background:#121923;color:#d7e1ef}
+button:disabled{opacity:.45;cursor:not-allowed}
+.step{display:flex;gap:10px;align-items:center;margin:8px 0;font-size:13px}.dot{width:8px;height:8px;border-radius:50%;background:#475569}.ok .dot{background:#75e3ad}.status{margin-top:18px;color:#8fb4ff;font:12px ui-monospace,monospace;white-space:pre-wrap}
+@media(max-width:720px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main>
+<div class="brand">KALYX · PRODUCT PLANE</div>
+<h1>Build your autonomous organisation.</h1>
+<p class="sub">Wallet-first identity, governed agents, configurable policy and provider connections. Your agents propose; Kalyx still authorizes and executes.</p>
+<div class="grid">
+<section class="card">
+<h2>01 · Identity</h2>
+<p class="muted">Connect a wallet and sign a non-transaction authentication message.</p>
+<button id="connect">Connect wallet</button>
+<button id="social" class="secondary" disabled>Social login · configure provider</button>
+<div id="identity" class="status"></div>
+</section>
+<section class="card">
+<h2>02 · Workspace</h2>
+<p class="muted">A workspace is your tenant boundary. You can belong to more than one.</p>
+<input id="workspaceName" placeholder="Workspace name" value="My Workspace">
+<button id="workspace" disabled>Create workspace</button>
+<div id="workspaceOut" class="status"></div>
+</section>
+<section class="card">
+<h2>03 · Organisation</h2>
+<p class="muted">Create the economic and governance boundary where agents operate.</p>
+<input id="orgName" placeholder="Organisation name" value="Autonomous Organisation">
+<input id="mission" placeholder="Mission" value="Build and operate governed autonomous systems">
+<button id="org" disabled>Create organisation</button>
+<div id="orgOut" class="status"></div>
+</section>
+<section class="card">
+<h2>04 · CEO / Agent</h2>
+<p class="muted">The CEO is the intelligence/orchestration layer, not an execution authority.</p>
+<input id="agentName" placeholder="CEO agent name" value="CEO">
+<input id="model" placeholder="Model" value="openai/gpt-4o-mini">
+<button id="agent" disabled>Create CEO agent</button>
+<div id="agentOut" class="status"></div>
+</section>
+<section class="card">
+<h2>05 · Governance</h2>
+<p class="muted">Hard budget and approval boundaries apply before an external action is executed.</p>
+<input id="spend" type="number" min="0" value="25" placeholder="Spend ceiling">
+<input id="approval" type="number" min="0" value="20" placeholder="Human approval threshold">
+<button id="policy" disabled>Create policy</button>
+<div id="policyOut" class="status"></div>
+</section>
+<section class="card">
+<h2>06 · Provider</h2>
+<p class="muted">Provider secrets are encrypted at rest. Agents receive Kalyx-scoped credentials, not the provider master key.</p>
+<select id="provider"><option value="orbio">Orbio</option><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option><option value="gemini">Gemini</option></select>
+<input id="providerKey" type="password" placeholder="Provider API key (optional for delegated connections)">
+<button id="providerBtn" disabled>Connect provider</button>
+<div id="providerOut" class="status"></div>
+</section>
+</div>
+<section class="card" style="margin-top:16px">
+<h2>Readiness</h2>
+<div id="readiness">
+<div class="step" id="rIdentity"><span class="dot"></span>Identity</div>
+<div class="step" id="rOrg"><span class="dot"></span>Organisation</div>
+<div class="step" id="rAgent"><span class="dot"></span>CEO agent</div>
+<div class="step" id="rPolicy"><span class="dot"></span>Policy</div>
+<div class="step" id="rProvider"><span class="dot"></span>Provider</div>
+</div>
+<div id="ready" class="status"></div>
+</section>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+let token=localStorage.getItem('kalyx_session')||'';
+let tenant='',org='',agent='';
+const auth=()=>token?{'Authorization':'Bearer '+token}:{};
+async function api(path,opts={}){const r=await fetch(path,{...opts,headers:{'Content-Type':'application/json',...auth(),...(opts.headers||{})}});const d=await r.json();if(!r.ok)throw new Error(d.detail||d.message||'Request failed');return d}
+function out(id,msg){$(id).textContent=msg}
+function enable(){['workspace','org','agent','policy','providerBtn'].forEach(x=>$(x).disabled=!token)}
+function mark(id,ok){$(id).classList.toggle('ok',!!ok)}
+async function refresh(){if(!token)return;const m=await api('/api/v1/product/me');tenant=m.workspace.tenant_id;mark('rIdentity',true);out('identity','Connected · '+(m.identities?.[0]?.subject||'wallet'));enable()}
+$('connect').onclick=async()=>{try{
+if(!window.ethereum)throw new Error('No EVM wallet detected. Open Kalyx in a wallet-enabled browser.');
+const [address]=await window.ethereum.request({method:'eth_requestAccounts'});
+const ch=await api('/api/v1/product/auth/wallet/challenge',{method:'POST',body:JSON.stringify({address,chain_id:4663})});
+const sig=await window.ethereum.request({method:'personal_sign',params:[ch.message,address]});
+const v=await api('/api/v1/product/auth/wallet/verify',{method:'POST',body:JSON.stringify({challenge_id:ch.challenge_id,signature:sig})});
+token=v.token;localStorage.setItem('kalyx_session',token);await refresh();
+}catch(e){out('identity',e.message)}};
+$('workspace').onclick=async()=>{try{const w=await api('/api/v1/product/workspaces',{method:'POST',body:JSON.stringify({name:$('workspaceName').value})});tenant=w.tenant_id;out('workspaceOut','Created · '+tenant);mark('rOrg',false);$('org').disabled=false}catch(e){out('workspaceOut',e.message)}};
+$('org').onclick=async()=>{try{const d=await api('/api/v1/product/workspaces/'+encodeURIComponent(tenant)+'/organisations',{method:'POST',body:JSON.stringify({name:$('orgName').value,mission:$('mission').value})});org=d.organisation_id;out('orgOut','Created · '+org);mark('rOrg',true);$('agent').disabled=false}catch(e){out('orgOut',e.message)}};
+$('agent').onclick=async()=>{try{const d=await api('/api/v1/product/organisations/'+encodeURIComponent(org)+'/agents',{method:'POST',body:JSON.stringify({name:$('agentName').value,role:'CEO',model_name:$('model').value,authority_ceiling:25,allowed_action_types:['INTERNAL_ANALYSIS','DATA_FETCH','REPLAN']})});agent=d.agent_id;out('agentOut','Created · '+agent);mark('rAgent',true);const k=await api('/api/v1/product/organisations/'+encodeURIComponent(org)+'/agents/'+encodeURIComponent(agent)+'/keys',{method:'POST'});out('agentOut','Created · '+agent+'\nKalyx credential: '+k.key+'\nStore it securely; shown once.');$('policy').disabled=false}catch(e){out('agentOut',e.message)}};
+$('policy').onclick=async()=>{try{await api('/api/v1/product/organisations/'+encodeURIComponent(org)+'/policies',{method:'POST',body:JSON.stringify({name:'Default Governance',spending_ceiling:+$('spend').value,human_approval_threshold:+$('approval').value,allowed_actions:['INTERNAL_ANALYSIS','DATA_FETCH','REPLAN'],daily_compute_budget:100,compute_call_limit:8,per_agent_compute_call_limit:3,max_prompt_chars:20000})});out('policyOut','Policy active · spend '+$('spend').value+' · human approval '+$('approval').value);mark('rPolicy',true);$('providerBtn').disabled=false}catch(e){out('policyOut',e.message)}};
+$('providerBtn').onclick=async()=>{try{const d=await api('/api/v1/product/organisations/'+encodeURIComponent(org)+'/providers',{method:'POST',body:JSON.stringify({provider:$('provider').value,connection_type:'api_key',api_key:$('providerKey').value||null})});out('providerOut','Connected · '+d.provider+' · secret returned: '+d.secret_returned);mark('rProvider',true);const b=await api('/api/v1/product/organisations/'+encodeURIComponent(org)+'/bootstrap');out('ready',JSON.stringify(b.readiness,null,2));if(b.readiness.ready_for_mission)out('ready','READY FOR GOVERNED MISSION\n'+JSON.stringify(b.readiness,null,2))}catch(e){out('providerOut',e.message)}};
+refresh().catch(()=>{});
+</script>
+</body>
+</html>
