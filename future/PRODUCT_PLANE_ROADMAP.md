@@ -44,103 +44,103 @@
 ## 22A–22F — Identity → Organisation → Agents → Providers → Policies
 
 ### 22A — Account & Identity
-- [ ] Wallet-first account creation
-- [ ] Wallet challenge/signature verification
-- [ ] Session/token lifecycle
-- [ ] User identity records
-- [ ] Wallet identity records
-- [ ] Social-login adapter boundary
-- [ ] No private-key/seed storage
+- [x] Wallet-first account creation
+- [x] Wallet challenge/signature verification
+- [x] Session/token lifecycle
+- [x] User identity records
+- [x] Wallet identity records
+- [x] Social-login adapter boundary
+- [x] No private-key/seed storage
 
 ### 22B — Workspace / Tenant
-- [ ] Create workspace
-- [ ] Owner membership
-- [ ] Workspace membership model
-- [ ] Workspace-scoped API access
-- [ ] Tenant isolation checks
-- [ ] First-login bootstrap
+- [x] Create workspace
+- [x] Owner membership
+- [x] Workspace membership model
+- [x] Workspace-scoped API access
+- [x] Tenant isolation checks
+- [x] First-login bootstrap
 
 ### 22C — Organisation Builder
-- [ ] Create organisation
-- [ ] Organisation lifecycle
-- [ ] Owner/admin/operator/viewer controls
-- [ ] Organisation dashboard bootstrap
-- [ ] Treasury/configuration boundary
+- [x] Create organisation
+- [x] Organisation lifecycle
+- [x] Owner/admin/operator/viewer controls
+- [x] Organisation dashboard bootstrap
+- [x] Treasury/configuration boundary
 
 ### 22D — Agent Management
-- [ ] Create/configure agent
-- [ ] Agent role
-- [ ] Capabilities
-- [ ] Allowed action types
-- [ ] Authority ceiling
-- [ ] Agent lifecycle controls
-- [ ] Kalyx agent credentials
-- [ ] Credential rotation/revocation
-- [ ] Agent credentials never expose provider master secrets
+- [x] Create/configure agent
+- [x] Agent role
+- [x] Capabilities
+- [x] Allowed action types
+- [x] Authority ceiling
+- [x] Agent lifecycle controls
+- [x] Kalyx agent credentials
+- [x] Credential rotation/revocation
+- [x] Agent credentials never expose provider master secrets
 
 ### 22E — Provider Connections
-- [ ] Provider registry
-- [ ] Orbio connection boundary
+- [x] Provider registry
+- [x] Orbio connection boundary
 - [ ] OpenAI connection
 - [ ] Anthropic connection
 - [ ] Gemini connection
-- [ ] Generic OpenAI-compatible provider
-- [ ] API-key encryption at rest
-- [ ] Never store provider keys as plaintext
-- [ ] Prefer delegated/OAuth connection when provider supports it
+- [x] Generic OpenAI-compatible provider
+- [x] API-key encryption at rest
+- [x] Never store provider keys as plaintext
+- [x] Prefer delegated/OAuth connection when provider supports it
 - [ ] Provider health/status
 - [ ] Provider spend/budget boundary
 
 ### 22F — Configurable Governance
-- [ ] Persist organisation policy profiles
-- [ ] Spending limits
-- [ ] Human-approval thresholds
-- [ ] Allowed actions
-- [ ] Target/provider allowlists
-- [ ] Per-agent ceilings
-- [ ] Policy versioning
+- [x] Persist organisation policy profiles
+- [x] Spending limits
+- [x] Human-approval thresholds
+- [x] Allowed actions
+- [x] Target/provider allowlists
+- [x] Per-agent ceilings
+- [x] Policy versioning
 - [ ] Policy preview
-- [ ] Governance remains non-bypassable
-- [ ] User policy configuration cannot disable Kalyx core safety invariants
+- [x] Governance remains non-bypassable
+- [x] User policy configuration cannot disable Kalyx core safety invariants
 
 ## 22G–22I — Orchestrator → Mission → Beta Security
 
 ### 22G — Governed CEO / Orchestrator
 - [ ] CEO/orchestrator identity
 - [ ] Objective intake
-- [ ] Task decomposition
+- [x] Task decomposition
 - [ ] Agent delegation
-- [ ] Orchestrator cannot directly execute
-- [ ] Orchestrator cannot mint/consume unrestricted provider credentials
-- [ ] Orchestrator compute budget
-- [ ] Per-agent compute budgets
+- [x] Orchestrator cannot directly execute
+- [x] Orchestrator cannot mint/consume unrestricted provider credentials
+- [x] Orchestrator compute budget
+- [x] Per-agent compute budgets
 - [ ] Model/tool allowlists
 - [ ] Spend/usage accounting
-- [ ] Loop/retry limits
-- [ ] Human escalation
-- [ ] Kill switch
+- [x] Loop/retry limits
+- [x] Human escalation
+- [x] Kill switch
 
 ### 22H — Mission / Organisation Runtime
-- [ ] Create mission from human objective
-- [ ] Plan → propose → authorize → execute → verify → settle
-- [ ] Mission budget
+- [x] Create mission from human objective
+- [x] Plan → propose → authorize → execute → verify → settle
+- [x] Mission budget
 - [ ] Mission deadline
 - [ ] Mission resource reservation
 - [ ] Async-friendly execution boundary
-- [ ] Mission event stream
-- [ ] Failure/reconciliation state
+- [x] Mission event stream
+- [x] Failure/reconciliation state
 - [ ] Organisation LIVE readiness state
 
 ### 22I — Beta / Security / Scale Gate
-- [ ] First-user onboarding E2E
-- [ ] Multi-user isolation E2E
-- [ ] Agent credential E2E
-- [ ] Provider credential secrecy tests
-- [ ] CEO spend-boundary tests
-- [ ] Policy bypass/adversarial tests
-- [ ] Rate-limit/load protections
-- [ ] Production auth verification
-- [ ] CI green on Python 3.11/3.12, SQLite, PostgreSQL, container
+- [x] First-user onboarding E2E
+- [x] Multi-user isolation E2E
+- [x] Agent credential E2E
+- [x] Provider credential secrecy tests
+- [x] CEO spend-boundary tests
+- [x] Policy bypass/adversarial tests
+- [x] Rate-limit/load protections
+- [x] Production auth verification
+- [x] CI green on Python 3.11/3.12, SQLite, PostgreSQL, container
 - [ ] Merge Phase 22
 
 ---
