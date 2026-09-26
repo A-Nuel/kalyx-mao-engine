@@ -9,7 +9,7 @@ This document separates **deployable software infrastructure** from **live conse
 
 | Gate | Status | Notes |
 |---|---|---|
-| Automated CI | IN PROGRESS | Must be green on the final branch head before merge. |
+| Automated CI | GREEN | Phase 21D–21H PR #38 completed the Python 3.11/3.12 matrix, SQLite suite, PostgreSQL integration suite, production container build, dependency checks, JavaScript syntax check, and Python compilation. |
 | Python 3.11 / 3.12 | REQUIRED | Matrix is enforced by GitHub Actions. |
 | Production container build | REQUIRED | CI builds the production image on Python 3.12. |
 | PostgreSQL integration | REQUIRED | Production persistence path must pass its integration suite. |
@@ -65,7 +65,7 @@ Therefore the correct release description is:
 
 ## Merge gate
 
-Do not merge Phase 21D–21H until the **final branch head** has a green CI run covering:
+The Phase 21D–21H merge gate is satisfied: the **final branch head** has a green CI run covering:
 
 - Python 3.11
 - Python 3.12
