@@ -15,7 +15,7 @@
 
 ## Current Release Status — September 2026
 
-Kalyx is being prepared as a standalone, deployable control-plane project. The repository currently has:
+Kalyx is a standalone, deployable control-plane project. The repository currently has:
 
 - **Production configuration gates**: production mode requires PostgreSQL, non-demo governance secrets, operator authentication, and explicit identity authentication.
 - **Durable governance**: deterministic policy authorization, durable authorization consumption, tenant/organisation isolation, and tamper-evident audit records.
@@ -26,7 +26,7 @@ Kalyx is being prepared as a standalone, deployable control-plane project. The r
 
 ### Important deployment boundary
 
-**Production-ready software infrastructure is not the same thing as autonomous economic execution with real funds.**
+**Deployable production infrastructure is not the same thing as autonomous economic execution with real funds.**
 
 Kalyx can be deployed as a standalone governed control plane, but live consequential providers must still be enabled deliberately and supplied with their own operational credentials. The repository does **not** claim that a live Orbio economic settlement has been completed: the verified Sepolia transaction was an infrastructure smoke test, and the Orbio CREDIT activation path has passed mainnet preflight but has not been broadcast through Kalyx.
 
