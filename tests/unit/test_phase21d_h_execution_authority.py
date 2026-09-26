@@ -20,9 +20,9 @@ def _seed_scope(db, tenant="tenant-a", organisations=("org-a",)):
     for org in organisations:
         db.conn.execute(
             """INSERT INTO organisations
-               (id, tenant_id, name, mission, treasury_balance, state, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (org, tenant, org.replace("-", " ").title(), "test", 0, "ACTIVE", now),
+               (id, tenant_id, mission, treasury_balance, state, created_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (org, tenant, "test", 0, "PLANNING", now),
         )
     db.conn.commit()
 
