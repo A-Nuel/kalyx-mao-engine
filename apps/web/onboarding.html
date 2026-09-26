@@ -21,6 +21,19 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .notice{padding:10px 12px;border:1px solid #263246;border-radius:10px;margin-top:10px;color:#aab6c8;font-size:12px;line-height:1.5}
 @media(max-width:720px){.grid{grid-template-columns:1fr}.wallets{grid-template-columns:1fr}}
 </style>
+<style>html.auth-pending body{visibility:hidden}</style>
+<script>
+document.documentElement.classList.add('auth-pending');
+(async()=>{
+ const token=localStorage.getItem('kalyx_session');
+ if(!token){location.replace('/auth?next='+encodeURIComponent('/onboarding'));return;}
+ try{
+  const r=await fetch('/api/v1/product/me',{headers:{Authorization:'Bearer '+token}});
+  if(!r.ok)throw new Error();
+  document.documentElement.classList.remove('auth-pending');
+ }catch(_){localStorage.removeItem('kalyx_session');location.replace('/auth?next='+encodeURIComponent('/onboarding'))}
+})();
+</script>
 </head>
 <body>
 <main>
