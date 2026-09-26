@@ -2144,6 +2144,10 @@ if os.path.isdir(WEB_ROOT):
     def landing() -> FileResponse:
         return FileResponse(os.path.join(WEB_ROOT, "landing.html"))
 
+    @app.get("/onboarding")
+    def onboarding() -> FileResponse:
+        return FileResponse(os.path.join(WEB_ROOT, "onboarding.html"))
+
     @app.get("/command-centre")
     def command_centre() -> FileResponse:
         return FileResponse(os.path.join(WEB_ROOT, "index.html"))
