@@ -22,7 +22,7 @@ from src.economy.allocator import ResourceAllocator
 from src.economy.reputation import ReputationEngine
 from src.governance.human_gate import HumanGate
 from src.governance.policy_engine import PolicyEngine
-from src.api.product_plane import ConfiguredGovernanceRule, get_active_policy_config
+from src.api.product_plane import ConfiguredGovernanceRule, get_active_policy_config, ensure_product_schema
 from src.orchestration.engine import OrchestrationEngine
 from src.orchestration.budget import BudgetedAgentAdapter
 from src.persistence.economy_repo import EconomyRepository
@@ -59,6 +59,7 @@ def run_mission(
     else:
         db = create_database()
     try:
+        ensure_product_schema(db)
         repo = SqliteRepository(db)
         existing_org = repo.load_organisation(organisation_id) if organisation_id else None
         if existing_org:
