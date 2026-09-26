@@ -413,7 +413,28 @@ CREATE TABLE IF NOT EXISTS admin_approvals (
     FOREIGN KEY (tenant_id) REFERENCES tenants(id)
 );
 CREATE INDEX IF NOT EXISTS idx_admin_approvals_target ON admin_approvals (tenant_id, target_id, action_type);
-CREATE INDEX IF NOT EXISTS idx_admin_approvals_hash ON admin_approvals (payload_hash);
+CREATE INDEX IF NOT EXISTS idx_admin_approvals_hash ON admin_approvals (payload_hash);\n
+CREATE TABLE IF NOT EXISTS execution_approvals (
+    approval_id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    organisation_id TEXT NOT NULL,
+    principal_id TEXT NOT NULL,
+    authority_id TEXT NOT NULL,
+    intent_hash TEXT NOT NULL,
+    policy_decision_id TEXT NOT NULL,
+    policy_decision_hash TEXT NOT NULL,
+    issued_at REAL NOT NULL,
+    expires_at REAL NOT NULL,
+    signature TEXT NOT NULL,
+    consumed INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id),
+    FOREIGN KEY (organisation_id) REFERENCES organisations(id)
+);
+CREATE INDEX IF NOT EXISTS idx_execution_approvals_scope
+    ON execution_approvals (tenant_id, organisation_id, authority_id);
+CREATE INDEX IF NOT EXISTS idx_execution_approvals_intent
+    ON execution_approvals (tenant_id, organisation_id, intent_hash);
 """
 
 class Database:
