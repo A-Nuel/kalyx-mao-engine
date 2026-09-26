@@ -181,3 +181,26 @@ def test_policy_ceiling_blocks_over_budget_mission(client):
         json={"objective": "Do something", "budget": 2},
     )
     assert result.status_code == 403
+
+
+def test_multiple_workspaces_are_not_implicitly_collapsed(client):
+    account = Account.create()
+    challenge = client.post("/api/v1/product/auth/wallet/challenge", json={"address": account.address}).json()
+    signed = Account.sign_message(encode_defunct(text=challenge["message"]), account.key)
+    token = client.post(
+        "/api/v1/product/auth/wallet/verify",
+        json={"challenge_id": challenge["challenge_id"], "signature": signed.signature.hex()},
+    ).json()["token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    first = client.get("/api/v1/product/me", headers=headers).json()["workspace"]["tenant_id"]
+    second = client.post("/api/v1/product/workspaces", headers=headers, json={"name": "Second Workspace"}).json()["tenant_id"]
+    assert first != second
+    workspaces = client.get("/api/v1/product/workspaces", headers=headers)
+    assert workspaces.status_code == 200
+    assert {w["id"] for w in workspaces.json()} >= {first, second}
+    org = client.post(
+        f"/api/v1/product/workspaces/{second}/organisations",
+        headers=headers,
+        json={"name": "Second Org", "mission": "Workspace isolation"},
+    )
+    assert org.status_code == 200
