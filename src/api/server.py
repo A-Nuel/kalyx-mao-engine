@@ -17,6 +17,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from src.api.bootstrap import ensure_started, is_production, policy_secret
 from src.api.config import cors_origins, operator_key, require_operator_auth
 from src.api.identity_auth import require_identity_for_org, require_identity_for_tenant, require_write_permission
+from src.api.product_plane import router as product_plane_router
 from src.identity.execution_context import ExecutionContext, current_execution_context, reset_current_execution_context, set_current_execution_context
 from src.api.mission_service import run_mission
 from src.api.security_middleware import CorrelationIdMiddleware, RateLimitMiddleware, RequestBodyLimitMiddleware
@@ -68,7 +69,8 @@ ensure_started()
 
 logger = logging.getLogger("kalyx.api")
 
-app = FastAPI(title="Kalyx Command Centre API", version="1.0.0-phase16")
+app = FastAPI(title="Kalyx Command Centre API", version="1.0.0-phase22")
+app.include_router(product_plane_router)
 app.add_middleware(CORSMiddleware, allow_origins=cors_origins(), allow_credentials=False, allow_methods=["GET", "POST"], allow_headers=["*"])
 
 
@@ -2141,6 +2143,10 @@ if os.path.isdir(WEB_ROOT):
     @app.get("/")
     def landing() -> FileResponse:
         return FileResponse(os.path.join(WEB_ROOT, "landing.html"))
+
+    @app.get("/onboarding")
+    def onboarding() -> FileResponse:
+        return FileResponse(os.path.join(WEB_ROOT, "onboarding.html"))
 
     @app.get("/command-centre")
     def command_centre() -> FileResponse:

@@ -24,7 +24,8 @@ class OpenRouterAgentAdapter(IAgentAdapter):
         base_url: str = "https://openrouter.ai/api/v1",
         fallback_adapter: Optional[IAgentAdapter] = None,
         fallback_on_error: bool = False,
-        mock_transport: Optional[Callable[[str, dict], dict]] = None
+        mock_transport: Optional[Callable[[str, dict], dict]] = None,
+        max_output_tokens: int = 1024,
     ):
         self.api_key = api_key or os.getenv("OPENROUTER_API_KEY")
         self.model = model
@@ -32,6 +33,7 @@ class OpenRouterAgentAdapter(IAgentAdapter):
         self.fallback_adapter = fallback_adapter
         self.fallback_on_error = fallback_on_error
         self.mock_transport = mock_transport
+        self.max_output_tokens = max(1, min(int(max_output_tokens), 8192))
 
     def _clean_json_content(self, text: str) -> str:
         """Strip markdown code fence blocks if present."""
@@ -68,7 +70,8 @@ class OpenRouterAgentAdapter(IAgentAdapter):
                 {"role": "user", "content": prompt}
             ],
             "response_format": {"type": "json_object"},
-            "temperature": 0.2
+            "temperature": 0.2,
+            "max_tokens": self.max_output_tokens,
         }
 
         try:

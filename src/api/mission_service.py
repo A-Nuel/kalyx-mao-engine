@@ -22,7 +22,9 @@ from src.economy.allocator import ResourceAllocator
 from src.economy.reputation import ReputationEngine
 from src.governance.human_gate import HumanGate
 from src.governance.policy_engine import PolicyEngine
+from src.api.product_plane import ConfiguredGovernanceRule, get_active_policy_config, ensure_product_schema
 from src.orchestration.engine import OrchestrationEngine
+from src.orchestration.budget import BudgetedAgentAdapter
 from src.persistence.economy_repo import EconomyRepository
 from src.persistence.factory import create_database, create_sqlite, create_scoped_ledger
 from src.persistence.repositories import SqliteEventStore, SqliteRepository
@@ -57,6 +59,7 @@ def run_mission(
     else:
         db = create_database()
     try:
+        ensure_product_schema(db)
         repo = SqliteRepository(db)
         existing_org = repo.load_organisation(organisation_id) if organisation_id else None
         if existing_org:
@@ -109,7 +112,13 @@ def run_mission(
                 repo.save_agent(agent, org.id)
         event_store = SqliteEventStore(db, verify_on_startup=True)
         secret = policy_secret()
-        policy = PolicyEngine(signing_secret=secret)
+        policy_config = get_active_policy_config(db, org.id)
+        policy = PolicyEngine(
+            signing_secret=secret,
+            human_approval_threshold=int(policy_config.get("human_approval_threshold", 40)),
+        )
+        if policy_config:
+            policy.rules.insert(0, ConfiguredGovernanceRule(policy_config))
         executor = DurableControlledExternalExecutor(
             policy_engine=policy,
             ledger=ledger,
@@ -120,10 +129,31 @@ def run_mission(
         auditor = Auditor(verification_secret=secret)
         mock = MockAgentAdapter()
         adapter = (
-            OpenRouterAgentAdapter(fallback_adapter=mock, fallback_on_error=True)
+            OpenRouterAgentAdapter(
+                fallback_adapter=mock,
+                fallback_on_error=True,
+                max_output_tokens=int(os.getenv("KALYX_LLM_MAX_OUTPUT_TOKENS", "1024")),
+            )
             if live and os.getenv("OPENROUTER_API_KEY")
             else mock
         )
+        # Two layers of budget: one organisation-wide hard ceiling and one
+        # per-agent envelope. A single agent cannot consume the whole allowance.
+        global_adapter = BudgetedAgentAdapter(
+            adapter,
+            max_calls=int(policy_config.get("compute_call_limit", 8)),
+            max_prompt_chars=int(policy_config.get("max_prompt_chars", 20_000)),
+        )
+        def bounded_agent_adapter():
+            return BudgetedAgentAdapter(
+                global_adapter,
+                max_calls=int(policy_config.get("per_agent_compute_call_limit", 3)),
+                max_prompt_chars=int(policy_config.get("max_prompt_chars", 20_000)),
+            )
+        ceo_adapter = bounded_agent_adapter()
+        researcher_adapter = bounded_agent_adapter()
+        strategist_adapter = bounded_agent_adapter()
+        finance_adapter = bounded_agent_adapter()
         # Initialize economy repository and run deterministic resource allocation with historical records
         economy_repo = EconomyRepository(db.conn)
         perf_records = {
@@ -148,8 +178,8 @@ def run_mission(
 
         engine = OrchestrationEngine(
             org=org, ledger=ledger, policy_engine=policy, executor=executor, event_store=event_store,
-            human_gate=HumanGate(), ceo=CEOAgent(ids["ceo"], adapter), researcher=ResearcherAgent(ids["research"], adapter),
-            strategist=StrategistAgent(ids["strategy"], adapter), financial_analyst=FinancialAnalystAgent(ids["finance"], adapter),
+            human_gate=HumanGate(), ceo=CEOAgent(ids["ceo"], ceo_adapter), researcher=ResearcherAgent(ids["research"], researcher_adapter),
+            strategist=StrategistAgent(ids["strategy"], strategist_adapter), financial_analyst=FinancialAnalystAgent(ids["finance"], finance_adapter),
             auditor=auditor, repository=repo, max_replan_attempts=3,
             stage_callback=stage_callback,
         )
