@@ -129,6 +129,15 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _challenge_chain_id(message: str) -> int:
+    """Recover the chain ID bound into the signed challenge without a schema migration."""
+    try:
+        line = next(line for line in message.splitlines() if line.startswith("Chain ID: "))
+        return int(line.split(":", 1)[1].strip())
+    except (StopIteration, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="Challenge has invalid chain metadata") from exc
+
+
 def ensure_product_schema(db: Any) -> None:
     statements = [s.strip() for s in PRODUCT_SCHEMA.split(";") if s.strip()]
     with db.conn:
@@ -402,7 +411,7 @@ def wallet_verify(request: WalletVerifyRequest) -> dict[str, Any]:
             )
             db.conn.execute(
                 "INSERT INTO product_identities (id,user_id,kind,subject,metadata_json,created_at) VALUES (?,?,?,?,?,?)",
-                (f"ident_{uuid.uuid4().hex}", user_id, "wallet", recovered, json.dumps({"chain_id": int(row["chain_id"])}), _now()),
+                (f"ident_{uuid.uuid4().hex}", user_id, "wallet", recovered, json.dumps({"chain_id": _challenge_chain_id(row["message"])}), _now()),
             )
             db.conn.execute(
                 "INSERT INTO tenants (id,name,status,created_at) VALUES (?,?,?,?)",
@@ -429,7 +438,7 @@ def wallet_verify(request: WalletVerifyRequest) -> dict[str, Any]:
             "user": {"id": user_id, "principal_id": principal_id},
             "workspace": {"tenant_id": tenant_id},
             "wallet": recovered,
-            "chain_id": int(row["chain_id"]),
+            "chain_id": _challenge_chain_id(row["message"]),
         }
     finally:
         db.close()
