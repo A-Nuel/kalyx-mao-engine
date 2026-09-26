@@ -26,6 +26,7 @@ from src.api.identity_auth import create_identity_token, verify_identity_token
 from src.persistence.factory import create_database
 from src.identity.models import Membership, MembershipRole, Principal
 from src.identity.repository import IdentityRepository
+from src.identity.social import configured_social_providers
 
 router = APIRouter(prefix="/api/v1/product", tags=["product-plane"])
 
@@ -237,6 +238,11 @@ class ConfiguredGovernanceRule:\n    """Non-bypassable organisation-configured l
     connection_type: str = Field(default="api_key", max_length=40)
     api_key: Optional[str] = Field(default=None, max_length=4096)
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+@router.get("/auth/social/providers")
+def social_providers() -> dict[str, Any]:
+    return {"providers": configured_social_providers(), "mode": "oauth-oidc-adapter"}
 
 
 @router.post("/auth/wallet/challenge")
