@@ -136,13 +136,23 @@ def run_mission(
             if live and os.getenv("OPENROUTER_API_KEY")
             else mock
         )
-        # The CEO and every delegated agent share a bounded orchestration budget.
-        # A single agent cannot turn an LLM loop into unbounded provider spend.
-        adapter = BudgetedAgentAdapter(
+        # Two layers of budget: one organisation-wide hard ceiling and one
+        # per-agent envelope. A single agent cannot consume the whole allowance.
+        global_adapter = BudgetedAgentAdapter(
             adapter,
             max_calls=int(policy_config.get("compute_call_limit", 8)),
             max_prompt_chars=int(policy_config.get("max_prompt_chars", 20_000)),
         )
+        def bounded_agent_adapter():
+            return BudgetedAgentAdapter(
+                global_adapter,
+                max_calls=int(policy_config.get("per_agent_compute_call_limit", 3)),
+                max_prompt_chars=int(policy_config.get("max_prompt_chars", 20_000)),
+            )
+        ceo_adapter = bounded_agent_adapter()
+        researcher_adapter = bounded_agent_adapter()
+        strategist_adapter = bounded_agent_adapter()
+        finance_adapter = bounded_agent_adapter()
         # Initialize economy repository and run deterministic resource allocation with historical records
         economy_repo = EconomyRepository(db.conn)
         perf_records = {
@@ -167,8 +177,8 @@ def run_mission(
 
         engine = OrchestrationEngine(
             org=org, ledger=ledger, policy_engine=policy, executor=executor, event_store=event_store,
-            human_gate=HumanGate(), ceo=CEOAgent(ids["ceo"], adapter), researcher=ResearcherAgent(ids["research"], adapter),
-            strategist=StrategistAgent(ids["strategy"], adapter), financial_analyst=FinancialAnalystAgent(ids["finance"], adapter),
+            human_gate=HumanGate(), ceo=CEOAgent(ids["ceo"], ceo_adapter), researcher=ResearcherAgent(ids["research"], researcher_adapter),
+            strategist=StrategistAgent(ids["strategy"], strategist_adapter), financial_analyst=FinancialAnalystAgent(ids["finance"], finance_adapter),
             auditor=auditor, repository=repo, max_replan_attempts=3,
             stage_callback=stage_callback,
         )
