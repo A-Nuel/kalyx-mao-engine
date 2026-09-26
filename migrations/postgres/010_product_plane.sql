@@ -71,6 +71,16 @@ CREATE TABLE IF NOT EXISTS provider_connections (
 CREATE INDEX IF NOT EXISTS idx_provider_connections_scope
     ON provider_connections(tenant_id, organisation_id, provider);
 
+CREATE TABLE IF NOT EXISTS organisation_profiles (
+    organisation_id TEXT PRIMARY KEY REFERENCES organisations(id),
+    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+    display_name TEXT NOT NULL,
+    description TEXT,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_org_profiles_tenant ON organisation_profiles(tenant_id);
+
 CREATE TABLE IF NOT EXISTS organisation_policies (
     id TEXT PRIMARY KEY,
     tenant_id TEXT NOT NULL REFERENCES tenants(id),
