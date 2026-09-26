@@ -15,6 +15,7 @@ def _intent(tenant="tenant-a", org="org-a"):
     return OrbioCreditActivationIntent(
         tenant_id=tenant,
         organisation_id=org,
+        operation_id="op-phase21-e2e",
         chain_id=4663,
         network="robinhood",
         credit_contract="0xE33322DA1380e61E5Ae5DfB21e7f62924c73004C",
