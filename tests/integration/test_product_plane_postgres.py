@@ -80,7 +80,7 @@ def test_product_plane_wallet_auth_and_onboarding_round_trip_postgres(monkeypatc
     workspaces = client.get("/api/v1/product/workspaces", headers=headers)
     assert workspaces.status_code == 200, workspaces.text
     assert len(workspaces.json()) == 1
-    tenant_id = workspaces.json()[0]["tenant_id"]
+    tenant_id = workspaces.json()[0]["id"]
 
     organisation = client.post(
         f"/api/v1/product/workspaces/{tenant_id}/organisations",
