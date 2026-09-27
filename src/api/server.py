@@ -14,9 +14,9 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from fastapi.exceptions import RequestValidationError
 from starlette.middleware.base import BaseHTTPMiddleware
-from src.api.bootstrap import ensure_started, is_production, policy_secret
+from src.api.bootstrap import ensure_started, policy_secret
 from src.api.config import cors_origins, operator_key, require_operator_auth
-from src.api.identity_auth import require_identity_for_org, require_identity_for_tenant, require_write_permission
+from src.api.identity_auth import identity_auth_required, require_identity_for_org, require_identity_for_tenant, require_write_permission
 from src.api.product_plane import router as product_plane_router
 from src.identity.execution_context import ExecutionContext, current_execution_context, reset_current_execution_context, set_current_execution_context
 from src.api.mission_service import run_mission
@@ -465,9 +465,13 @@ def _build_purchase_loop(
 
 
 def _identity_enabled() -> bool:
-    if is_production() or os.getenv("KALYX_IDENTITY_AUTH", "").strip().lower() == "production":
-        return True
-    return os.getenv("KALYX_IDENTITY_AUTH", "false").strip().lower() in {"1", "true", "yes", "on", "production"}
+    """Return the single canonical identity-authentication gate.
+
+    The identity module treats authentication as fail-closed unless demo mode
+    was explicitly selected. Keeping this helper delegated to that function
+    prevents the middleware and resource-level authorization from drifting.
+    """
+    return identity_auth_required()
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
