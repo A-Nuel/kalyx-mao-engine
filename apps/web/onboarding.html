@@ -3,387 +3,137 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#07090d">
+<meta name="theme-color" content="#080a0e">
 <title>Kalyx — Initialize Organisation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-:root{
-  color-scheme:dark;
-  --bg:#07090d;--panel:#0c1119;--panel2:#101720;--line:#202b39;
-  --line2:#2a3747;--text:#edf3f8;--muted:#8e9baa;--dim:#667384;
-  --accent:#9dbdff;--accent2:#dbe7ff;--ok:#79d6a4;--warn:#f1c879;
-  font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-}
-*{box-sizing:border-box}
-html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text)}
-body{
-  min-height:100vh;
-  background:
-    radial-gradient(900px 500px at 15% -10%,#172235 0%,transparent 62%),
-    radial-gradient(700px 500px at 100% 20%,#111923 0%,transparent 58%),
-    var(--bg);
-}
-html.auth-pending body{visibility:hidden}
-button,input,select{font:inherit}
-button{cursor:pointer}
-.shell{width:min(1180px,calc(100% - 36px));margin:0 auto;padding:30px 0 56px}
-.topbar{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:34px}
-.brand{display:flex;align-items:center;gap:10px;font:700 13px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.18em}
-.mark{width:25px;height:25px;border:1px solid #60728a;border-radius:7px;display:grid;place-items:center;color:var(--accent);font-size:11px}
-.session{font:11px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--dim);max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.layout{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:22px;align-items:start}
-.main,.control{background:linear-gradient(180deg,#0d131cfa,#0a0f16fa);border:1px solid var(--line);border-radius:24px;box-shadow:0 28px 90px #0007}
-.main{padding:34px}
-.eyebrow{font:700 11px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.16em;color:var(--accent);text-transform:uppercase}
-h1{font-size:clamp(34px,5vw,56px);line-height:1.02;letter-spacing:-.045em;margin:12px 0 12px;max-width:720px}
-.lead{color:var(--muted);font-size:15px;line-height:1.65;max-width:650px;margin:0}
-.progress{display:flex;align-items:center;gap:7px;margin:30px 0 34px}
-.pdot{width:9px;height:9px;border-radius:50%;background:#293442;transition:.2s}
-.pdot.done{background:var(--ok)}
-.pdot.active{background:var(--accent);box-shadow:0 0 0 4px #9dbdff1c}
-.pbar{height:1px;flex:1;max-width:58px;background:#26313e}
-.step-label{margin-left:auto;color:var(--dim);font:11px ui-monospace,SFMono-Regular,Menlo,monospace}
-.step{display:none;animation:in .22s ease}
-.step.active{display:block}
-@keyframes in{from{opacity:.3;transform:translateY(5px)}to{opacity:1;transform:none}}
-.step h2{font-size:25px;letter-spacing:-.02em;margin:0 0 7px}
-.step .hint{color:var(--muted);font-size:13px;line-height:1.6;margin:0 0 22px;max-width:650px}
-.field{margin:15px 0}
-label{display:block;font-size:12px;color:#b7c1cd;margin-bottom:8px}
-input,select{
-  width:100%;border:1px solid var(--line2);background:#080c12;color:var(--text);
-  border-radius:13px;padding:14px 15px;outline:none;transition:.15s;
-}
-input:focus,select:focus{border-color:#5b7393;box-shadow:0 0 0 3px #8fb4ff12}
-textarea{width:100%;min-height:100px;resize:vertical}
-.actions{display:flex;gap:10px;margin-top:26px}
-.btn{border:1px solid var(--line2);border-radius:12px;padding:12px 17px;font-weight:750;min-width:118px}
-.primary{background:var(--accent2);color:#080c12;border-color:var(--accent2)}
-.secondary{background:#111822;color:#d8e0e8}
-.btn:disabled{opacity:.45;cursor:not-allowed}
-.notice{padding:12px 13px;border:1px solid var(--line);border-radius:13px;background:#0a0f15;color:var(--muted);font-size:12px;line-height:1.55;margin-top:16px}
-.wallet-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.wallet-grid .btn{width:100%}
-.status{margin-top:13px;color:var(--accent);font:11px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
-.choice{display:flex;align-items:flex-start;gap:12px;border:1px solid var(--line);background:#0a0f15;border-radius:14px;padding:14px;margin-top:10px}
-.choice input{width:auto;margin-top:3px;accent-color:#9dbdff}
-.choice strong{font-size:13px}.choice span{display:block;color:var(--muted);font-size:11px;line-height:1.45;margin-top:3px}
-.control{position:sticky;top:18px;padding:22px}
-.control-head{display:flex;justify-content:space-between;align-items:start;gap:12px}
-.control h3{margin:0;font-size:14px}.control small{color:var(--dim);font:10px ui-monospace,monospace}
-.ring{width:58px;height:58px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(var(--accent) var(--progress),#1b2531 0);position:relative;flex:none}
-.ring:after{content:"";position:absolute;inset:5px;border-radius:50%;background:#0b1017}
-.ring b{position:relative;z-index:1;font:700 12px ui-monospace,monospace}
-.identity-box{border:1px solid var(--line);background:#090e14;border-radius:14px;padding:12px;margin:18px 0}
-.identity-box .cap{font:10px ui-monospace,monospace;color:var(--dim);text-transform:uppercase;letter-spacing:.12em}
-.identity-box .value{font-size:12px;margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.checklist{display:grid;gap:2px}
-.row{display:grid;grid-template-columns:20px 1fr auto;align-items:center;gap:8px;padding:11px 5px;border-bottom:1px solid #151e29}
-.row:last-child{border-bottom:0}
-.icon{width:20px;height:20px;border:1px solid #334254;border-radius:6px;display:grid;place-items:center;color:var(--dim);font-size:10px}
-.row.ok .icon{border-color:#3d7258;color:var(--ok)}
-.row .name{font-size:12px}.row .state{font:10px ui-monospace,monospace;color:var(--dim)}
-.row.ok .state{color:var(--ok)}
-.control-foot{margin-top:18px;padding-top:15px;border-top:1px solid var(--line);color:var(--muted);font-size:11px;line-height:1.55}
-.ready{margin-top:14px;border:1px solid #31533f;background:#0b1510;border-radius:12px;padding:11px;color:#a9dfbf;font:11px ui-monospace,monospace;display:none}
-.ready.show{display:block}
-.mobile-control{display:none}
-.back{display:none}
-@media(max-width:850px){
-  .shell{width:min(100% - 24px,680px);padding-top:18px}
-  .topbar{margin-bottom:20px}.session{display:none}
-  .layout{grid-template-columns:1fr}.control{display:none}
-  .main{padding:24px 20px;border-radius:20px}
-  h1{font-size:40px}
-  .mobile-control{display:block;margin:0 0 14px}
-  .mobile-control .control{display:block;position:static;padding:15px;border-radius:16px}
-  .mobile-control .control-foot{display:none}
-  .wallet-grid{grid-template-columns:1fr}
-  .actions{position:sticky;bottom:10px;background:linear-gradient(180deg,transparent,#0b1017 28%);padding-top:18px;margin-left:-2px;margin-right:-2px}
-  .actions .btn{flex:1}
-}
-@media(max-width:480px){
-  .shell{width:calc(100% - 16px);padding-bottom:30px}
-  .main{padding:20px 16px}
-  h1{font-size:34px}.lead{font-size:14px}
-  .progress{margin:24px 0 27px}.step-label{font-size:10px}
-}
+:root{color-scheme:dark;--bg:#080a0e;--panel:#0d1118;--panel2:#111720;--line:#232c38;--text:#edf2f8;--muted:#8b96a6;--soft:#b8c2d0;--accent:#dbe8ff;--accentText:#0a0d12;--good:#8fe0b4;--warn:#e8c98b}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:Geist,system-ui,sans-serif}
+body{min-height:100vh;overflow-x:hidden}.shell{width:min(1180px,calc(100% - 40px));margin:auto;padding:28px 0 56px}
+header{display:flex;align-items:center;justify-content:space-between;margin-bottom:52px}.brand{display:flex;align-items:center;gap:11px;font:600 14px "JetBrains Mono",monospace;letter-spacing:.16em}.mark{width:22px;height:22px;position:relative;display:inline-block}.mark i{position:absolute;width:10px;height:18px;border:1px solid var(--text);transform:skewY(-25deg)}.mark i:first-child{left:2px;top:2px}.mark i:last-child{right:2px;top:2px}
+.exit{color:var(--muted);font:12px "JetBrains Mono",monospace;text-decoration:none}.exit:hover{color:var(--text)}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:54px}.eyebrow{font:11px "JetBrains Mono",monospace;letter-spacing:.13em;color:#788494;margin:0 0 18px;text-transform:uppercase}
+h1{font-size:clamp(38px,6vw,72px);line-height:.98;letter-spacing:-.045em;margin:0 0 18px;max-width:780px}h1 em{font-style:normal;color:#9aa7b8}.lead{color:var(--muted);line-height:1.7;max-width:650px;font-size:16px;margin:0 0 38px}
+.step{display:none;animation:in .25s ease}.step.active{display:block}@keyframes in{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+.prompt{font-size:13px;color:var(--soft);margin-bottom:10px}.field{width:100%;border:1px solid var(--line);background:#090c11;color:var(--text);border-radius:14px;padding:17px 18px;font:500 16px Geist;outline:none;transition:.15s}.field:focus{border-color:#566476;box-shadow:0 0 0 3px #ffffff08}.textarea{min-height:150px;resize:vertical;line-height:1.55}
+.actions{display:flex;gap:10px;margin-top:24px;flex-wrap:wrap}button{border:1px solid var(--line);background:var(--panel2);color:var(--text);padding:13px 17px;border-radius:12px;font:600 13px Geist;cursor:pointer}button.primary{background:var(--accent);color:var(--accentText);border-color:var(--accent)}button:disabled{opacity:.45;cursor:not-allowed}
+.hint{font-size:12px;color:#687485;line-height:1.6;margin-top:12px}.error{color:#e4a5a5;font:12px "JetBrains Mono",monospace;margin-top:13px;white-space:pre-wrap}.success{color:var(--good);font:12px "JetBrains Mono",monospace;margin-top:13px;white-space:pre-wrap}
+.side{position:sticky;top:24px;align-self:start}.control{border:1px solid var(--line);background:linear-gradient(180deg,#0d1118,#0a0d12);border-radius:18px;padding:18px}.control-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;font:10px "JetBrains Mono",monospace;color:#7d8999;letter-spacing:.12em}.percent{color:var(--text)}
+.progress{height:4px;background:#1a212b;border-radius:99px;overflow:hidden;margin-bottom:22px}.bar{height:100%;width:0;background:#cbd8eb;transition:.25s}
+.check{display:grid;grid-template-columns:20px 1fr auto;gap:10px;align-items:center;padding:11px 0;border-top:1px solid #171e27;font-size:12px}.check:first-of-type{border-top:0}.check .dot{width:7px;height:7px;border-radius:50%;background:#3c4654}.check.done .dot{background:var(--good)}.check .state{font:9px "JetBrains Mono",monospace;color:#626d7c}.check.done .state{color:var(--good)}
+.card{margin-top:22px;border:1px solid var(--line);background:var(--panel);border-radius:16px;padding:17px}.card-title{font:10px "JetBrains Mono",monospace;color:#6f7c8d;letter-spacing:.12em;margin-bottom:9px}.card-value{font-size:13px;line-height:1.5;color:var(--soft);word-break:break-word}
+.choice{display:grid;gap:10px;margin-top:16px}.choice button{text-align:left}.choice button.selected{border-color:#74849a;background:#151c26}.choice strong{display:block;font-size:13px;margin-bottom:4px}.choice span{display:block;color:var(--muted);font-size:11px;font-weight:400}
+.range-row{display:flex;gap:12px;align-items:center}.range-row input{accent-color:#dbe8ff;flex:1}.range-value{min-width:55px;text-align:right;font:12px "JetBrains Mono",monospace;color:var(--soft)}
+pre{white-space:pre-wrap;word-break:break-word;font:11px/1.6 "JetBrains Mono",monospace;color:#aeb9c8;background:#090c11;border:1px solid #1b232e;border-radius:12px;padding:13px;margin:14px 0 0}
+@media(max-width:850px){.shell{width:min(100% - 28px,680px);padding-top:20px}.layout{display:block}.side{position:static;margin-top:42px}.layout main{order:1}header{margin-bottom:38px}h1{font-size:clamp(39px,12vw,60px)}.lead{font-size:14px}}
 </style>
-<script>
-document.documentElement.classList.add('auth-pending');
-(async()=>{
- const token=localStorage.getItem('kalyx_session');
- if(!token){location.replace('/auth?next='+encodeURIComponent('/onboarding'));return;}
- try{
-  const r=await fetch('/api/v1/product/me',{headers:{Authorization:'Bearer '+token}});
-  if(!r.ok)throw new Error();
-  document.documentElement.classList.remove('auth-pending');
- }catch(_){localStorage.removeItem('kalyx_session');location.replace('/auth?next='+encodeURIComponent('/onboarding'))}
-})();
-</script>
 </head>
 <body>
 <div class="shell">
-  <header class="topbar">
-    <div class="brand"><span class="mark">K</span>KALYX <span style="color:#526070">/</span> INITIALIZE</div>
-    <div class="session" id="session"></div>
-  </header>
+<header><a class="brand" href="/"><span class="mark"><i></i><i></i></span>KALYX</a><a class="exit" href="/command-centre">COMMAND CENTRE ↗</a></header>
+<div class="layout">
+<main>
+<p class="eyebrow" id="eyebrow">INITIALIZE ORGANISATION · 01 / 06</p>
+<h1 id="headline">What should Kalyx <em>accomplish?</em></h1>
+<p class="lead" id="lead">Start with the outcome. We'll turn it into an organisation, an executive, and a governed operating structure.</p>
 
-  <div class="layout">
-    <main class="main">
-      <div class="eyebrow">Autonomous Organisation Setup</div>
-      <h1 id="headline">Let's build your organisation.</h1>
-      <p class="lead" id="subhead">A few decisions now. Kalyx will turn them into a governed operating structure you can control.</p>
+<section class="step active" data-step="0">
+<div class="prompt">Describe the mission you want this organisation to pursue.</div>
+<textarea id="mission" class="field textarea" placeholder="e.g. Research emerging robotics markets and produce verified intelligence for my team."></textarea>
+<div class="hint">You can change the organisation's strategy later. This is the initial objective, not an unrestricted instruction.</div>
+<div class="actions"><button class="primary" id="missionNext">Continue →</button></div>
+<div class="error" id="missionError"></div>
+</section>
 
-      <div class="progress" id="progress">
-        <span class="pdot active"></span><span class="pbar"></span>
-        <span class="pdot"></span><span class="pbar"></span>
-        <span class="pdot"></span><span class="pbar"></span>
-        <span class="pdot"></span><span class="pbar"></span>
-        <span class="pdot"></span><span class="pbar"></span>
-        <span class="pdot"></span><span class="step-label" id="stepLabel">01 / 06</span>
-      </div>
+<section class="step" data-step="1">
+<div class="prompt">What should the organisation be called?</div>
+<input id="orgName" class="field" maxlength="120" placeholder="Nuel Research">
+<div class="hint">Your authenticated wallet already has a workspace. This step creates the organisation inside it.</div>
+<div class="actions"><button class="secondary back">← Back</button><button class="primary" id="orgNext">Create organisation →</button></div>
+<div class="error" id="orgError"></div>
+</section>
 
-      <section class="step active" data-step="0">
-        <h2>Who are you?</h2>
-        <p class="hint">Your wallet establishes your Kalyx identity. You only sign a message — no blockchain transaction is made during sign-in.</p>
-        <div class="wallet-grid">
-          <button class="btn primary" id="connect">Browser wallet</button>
-          <button class="btn secondary" id="walletConnect">WalletConnect</button>
-        </div>
-        <div id="walletConfig" class="notice">Checking wallet connector…</div>
-        <div id="identity" class="status"></div>
-        <div class="actions"><button class="btn primary" id="identityNext" disabled>Continue</button></div>
-      </section>
+<section class="step" data-step="2">
+<div class="prompt">Give the organisation an executive.</div>
+<input id="agentName" class="field" maxlength="120" value="CEO">
+<div class="choice">
+<button class="selected" type="button"><strong>Governed CEO</strong><span>Plans, delegates and proposes. It never becomes the execution authority.</span></button>
+</div>
+<div class="actions"><button class="secondary back">← Back</button><button class="primary" id="agentNext">Create CEO →</button></div>
+<div class="success" id="agentSuccess"></div><div class="error" id="agentError"></div>
+</section>
 
-      <section class="step" data-step="1">
-        <h2>What should we call it?</h2>
-        <p class="hint">This is the organisation Kalyx will govern. Your workspace is created alongside it as the tenant boundary.</p>
-        <div class="field"><label for="orgName">Organisation name</label><input id="orgName" value="Nuel Research" placeholder="e.g. Nuel Research"></div>
-        <div class="field"><label for="mission">What is it here to accomplish?</label><input id="mission" value="Research and build autonomous systems." placeholder="Describe the organisation's purpose"></div>
-        <div class="field"><label for="workspaceName">Workspace</label><input id="workspaceName" value="My Workspace" placeholder="Workspace name"></div>
-        <div id="orgOut" class="status"></div>
-        <div class="actions"><button class="btn secondary back">Back</button><button class="btn primary" id="orgNext">Create organisation</button></div>
-      </section>
+<section class="step" data-step="3">
+<div class="prompt">How much authority should a single proposal have?</div>
+<div class="range-row"><input id="spend" type="range" min="1" max="100" value="25"><span class="range-value" id="spendValue">25 CR</span></div>
+<div class="choice">
+<button id="approvalChoice" type="button"><strong>Human approval above this limit</strong><span>Consequential proposals above the configured threshold require an approval boundary.</span></button>
+</div>
+<div class="hint">These are organisation limits. The CEO cannot raise them itself.</div>
+<div class="actions"><button class="secondary back">← Back</button><button class="primary" id="policyNext">Activate governance →</button></div>
+<div class="success" id="policySuccess"></div><div class="error" id="policyError"></div>
+</section>
 
-      <section class="step" data-step="2">
-        <h2>Give it an executive.</h2>
-        <p class="hint">Your CEO is the intelligence and orchestration layer. It can plan and delegate, but Kalyx policies still decide what may execute.</p>
-        <div class="field"><label for="agentName">CEO name</label><input id="agentName" value="CEO-01" placeholder="e.g. Research CEO"></div>
-        <div class="field"><label for="model">Model</label><input id="model" value="openai/gpt-4o-mini" placeholder="Model identifier"></div>
-        <div class="choice"><input type="checkbox" checked disabled><div><strong>Execution stays governed</strong><span>The CEO does not receive unrestricted provider credentials or direct execution authority.</span></div></div>
-        <div id="agentOut" class="status"></div>
-        <div class="actions"><button class="btn secondary back">Back</button><button class="btn primary" id="agentNext">Create CEO</button></div>
-      </section>
+<section class="step" data-step="4">
+<div class="prompt">Where should computation come from?</div>
+<div class="choice">
+<button id="simulatedChoice" class="selected" type="button"><strong>Simulation / Judge Mode</strong><span>Safe for testing. No external provider spend.</span></button>
+<button id="orbioChoice" type="button"><strong>Orbio connection</strong><span>Use the governed Orbio connection when your delegated/API setup is ready.</span></button>
+</div>
+<div class="hint">You don't need to paste an Orbio key here. Kalyx can record the provider boundary now and connect the real delegated path later.</div>
+<div class="actions"><button class="secondary back">← Back</button><button class="primary" id="providerNext">Continue →</button></div>
+<div class="success" id="providerSuccess"></div><div class="error" id="providerError"></div>
+</section>
 
-      <section class="step" data-step="3">
-        <h2>Set the boundaries.</h2>
-        <p class="hint">These are the organisation's hard operating limits. They apply before consequential actions are authorized.</p>
-        <div class="field"><label for="spend">Organisation spending ceiling</label><input id="spend" type="number" min="0" value="25"></div>
-        <div class="field"><label for="approval">Human approval above</label><input id="approval" type="number" min="0" value="20"></div>
-        <div class="choice"><input type="checkbox" checked disabled><div><strong>Core Kalyx invariants remain enforced</strong><span>Your policy configuration cannot disable the control-plane safety boundary.</span></div></div>
-        <div id="policyOut" class="status"></div>
-        <div class="actions"><button class="btn secondary back">Back</button><button class="btn primary" id="policyNext">Activate governance</button></div>
-      </section>
+<section class="step" data-step="5">
+<p class="eyebrow">SYSTEM READY</p>
+<h2 style="font-size:clamp(28px,5vw,46px);letter-spacing:-.035em;margin:0 0 12px">Your organisation has a <em style="color:#9aa7b8;font-style:normal">governed starting point.</em></h2>
+<p class="lead" style="margin-bottom:20px">The objective can drive missions. The CEO can propose. Policy still decides what can happen.</p>
+<pre id="summary">Initializing…</pre>
+<div class="actions"><button class="secondary" id="restart">Review setup</button><button class="primary" id="enter">Enter Kalyx →</button></div>
+</section>
+</main>
 
-      <section class="step" data-step="4">
-        <h2>Connect compute.</h2>
-        <p class="hint">Connect the infrastructure your agents will use. Provider secrets stay behind the Kalyx provider boundary and are never handed to agents.</p>
-        <div class="field"><label for="provider">Provider</label><select id="provider"><option value="orbio">Orbio</option><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option><option value="gemini">Gemini</option></select></div>
-        <div class="field"><label for="providerKey">Provider API key <span style="color:#657486">(optional)</span></label><input id="providerKey" type="password" placeholder="Paste only if using an API-key connection"></div>
-        <div class="choice"><input type="radio" name="connection" checked disabled><div><strong>Governed provider connection</strong><span>Delegated/OAuth connection can be used where the provider supports it. Kalyx will not ask for private wallet credentials.</span></div></div>
-        <div id="providerOut" class="status"></div>
-        <div class="actions"><button class="btn secondary back">Back</button><button class="btn primary" id="providerNext">Connect compute</button></div>
-      </section>
-
-      <section class="step" data-step="5">
-        <h2 id="finalTitle">Your organisation is ready.</h2>
-        <p class="hint" id="finalHint">Review the control room, then enter Kalyx to run your first governed mission.</p>
-        <div class="notice" id="finalStatus">Checking readiness…</div>
-        <div class="actions"><button class="btn secondary back">Back</button><button class="btn primary" id="enter">Enter Kalyx</button></div>
-      </section>
-    </main>
-
-    <aside class="control">
-      <div class="control-head">
-        <div><h3>Organisation Control Room</h3><small>SYSTEM READINESS</small></div>
-        <div class="ring" id="ring" style="--progress:0%"><b id="ringValue">0%</b></div>
-      </div>
-      <div class="identity-box"><div class="cap">Identity</div><div class="value" id="identityValue">Not connected</div></div>
-      <div class="checklist">
-        <div class="row" id="rIdentity"><div class="icon">01</div><div class="name">Identity</div><div class="state">WAITING</div></div>
-        <div class="row" id="rOrg"><div class="icon">02</div><div class="name">Organisation</div><div class="state">WAITING</div></div>
-        <div class="row" id="rAgent"><div class="icon">03</div><div class="name">CEO</div><div class="state">WAITING</div></div>
-        <div class="row" id="rPolicy"><div class="icon">04</div><div class="name">Governance</div><div class="state">WAITING</div></div>
-        <div class="row" id="rProvider"><div class="icon">05</div><div class="name">Compute</div><div class="state">WAITING</div></div>
-        <div class="row" id="rMission"><div class="icon">06</div><div class="name">Mission Ready</div><div class="state">WAITING</div></div>
-      </div>
-      <div class="ready" id="ready">READY FOR GOVERNED MISSION</div>
-      <div class="control-foot">Agents propose. Policies authorize. Executors execute. Auditors verify. The ledger settles.</div>
-    </aside>
-  </div>
-
-  <div class="mobile-control">
-    <aside class="control">
-      <div class="control-head">
-        <div><h3>Control Room</h3><small>SYSTEM READINESS</small></div>
-        <div class="ring" id="mobileRing" style="--progress:0%"><b id="mobileRingValue">0%</b></div>
-      </div>
-      <div class="checklist">
-        <div class="row" id="mrIdentity"><div class="icon">01</div><div class="name">Identity</div><div class="state">WAITING</div></div>
-        <div class="row" id="mrOrg"><div class="icon">02</div><div class="name">Organisation</div><div class="state">WAITING</div></div>
-        <div class="row" id="mrAgent"><div class="icon">03</div><div class="name">CEO</div><div class="state">WAITING</div></div>
-        <div class="row" id="mrPolicy"><div class="icon">04</div><div class="name">Governance</div><div class="state">WAITING</div></div>
-        <div class="row" id="mrProvider"><div class="icon">05</div><div class="name">Compute</div><div class="state">WAITING</div></div>
-        <div class="row" id="mrMission"><div class="icon">06</div><div class="name">Mission Ready</div><div class="state">WAITING</div></div>
-      </div>
-    </aside>
-  </div>
+<aside class="side">
+<div class="control">
+<div class="control-head"><span>SYSTEM READINESS</span><span class="percent" id="percent">0%</span></div>
+<div class="progress"><div class="bar" id="bar"></div></div>
+<div class="check" id="cIdentity"><span class="dot"></span><span>Identity</span><span class="state">WAITING</span></div>
+<div class="check" id="cOrg"><span class="dot"></span><span>Organisation</span><span class="state">WAITING</span></div>
+<div class="check" id="cAgent"><span class="dot"></span><span>Executive</span><span class="state">WAITING</span></div>
+<div class="check" id="cPolicy"><span class="dot"></span><span>Governance</span><span class="state">WAITING</span></div>
+<div class="check" id="cProvider"><span class="dot"></span><span>Compute</span><span class="state">WAITING</span></div>
+</div>
+<div class="card"><div class="card-title">WORKSPACE</div><div class="card-value" id="workspaceValue">Checking authenticated session…</div></div>
+<div class="card"><div class="card-title">KALYX PRINCIPLE</div><div class="card-value">Agents propose · Policies authorize · Executors execute · Auditors verify · Ledger settles.</div></div>
+</aside>
+</div>
 </div>
 
 <script>
 const $=id=>document.getElementById(id);
-let token=localStorage.getItem('kalyx_session')||'';
-let tenant='',org='',agent='',step=0;
-let appKit=null,wagmiAdapter=null,wagmiCore=null;
-
+let token=localStorage.getItem('kalyx_session')||'',tenant='',org='',agent='',provider='simulated',step=0;
 const auth=()=>token?{'Authorization':'Bearer '+token}:{};
-async function api(path,opts={}){
- const r=await fetch(path,{...opts,headers:{'Content-Type':'application/json',...auth(),...(opts.headers||{})}});
- const d=await r.json();
- if(!r.ok)throw new Error(d.detail||d.message||'Request failed');
- return d;
-}
-function out(id,msg){$(id).textContent=msg}
-function mark(name,ok){
- const row=$(name), mobile=$('m'+name.slice(1).charAt(0).toUpperCase()+name.slice(2));
- [row,mobile].filter(Boolean).forEach(el=>{
-   el.classList.toggle('ok',!!ok);
-   const state=el.querySelector('.state'); if(state)state.textContent=ok?'READY':'WAITING';
- });
- updateProgress();
-}
-function updateProgress(){
- const names=['rIdentity','rOrg','rAgent','rPolicy','rProvider','rMission'];
- const done=names.filter(n=>$(n).classList.contains('ok')).length;
- const pct=Math.round(done/names.length*100);
- $('ring').style.setProperty('--progress',pct+'%');$('ringValue').textContent=pct+'%';
- $('mobileRing').style.setProperty('--progress',pct+'%');$('mobileRingValue').textContent=pct+'%';
- if(done===names.length)$('ready').classList.add('show');
-}
-function setStep(n){
- step=Math.max(0,Math.min(5,n));
- document.querySelectorAll('.step').forEach((el,i)=>el.classList.toggle('active',i===step));
- document.querySelectorAll('.pdot').forEach((el,i)=>el.classList.toggle('active',i===step));
- document.querySelectorAll('.pdot').forEach((el,i)=>el.classList.toggle('done',i<step));
- $('stepLabel').textContent=String(step+1).padStart(2,'0')+' / 06';
- if(step===0){$('headline').textContent="Let's build your organisation.";$('subhead').textContent='A few decisions now. Kalyx will turn them into a governed operating structure you can control.'}
- else if(step===1){$('headline').textContent='Give it a purpose.';$('subhead').textContent='Start with the organisation you want Kalyx to operate.'}
- else if(step===2){$('headline').textContent='Give it an executive.';$('subhead').textContent='Your CEO plans and delegates. Kalyx remains the authority boundary.'}
- else if(step===3){$('headline').textContent='Set the boundaries.';$('subhead').textContent='Hard limits apply before consequential actions are authorized.'}
- else if(step===4){$('headline').textContent='Connect compute.';$('subhead').textContent='Choose the infrastructure your governed agents will use.'}
- else {$('headline').textContent='Your control room is initialized.';$('subhead').textContent='Review the final state, then enter Kalyx.'}
-}
-function enableAuth(){
- $('identityNext').disabled=!token;
-}
-async function refresh(){
- if(!token)return;
- const m=await api('/api/v1/product/me');
- if(m.workspace?.tenant_id)tenant=m.workspace.tenant_id;
- if(m.identities?.[0]?.subject){
-   out('identity','Authenticated · '+m.identities[0].subject);
-   $('identityValue').textContent=m.identities[0].subject;
-   mark('rIdentity',true);
- }
- enableAuth();
-}
-async function finishWalletAuth(address,chainId,method,signer){
- const ch=await api('/api/v1/product/auth/wallet/challenge',{method:'POST',body:JSON.stringify({address,chain_id:chainId})});
- const sig=await signer(ch.message,address);
- const v=await api('/api/v1/product/auth/wallet/verify',{method:'POST',body:JSON.stringify({challenge_id:ch.challenge_id,signature:sig})});
- token=v.token;localStorage.setItem('kalyx_session',token);
- $('identityValue').textContent=v.wallet;
- out('identity','Authenticated · '+v.wallet+'\n'+method+' · chain '+v.chain_id);
- mark('rIdentity',true);enableAuth();
-}
-$('connect').onclick=async()=>{
- try{
-  if(!window.ethereum)throw new Error('No browser wallet detected. Use WalletConnect or open Kalyx inside a wallet browser.');
-  const [address]=await window.ethereum.request({method:'eth_requestAccounts'});
-  const chainId=parseInt(await window.ethereum.request({method:'eth_chainId'}),16);
-  await finishWalletAuth(address,chainId,'Browser wallet',async(message,a)=>window.ethereum.request({method:'personal_sign',params:[message,a]}));
- }catch(e){out('identity',e.message)}
-};
-async function initWalletConnect(){
- const cfg=await api('/api/v1/product/auth/wallet/config');
- if(!cfg.walletconnect.configured){
-  $('walletConnect').disabled=true;out('walletConfig','WalletConnect is not configured on this deployment yet.');
-  return;
- }
- out('walletConfig','WalletConnect ready · mobile wallet selection enabled.');
- try{
-  const sdk=await import('https://cdn.jsdelivr.net/npm/@reown/appkit-cdn@1.8.24/dist/appkit.min.js');
-  const {createAppKit,WagmiAdapter}=sdk;
-  const core=await import('https://cdn.jsdelivr.net/npm/@wagmi/core@2.18.1/+esm');
-  wagmiCore=core;
-  const network={id:cfg.chain.id,name:cfg.chain.name,nativeCurrency:{name:'Ether',symbol:'ETH',decimals:18},rpcUrls:{default:{http:[cfg.chain.rpc_url]}},blockExplorers:{default:{name:'Robinhood Chain Explorer',url:cfg.chain.explorer}},testnet:false};
-  wagmiAdapter=new WagmiAdapter({projectId:cfg.walletconnect.project_id,networks:[network]});
-  appKit=createAppKit({adapters:[wagmiAdapter],networks:[network],projectId:cfg.walletconnect.project_id,defaultNetwork:network,themeMode:'dark',metadata:{name:'Kalyx',description:'Governed autonomous organisations',url:location.origin,icons:[]},features:{analytics:false,email:false,socials:false}});
- }catch(e){$('walletConnect').disabled=true;out('walletConfig','WalletConnect failed to initialize: '+e.message)}
-}
-$('walletConnect').onclick=async()=>{
- try{
-  if(!appKit||!wagmiAdapter)await initWalletConnect();
-  if(!appKit)throw new Error('WalletConnect is not available on this deployment.');
-  await appKit.open();out('identity','Waiting for wallet approval…');
-  let account=null;
-  for(let i=0;i<60;i++){account=wagmiCore.getAccount(wagmiAdapter.wagmiConfig);if(account?.isConnected&&account.address)break;await new Promise(r=>setTimeout(r,300))}
-  if(!account?.address)throw new Error('Wallet connection was not completed.');
-  const chainId=wagmiCore.getChainId(wagmiAdapter.wagmiConfig);
-  await finishWalletAuth(account.address,chainId,'WalletConnect',async message=>wagmiCore.signMessage(wagmiAdapter.wagmiConfig,{message}));
- }catch(e){out('identity',e.message)}
-};
-
-$('identityNext').onclick=()=>setStep(1);
-$('orgNext').onclick=async()=>{
- try{
-  const w=await api('/api/v1/product/workspaces',{method:'POST',body:JSON.stringify({name:$('workspaceName').value.trim()||'My Workspace'})});
-  tenant=w.tenant_id;
-  const d=await api('/api/v1/product/workspaces/'+encodeURIComponent(tenant)+'/organisations',{method:'POST',body:JSON.stringify({name:$('orgName').value.trim()||'Autonomous Organisation',mission:$('mission').value.trim()||'Operate governed autonomous systems'})});
-  org=d.organisation_id;mark('rOrg',true);out('orgOut','Organisation created · '+org);setStep(2);
- }catch(e){out('orgOut',e.message)}
-};
-$('agentNext').onclick=async()=>{
- try{
-  const d=await api('/api/v1/product/organisations/'+encodeURIComponent(org)+'/agents',{method:'POST',body:JSON.stringify({name:$('agentName').value.trim()||'CEO',role:'CEO',model_name:$('model').value.trim()||'openai/gpt-4o-mini',authority_ceiling:25,allowed_action_types:['INTERNAL_ANALYSIS','DATA_FETCH','REPLAN']})});
-  agent=d.agent_id;
-  const k=await api('/api/v1/product/organisations/'+encodeURIComponent(org)+'/agents/'+encodeURIComponent(agent)+'/keys',{method:'POST'});
-  out('agentOut','CEO created · '+agent+'\nKalyx credential generated once and shown only here.');
-  mark('rAgent',true);setStep(3);
- }catch(e){out('agentOut',e.message)}
-};
-$('policyNext').onclick=async()=>{
- try{
-  await api('/api/v1/product/organisations/'+encodeURIComponent(org)+'/policies',{method:'POST',body:JSON.stringify({name:'Default Governance',spending_ceiling:+$('spend').value,human_approval_threshold:+$('approval').value,allowed_actions:['INTERNAL_ANALYSIS','DATA_FETCH','REPLAN'],daily_compute_budget:100,compute_call_limit:8,per_agent_compute_call_limit:3,max_prompt_chars:20000})});
-  mark('rPolicy',true);out('policyOut','Governance active · spending '+$('spend').value+' · approval '+$('approval').value);setStep(4);
- }catch(e){out('policyOut',e.message)}
-};
-$('providerNext').onclick=async()=>{
- try{
-  const key=$('providerKey').value.trim();
-  const d=await api('/api/v1/product/organisations/'+encodeURIComponent(org)+'/providers',{method:'POST',body:JSON.stringify({provider:$('provider').value,connection_type:key?'api_key':'delegated',api_key:key||null})});
-  mark('rProvider',true);out('providerOut','Connection recorded · '+d.provider+' · secret stored: '+d.secret_stored);
-  const b=await api('/api/v1/product/organisations/'+encodeURIComponent(org)+'/bootstrap');
-  if(b.readiness.ready_for_mission)mark('rMission',true);
-  $('finalStatus').textContent=JSON.stringify(b.readiness,null,2);
-  setStep(5);
- }catch(e){out('providerOut',e.message)}
-};
-$('enter').onclick=()=>location.href='/command-centre';
+async function api(path,opts={}){const r=await fetch(path,{...opts,headers:{'Content-Type':'application/json',...auth(),...(opts.headers||{})}});let d={};try{d=await r.json()}catch{}if(!r.ok)throw new Error(d.detail||d.message||'Request failed');return d}
+function setStep(n){step=Math.max(0,Math.min(5,n));document.querySelectorAll('.step').forEach((e,i)=>e.classList.toggle('active',i===step));$('eyebrow').textContent=step===5?'SYSTEM READY':'INITIALIZE ORGANISATION · '+String(step+1).padStart(2,'0')+' / 06';const heads=[['What should Kalyx ','accomplish?'],['Name the ','organisation.'],['Give it an ','executive.'],['Set the ','boundaries.'],['Connect ','compute.'],['Your organisation is ','ready.']];$('headline').innerHTML=heads[step][0]+'<em>'+heads[step][1]+'</em>';const leads=['Start with the outcome. We’ll turn it into an organisation, an executive, and a governed operating structure.','Your authenticated wallet already owns the workspace. Now define the organisation that will operate inside it.','The CEO is intelligence and orchestration — not execution authority.','Set hard limits before the organisation can act. These boundaries cannot be raised by the CEO.','Choose how computation should be connected. Simulation is safe for judging and development.','Review what was initialized, then enter the Kalyx command centre.'];$('lead').textContent=leads[step];updateProgress()}
+function mark(id,done){$(id).classList.toggle('done',done);$(id).querySelector('.state').textContent=done?'READY':'WAITING';updateProgress()}
+function updateProgress(){const ids=['cIdentity','cOrg','cAgent','cPolicy','cProvider'];const done=ids.filter(id=>$(id).classList.contains('done')).length;const pct=Math.round(done/ids.length*100);$('percent').textContent=pct+'%';$('bar').style.width=pct+'%'}
+async function bootstrapAuth(){if(!token){location.href='/auth?next='+encodeURIComponent('/onboarding');return}try{const m=await api('/api/v1/product/me');tenant=m.workspace?.tenant_id||'';if(!tenant)throw new Error('Authenticated account has no workspace.');$('workspaceValue').textContent=tenant;mark('cIdentity',true)}catch(e){localStorage.removeItem('kalyx_session');location.href='/auth?next='+encodeURIComponent('/onboarding')}}
+$('missionNext').onclick=()=>{const v=$('mission').value.trim();if(v.length<3){$('missionError').textContent='Describe a mission first.';return}$('missionError').textContent='';setStep(1)};
+$('orgNext').onclick=async()=>{try{const name=$('orgName').value.trim()||'Autonomous Organisation';const mission=$('mission').value.trim();const d=await api('/api/v1/product/workspaces/'+encodeURIComponent(tenant)+'/organisations',{method:'POST',body:JSON.stringify({name,mission})});org=d.organisation_id;mark('cOrg',true);$('orgError').textContent='';setStep(2)}catch(e){$('orgError').textContent=e.message}};
+$('agentNext').onclick=async()=>{try{const name=$('agentName').value.trim()||'CEO';const d=await api('/api/v1/product/organisations/'+encodeURIComponent(org)+'/agents',{method:'POST',body:JSON.stringify({name,role:'CEO',model_name:'openai/gpt-4o-mini',authority_ceiling:+$('spend').value,allowed_action_types:['INTERNAL_ANALYSIS','DATA_FETCH','REPLAN']})});agent=d.agent_id;const k=await api('/api/v1/product/organisations/'+encodeURIComponent(org)+'/agents/'+encodeURIComponent(agent)+'/keys',{method:'POST'});mark('cAgent',true);$('agentSuccess').textContent='CEO initialized · Kalyx credential generated for this agent.';$('agentError').textContent='';setStep(3)}catch(e){$('agentError').textContent=e.message}};
+$('spend').oninput=()=>{$('spendValue').textContent=$('spend').value+' CR'};
+$('approvalChoice').onclick=()=>{$('approvalChoice').classList.toggle('selected')};
+$('policyNext').onclick=async()=>{try{const ceiling=+$('spend').value;const approval=Math.max(1,Math.round(ceiling*.8));await api('/api/v1/product/organisations/'+encodeURIComponent(org)+'/policies',{method:'POST',body:JSON.stringify({name:'Default Governance',spending_ceiling:ceiling,human_approval_threshold:approval,per_agent_ceiling:ceiling,allowed_actions:['INTERNAL_ANALYSIS','DATA_FETCH','REPLAN'],daily_compute_budget:100,compute_call_limit:8,per_agent_compute_call_limit:3,max_prompt_chars:20000})});mark('cPolicy',true);$('policySuccess').textContent='Governance active · proposal ceiling '+ceiling+' CR · approval threshold '+approval+' CR';$('policyError').textContent='';setStep(4)}catch(e){$('policyError').textContent=e.message}};
+$('simulatedChoice').onclick=()=>{provider='simulated';$('simulatedChoice').classList.add('selected');$('orbioChoice').classList.remove('selected')};
+$('orbioChoice').onclick=()=>{provider='orbio';$('orbioChoice').classList.add('selected');$('simulatedChoice').classList.remove('selected')};
+$('providerNext').onclick=async()=>{try{const d=await api('/api/v1/product/organisations/'+encodeURIComponent(org)+'/providers',{method:'POST',body:JSON.stringify({provider,connection_type:provider==='simulated'?'simulated':'delegated',api_key:null,metadata:{source:'onboarding',mode:provider==='simulated'?'judge':'delegated-pending'}})});mark('cProvider',true);$('providerSuccess').textContent=(provider==='simulated'?'Simulation provider connected.':'Orbio connection boundary recorded; delegated authorization can be completed later.');const b=await api('/api/v1/product/organisations/'+encodeURIComponent(org)+'/bootstrap');$('summary').textContent='WORKSPACE  '+tenant+'\nORGANISATION  '+org+'\nCEO  '+agent+'\nGOVERNANCE  '+(b.readiness.policy?'ACTIVE':'MISSING')+'\nCOMPUTE  '+provider.toUpperCase()+'\n\nMISSION\n'+$('mission').value.trim()+'\n\nREADY FOR GOVERNED MISSION  '+(b.readiness.ready_for_mission?'YES':'NO');setStep(5)}catch(e){$('providerError').textContent=e.message}};
 document.querySelectorAll('.back').forEach(b=>b.onclick=()=>setStep(step-1));
-
-initWalletConnect().catch(e=>out('walletConfig','Wallet connector unavailable: '+e.message));
-refresh().catch(()=>{});
+$('restart').onclick=()=>setStep(0);
+$('enter').onclick=()=>location.href='/command-centre';
+bootstrapAuth();
 </script>
 </body>
 </html>
