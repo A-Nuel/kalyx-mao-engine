@@ -15,7 +15,7 @@ class IdentityRepository:
             self.db.conn.execute(
                 "INSERT INTO principals (id, name, active, created_at) VALUES (?, ?, ?, ?) "
                 "ON CONFLICT(id) DO UPDATE SET name=excluded.name, active=excluded.active",
-                (principal.id, principal.name, int(principal.active), principal.created_at.isoformat()),
+                (principal.id, principal.name, principal.active, principal.created_at.isoformat()),
             )
 
     def save_membership(self, membership: Membership) -> None:
