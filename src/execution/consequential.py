@@ -322,13 +322,28 @@ class ConsequentialExecutionManager:
             )
         if operation.amount > 0:
             tx_id = f"res-{hashlib.sha256(operation.id.encode('utf-8')).hexdigest()[:16]}"
-            self.ledger.transfer(
-                from_account=TREASURY,
-                to_account=ESCROW,
-                amount=operation.amount,
-                memo=f"Escrow lock for consequential operation {operation.id}",
-                transaction_id=tx_id,
+            existing_entry = next(
+                (entry for entry in self.ledger.get_entries() if entry.transaction_id == tx_id),
+                None,
             )
+            if existing_entry is not None:
+                if (
+                    existing_entry.from_account != TREASURY
+                    or existing_entry.to_account != ESCROW
+                    or existing_entry.amount != operation.amount
+                    or operation.id not in existing_entry.memo
+                ):
+                    raise InvalidStateTransitionError(
+                        f"Escrow transaction '{tx_id}' exists with unexpected contents"
+                    )
+            else:
+                self.ledger.transfer(
+                    from_account=TREASURY,
+                    to_account=ESCROW,
+                    amount=operation.amount,
+                    memo=f"Escrow lock for consequential operation {operation.id}",
+                    transaction_id=tx_id,
+                )
             org.treasury_balance = self.ledger.get_balance(TREASURY)
 
         operation.transition_to(OperationState.ESCROWED)
