@@ -808,7 +808,7 @@ def create_policy(
         config = request.model_dump()
         db.conn.execute(
             "INSERT INTO organisation_policies (id,tenant_id,organisation_id,name,version,enabled,config_json,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
-            (policy_id, tenant_id, org_id, request.name, version, 1, json.dumps(config, sort_keys=True), _now(), _now()),
+            (policy_id, tenant_id, org_id, request.name, version, True, json.dumps(config, sort_keys=True), _now(), _now()),
         )
         db.conn.execute(
             "UPDATE organisations SET state = CASE WHEN state = 'INITIALIZING' THEN 'PLANNING' ELSE state END WHERE id = ?",
