@@ -13,3 +13,10 @@ import pytest
 @pytest.fixture(autouse=True)
 def disable_rate_limit_by_default(monkeypatch):
     monkeypatch.setenv("KALYX_RATE_LIMIT_ENABLED", "false")
+
+
+@pytest.fixture(autouse=True)
+def explicitly_opt_into_demo_auth(monkeypatch):
+    """Tests opt into unauthenticated demo mode explicitly."""
+    monkeypatch.setenv("KALYX_ENV", "demo")
+    monkeypatch.setenv("KALYX_IDENTITY_AUTH", "false")
