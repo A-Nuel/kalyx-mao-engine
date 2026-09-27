@@ -27,6 +27,12 @@ const API = (() => {
       'X-Tenant-ID': activeTenantId,
       'X-Principal-ID': activePrincipalId,
     };
+    const sessionToken = (() => {
+      try { return localStorage.getItem('kalyx_session') || ''; } catch { return ''; }
+    })();
+    if (sessionToken) {
+      headers['Authorization'] = 'Bearer ' + sessionToken;
+    }
     if (apiKey) {
       headers['X-API-Key'] = apiKey;
     }
@@ -69,6 +75,21 @@ const API = (() => {
     setPrincipal,
     setApiKey,
     getTenant: () => activeTenantId,
+
+    // Product Plane identity
+    async getProductMe() {
+      return request('/api/v1/product/me');
+    },
+    async getProductOrganisations() {
+      const me = await request('/api/v1/product/me');
+      return me.organisations || [];
+    },
+    async createProductAgent(orgId, data) {
+      return request('/api/v1/product/organisations/' + encodeURIComponent(orgId) + '/agents', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      });
+    },
 
     // System & Health
     async getHealth() {
