@@ -533,7 +533,7 @@ def list_workspaces(authorization: Optional[str] = Header(default=None, alias="A
         ensure_product_schema(db)
         _, principal_id, _ = _authenticate(db, authorization)
         rows = db.conn.execute(
-            "SELECT t.id, t.name, t.status, m.role FROM tenants t JOIN tenant_memberships m ON m.tenant_id=t.id WHERE m.principal_id=? AND m.active=1 ORDER BY t.created_at",
+            "SELECT t.id, t.name, t.status, m.role FROM tenants t JOIN tenant_memberships m ON m.tenant_id=t.id WHERE m.principal_id=? AND m.active = TRUE ORDER BY t.created_at",
             (principal_id,),
         ).fetchall()
         return [dict(r) for r in rows]
