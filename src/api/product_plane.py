@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS wallet_challenges (
     message TEXT NOT NULL,
     nonce TEXT NOT NULL UNIQUE,
     expires_at REAL NOT NULL,
-    consumed INTEGER NOT NULL DEFAULT 0,
+    consumed BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS product_sessions (
@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS product_sessions (
     principal_id TEXT NOT NULL,
     token_hash TEXT NOT NULL UNIQUE,
     expires_at REAL NOT NULL,
-    revoked INTEGER NOT NULL DEFAULT 0,
+    revoked BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TEXT NOT NULL,
     FOREIGN KEY(user_id) REFERENCES product_users(id)
 );
@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS agent_credentials (
     key_hash TEXT NOT NULL UNIQUE,
     scopes_json TEXT NOT NULL,
     expires_at REAL,
-    revoked INTEGER NOT NULL DEFAULT 0,
+    revoked BOOLEAN NOT NULL DEFAULT FALSE,
     last_used_at TEXT,
     created_at TEXT NOT NULL
 );
@@ -117,7 +117,7 @@ CREATE TABLE IF NOT EXISTS organisation_policies (
     organisation_id TEXT NOT NULL,
     name TEXT NOT NULL,
     version INTEGER NOT NULL DEFAULT 1,
-    enabled INTEGER NOT NULL DEFAULT 1,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
     config_json TEXT NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
