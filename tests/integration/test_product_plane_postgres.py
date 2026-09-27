@@ -124,6 +124,18 @@ def test_product_plane_wallet_auth_and_onboarding_round_trip_postgres(monkeypatc
     )
     assert policy.status_code == 200, policy.text
 
+    agent_key = client.post(
+        f"/api/v1/product/organisations/{org_id}/agents/{ceo.json()['agent_id']}/keys",
+        headers=headers,
+    )
+    assert agent_key.status_code == 200, agent_key.text
+
+    revoked = client.post(
+        f"/api/v1/product/organisations/{org_id}/agents/{ceo.json()['agent_id']}/keys/revoke",
+        headers=headers,
+    )
+    assert revoked.status_code == 200, revoked.text
+
     provider = client.post(
         f"/api/v1/product/organisations/{org_id}/providers",
         headers=headers,
@@ -177,6 +189,39 @@ def test_product_plane_wallet_auth_and_onboarding_round_trip_postgres(monkeypatc
         ).fetchone()
         assert isinstance(policy_row["enabled"], bool)
         assert policy_row["enabled"] is True
+
+        credential_row = db.conn.execute(
+            "SELECT revoked FROM agent_credentials WHERE organisation_id = ? AND agent_id = ?",
+            (org_id, ceo.json()["agent_id"]),
+        ).fetchone()
+        assert isinstance(credential_row["revoked"], bool)
+        assert credential_row["revoked"] is True
+
+        boolean_columns = db.conn.execute(
+            """
+            SELECT table_name, column_name, data_type
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND (
+                    (table_name = 'principals' AND column_name = 'active')
+                 OR (table_name = 'tenant_memberships' AND column_name = 'active')
+                 OR (table_name = 'wallet_challenges' AND column_name = 'consumed')
+                 OR (table_name = 'product_sessions' AND column_name = 'revoked')
+                 OR (table_name = 'agent_credentials' AND column_name = 'revoked')
+                 OR (table_name = 'organisation_policies' AND column_name = 'enabled')
+              )
+            ORDER BY table_name, column_name
+            """
+        ).fetchall()
+        assert {(row["table_name"], row["column_name"], row["data_type"]) for row in boolean_columns} == {
+            ("agent_credentials", "revoked", "boolean"),
+            ("organisation_policies", "enabled", "boolean"),
+            ("principals", "active", "boolean"),
+            ("product_sessions", "revoked", "boolean"),
+            ("tenant_memberships", "active", "boolean"),
+            ("wallet_challenges", "consumed", "boolean"),
+        }
+
     finally:
         db.close()
 
