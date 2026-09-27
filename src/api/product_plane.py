@@ -195,7 +195,7 @@ def _authenticate(db: Any, authorization: Optional[str]) -> tuple[str, str, str]
 
 def _tenant_for_user(db: Any, principal_id: str) -> str:
     row = db.conn.execute(
-        "SELECT tenant_id FROM tenant_memberships WHERE principal_id = ? AND active = 1 ORDER BY created_at LIMIT 1",
+        "SELECT tenant_id FROM tenant_memberships WHERE principal_id = ? AND active = TRUE ORDER BY created_at LIMIT 1",
         (principal_id,),
     ).fetchone()
     if not row:
@@ -295,7 +295,7 @@ class ConfiguredGovernanceRule:
 
 def get_active_policy_config(db: Any, organisation_id: str) -> dict[str, Any]:
     row = db.conn.execute(
-        "SELECT config_json FROM organisation_policies WHERE organisation_id = ? AND enabled = 1 ORDER BY version DESC LIMIT 1",
+        "SELECT config_json FROM organisation_policies WHERE organisation_id = ? AND enabled = TRUE ORDER BY version DESC LIMIT 1",
         (organisation_id,),
     ).fetchone()
     return json.loads(row["config_json"]) if row else {}
@@ -379,7 +379,7 @@ def wallet_verify(request: WalletVerifyRequest) -> dict[str, Any]:
         ensure_product_schema(db)
         with db.conn:
             row = db.conn.execute(
-                "SELECT * FROM wallet_challenges WHERE id = ? AND consumed = 0",
+                "SELECT * FROM wallet_challenges WHERE id = ? AND consumed = FALSE",
                 (request.challenge_id,),
             ).fetchone()
             if not row or time.time() > float(row["expires_at"]):
@@ -398,7 +398,7 @@ def wallet_verify(request: WalletVerifyRequest) -> dict[str, Any]:
                 raise HTTPException(status_code=401, detail="Signature does not match challenged wallet")
 
             db.conn.execute(
-                "UPDATE wallet_challenges SET consumed = 1 WHERE id = ?",
+                "UPDATE wallet_challenges SET consumed = TRUE WHERE id = ?",
                 (request.challenge_id,),
             )
 
@@ -666,7 +666,7 @@ def agent_me(x_kalyx_agent_key: Optional[str] = Header(default=None, alias="X-Ka
     try:
         ensure_product_schema(db)
         row = db.conn.execute(
-            "SELECT id,tenant_id,organisation_id,agent_id,scopes_json,expires_at FROM agent_credentials WHERE key_hash = ? AND revoked = 0",
+            "SELECT id,tenant_id,organisation_id,agent_id,scopes_json,expires_at FROM agent_credentials WHERE key_hash = ? AND revoked = FALSE",
             (_hash_agent_key(x_kalyx_agent_key),),
         ).fetchone()
         if not row:
@@ -701,7 +701,7 @@ def rotate_agent_key(
         _, principal_id, _ = _authenticate(db, authorization)
         tenant_id, _ = _require_org(db, principal_id, org_id)
         db.conn.execute(
-            "UPDATE agent_credentials SET revoked = 1 WHERE organisation_id = ? AND agent_id = ? AND revoked = 0",
+            "UPDATE agent_credentials SET revoked = TRUE WHERE organisation_id = ? AND agent_id = ? AND revoked = FALSE",
             (org_id, agent_id),
         )
         secret = "kal_agent_" + secrets.token_urlsafe(32)
@@ -728,7 +728,7 @@ def revoke_agent_keys(
         _, principal_id, _ = _authenticate(db, authorization)
         _require_org(db, principal_id, org_id)
         cur = db.conn.execute(
-            "UPDATE agent_credentials SET revoked = 1 WHERE organisation_id = ? AND agent_id = ? AND revoked = 0",
+            "UPDATE agent_credentials SET revoked = TRUE WHERE organisation_id = ? AND agent_id = ? AND revoked = FALSE",
             (org_id, agent_id),
         )
         db.conn.commit()
