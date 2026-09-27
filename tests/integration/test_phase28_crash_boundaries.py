@@ -3,8 +3,7 @@
 import hashlib
 
 from src.domain.entities import ActionProposal, AgentRecord, Organisation
-from src.domain.enums import ActionType, AgentRole, OperationState, PolicyResult
-from src.domain.exceptions import ExternalExecutionError
+from src.domain.enums import ActionType, AgentRole, OperationState, ProviderOutcome
 from src.economy.ledger import ESCROW, EXTERNAL_SINK, TREASURY
 from src.execution.consequential import ConsequentialExecutionManager, ConsequentialOperationRepository
 from src.governance.policy_engine import PolicyEngine
@@ -142,7 +141,7 @@ def test_reconciliation_does_not_double_settle_after_settlement_crash(tmp_path):
         operation_id=operation.id,
         amount=operation.amount,
         target=operation.target,
-        outcome=__import__("src.domain.enums", fromlist=["ProviderOutcome"]).ProviderOutcome.SUCCESS,
+        outcome=ProviderOutcome.SUCCESS,
     )
 
     settlement_tx = f"tx-{hashlib.sha256((decision.authorization_token or operation.id).encode('utf-8')).hexdigest()[:16]}"
