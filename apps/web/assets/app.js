@@ -440,8 +440,11 @@ const App = (() => {
 
     // 1. Active Agents List
     const agentContainer = $('activeAgentsContainer');
-    if (agentContainer && agents && agents.length > 0) {
-      const compactAgentId = (id) => {
+    if (agentContainer) {
+      if (!agents || agents.length === 0) {
+        agentContainer.innerHTML = '<div class="kalyx-empty-state">No agents configured yet. Open Organisation → Workforce to create your first specialist agent.</div>';
+      } else {
+        const compactAgentId = (id) => {
         const value = String(id || '—');
         return value.length > 27 ? value.slice(0, 14) + '…' + value.slice(-9) : value;
       };
@@ -457,7 +460,8 @@ const App = (() => {
           '<span><b>' + Number(a.reputation_score).toFixed(0) + '</b><small>Rep</small></span></span>' +
           '<span class="kalyx-agent-status ' + (a.status === 'ACTIVE' ? 'is-active' : 'is-idle') + '"><i></i>' +
           esc(a.status || 'UNKNOWN') + '</span></button>'
-      ).join('');
+        ).join('');
+      }
     }
 
     // 2. Recent Chronology Activity
@@ -577,12 +581,15 @@ const App = (() => {
     const agents = await API.getAgents(activeOrgId).catch(() => []);
     if (!agents) return;
 
-    setTxt('orgTotalAgentsCount', `${agents.length} Active`);
+    setTxt('orgTotalAgentsCount', `${agents.length} ${agents.length === 1 ? 'Agent' : 'Agents'}`);
 
     // Populate Roster Table
     const tbody = $('organisationAgentsTableBody');
-    if (tbody && agents.length > 0) {
-      tbody.innerHTML = agents.map(a => `
+    if (tbody) {
+      if (agents.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="kc-empty">No agents configured yet. Create a specialist agent with its own role, model and governed authority.</td></tr>';
+      } else {
+        tbody.innerHTML = agents.map(a => `
         <tr class="hover:bg-white/[0.02] cursor-pointer" onclick="App.selectAgentForInspector('${esc(a.id)}')">
           <td class="py-3 px-4 font-semibold text-white font-mono">${esc(a.id)}</td>
           <td class="py-3 px-4 text-slate-300">${esc(a.role)}</td>
@@ -601,7 +608,43 @@ const App = (() => {
             </button>
           </td>
         </tr>
-      `).join('');
+        `).join('');
+      }
+    }
+  }
+
+  async function createAgent() {
+    if (!activeOrgId) {
+      alert('Select an organisation before creating an agent.');
+      return;
+    }
+    const name = ($('createAgentName')?.value || '').trim();
+    const role = ($('createAgentRole')?.value || 'RESEARCHER').trim().toUpperCase();
+    const modelName = ($('createAgentModel')?.value || '').trim();
+    const authority = Number($('createAgentAuthority')?.value || 25);
+    if (name.length < 2 || !modelName || !Number.isFinite(authority) || authority < 0) {
+      setTxt('createAgentError', 'Enter a name, model and valid authority ceiling.');
+      return;
+    }
+    try {
+      const created = await API.createProductAgent(activeOrgId, {
+        name,
+        role,
+        model_name: modelName,
+        authority_ceiling: authority,
+        allowed_action_types: ['INTERNAL_ANALYSIS', 'DATA_FETCH', 'REPLAN'],
+      });
+      closeModals();
+      ['createAgentName','createAgentModel','createAgentAuthority'].forEach(id => {
+        const el = $(id);
+        if (el) el.value = id === 'createAgentAuthority' ? '25' : '';
+      });
+      const roleEl = $('createAgentRole');
+      if (roleEl) roleEl.value = 'RESEARCHER';
+      await refreshCurrentView();
+      if (created?.agent_id) selectAgentForInspector(created.agent_id);
+    } catch (err) {
+      setTxt('createAgentError', err.message || 'Agent creation failed.');
     }
   }
 
@@ -1739,13 +1782,28 @@ const App = (() => {
     restoreNavigationState();
     setupSidebarScroll();
 
-    // 2. Hash routing listener
+    // 2. Resolve the authenticated Product Plane workspace before any legacy
+    // Command Centre resource is queried. Legacy control-plane endpoints remain
+    // useful, but their tenant scope must come from the signed product session.
+    try {
+      const me = await API.getProductMe();
+      const tenantId = me.workspace?.tenant_id || '';
+      const principalId = me.user?.principal_id || me.identities?.find(i => i.kind === 'wallet')?.subject || '';
+      if (tenantId) API.setTenant(tenantId);
+      if (principalId) API.setPrincipal(principalId);
+      const productOrgs = Array.isArray(me.organisations) ? me.organisations : [];
+      if (productOrgs.length) activeOrgId = productOrgs[0].id;
+    } catch (err) {
+      console.warn('Product Plane session context unavailable:', err);
+    }
+
+    // 3. Hash routing listener
     window.addEventListener('hashchange', () => {
       const route = window.location.hash.replace('#', '') || 'overview';
       setRoute(route);
     });
 
-    // 3. Escape key closes drawers and modals
+    // 4. Escape key closes drawers and modals
     window.addEventListener('keydown', e => {
       if (e.key === 'Escape') {
         closeDrawers();
@@ -1755,7 +1813,7 @@ const App = (() => {
       }
     });
 
-    // 4. Initial load
+    // 5. Initial load
     await loadOrganisations();
     if (!localStorage.getItem('kalyx-tour-seen')) { setTimeout(startTour, 500); }
     const initialRoute = window.location.hash.replace('#', '') || 'overview';
@@ -1767,7 +1825,7 @@ const App = (() => {
     updateLiveClock();
     setInterval(updateLiveClock, 1000);
 
-    // 5. Background polling (every 4s)
+    // 6. Background polling (every 4s)
     setInterval(() => {
       if (!document.hidden && !isPolling) {
         isPolling = true;
@@ -1943,6 +2001,7 @@ return {
     reconcileLatest,
     reconcileOp,
     selectOrg,
+    createAgent,
     stepDaemon,
     refreshCurrentView,
     startTour,
