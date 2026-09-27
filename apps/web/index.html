@@ -591,7 +591,7 @@ if(COMMAND_CENTRE_AUTH_GATE_ENABLED){
       <div class="grid gap-4">
         <label class="grid gap-1.5">
           <span class="text-[11px] uppercase tracking-wider text-slate-500">Agent name</span>
-          <input id="createAgentName" class="kc-input" maxlength="120" placeholder="e.g. Robotics Researcher">
+          <input id="createAgentName" class="w-full rounded-lg bg-black/20 border border-white/10 px-3 py-2.5 text-sm text-white placeholder:text-slate-600 outline-none focus:border-blue-400/50" maxlength="120" placeholder="e.g. Robotics Researcher">
         </label>
         <label class="grid gap-1.5">
           <span class="text-[11px] uppercase tracking-wider text-slate-500">Role</span>
@@ -605,11 +605,11 @@ if(COMMAND_CENTRE_AUTH_GATE_ENABLED){
         </label>
         <label class="grid gap-1.5">
           <span class="text-[11px] uppercase tracking-wider text-slate-500">Model</span>
-          <input id="createAgentModel" class="kc-input" maxlength="160" placeholder="e.g. openai/gpt-4o-mini">
+          <input id="createAgentModel" class="w-full rounded-lg bg-black/20 border border-white/10 px-3 py-2.5 text-sm text-white placeholder:text-slate-600 outline-none focus:border-blue-400/50" maxlength="160" placeholder="e.g. openai/gpt-4o-mini">
         </label>
         <label class="grid gap-1.5">
           <span class="text-[11px] uppercase tracking-wider text-slate-500">Authority ceiling (credits)</span>
-          <input id="createAgentAuthority" class="kc-input" type="number" min="0" max="1000000" value="25">
+          <input id="createAgentAuthority" class="w-full rounded-lg bg-black/20 border border-white/10 px-3 py-2.5 text-sm text-white outline-none focus:border-blue-400/50" type="number" min="0" max="1000000" value="25">
         </label>
       </div>
 
