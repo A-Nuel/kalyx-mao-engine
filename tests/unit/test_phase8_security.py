@@ -8,7 +8,7 @@ from src.domain.exceptions import InsufficientCreditsError, UnauthorizedActionEr
 from src.persistence.database import Database
 from src.security.atomic_ledger import AtomicSqliteLedger
 from src.security.capabilities import enforce_agent_capability
-from src.security.idempotency import IdempotencyConflict, SQLiteIdempotencyJournal
+from src.security.idempotency import IdempotencyConflict, IdempotencyInProgress, SQLiteIdempotencyJournal
 
 
 def test_atomic_ledger_prevents_concurrent_overspend(tmp_path):
@@ -66,6 +66,47 @@ def test_idempotency_key_is_bound_to_content(tmp_path):
             journal.begin("op-1", "fingerprint-b")
     finally:
         db.close()
+
+
+def test_idempotency_ownership_is_serialized_under_concurrency(tmp_path):
+    db_path = str(tmp_path / "idempotency-concurrency.db")
+    seed = Database(db_path)
+    SQLiteIdempotencyJournal(seed.conn)
+    seed.close()
+
+    dbs = [Database(db_path) for _ in range(2)]
+    barrier = threading.Barrier(2)
+    results = []
+    lock = threading.Lock()
+
+    def begin(i):
+        journal = SQLiteIdempotencyJournal(dbs[i].conn)
+        barrier.wait()
+        try:
+            value = journal.begin("shared-operation", "same-fingerprint")
+            outcome = ("owned", value)
+        except IdempotencyInProgress:
+            outcome = ("in-progress", None)
+        with lock:
+            results.append(outcome)
+
+    try:
+        threads = [threading.Thread(target=begin, args=(i,)) for i in range(2)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        assert sorted(results) == [("in-progress", None), ("owned", None)]
+        row = dbs[0].conn.execute(
+            "SELECT state, fingerprint FROM idempotency_operations WHERE operation_key = ?",
+            ("shared-operation",),
+        ).fetchone()
+        assert row["state"] == "started"
+        assert row["fingerprint"] == "same-fingerprint"
+    finally:
+        for db in dbs:
+            db.close()
 
 
 def _proposal(action_type=ActionType.INTERNAL_ANALYSIS, credits=0):
