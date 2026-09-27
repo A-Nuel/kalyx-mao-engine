@@ -96,10 +96,19 @@ class ReconciliationService:
                 # Perform exactly-once escrow settlement: ESCROW -> EXTERNAL_SINK
                 if op.amount > 0:
                     tx_id = f"tx-rec-{hashlib.sha256(op.id.encode('utf-8')).hexdigest()[:16]}"
-                    # Check if already settled in ledger (e.g. prior crash before state save or concurrent reconciliation)
+                    # Check the authoritative deterministic settlement transaction
+                    # first. The fallback memo check preserves compatibility with
+                    # the older direct-execution settlement transaction.
+                    entries = self.ledger.get_entries()
                     already_settled = any(
-                        op.id in e.memo and e.to_account == EXTERNAL_SINK
-                        for e in self.ledger.get_entries()
+                        e.transaction_id == tx_id
+                        and e.from_account == ESCROW
+                        and e.to_account == EXTERNAL_SINK
+                        and e.amount == op.amount
+                        for e in entries
+                    ) or any(
+                        op.id in e.memo and e.to_account == EXTERNAL_SINK and e.amount == op.amount
+                        for e in entries
                     )
                     if not already_settled and self.ledger.get_balance(ESCROW) >= op.amount:
                         try:
@@ -144,9 +153,16 @@ class ReconciliationService:
                 # Perform exactly-once escrow release: ESCROW -> TREASURY
                 if op.amount > 0:
                     tx_id = f"rollback-rec-{hashlib.sha256(op.id.encode('utf-8')).hexdigest()[:16]}"
+                    entries = self.ledger.get_entries()
                     already_refunded = any(
-                        op.id in e.memo and e.to_account == TREASURY and e.from_account == ESCROW
-                        for e in self.ledger.get_entries()
+                        e.transaction_id == tx_id
+                        and e.from_account == ESCROW
+                        and e.to_account == TREASURY
+                        and e.amount == op.amount
+                        for e in entries
+                    ) or any(
+                        op.id in e.memo and e.to_account == TREASURY and e.from_account == ESCROW and e.amount == op.amount
+                        for e in entries
                     )
                     if not already_refunded and self.ledger.get_balance(ESCROW) >= op.amount:
                         try:
