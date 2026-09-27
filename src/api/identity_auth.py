@@ -20,10 +20,21 @@ def is_production() -> bool:
     )
 
 
+def _explicit_demo_mode() -> bool:
+    """Return True only when the caller explicitly opts into unauthenticated demo mode.
+
+    Authentication is intentionally fail-closed when KALYX_ENV is unset. Local
+    demo/test callers must explicitly set KALYX_ENV=demo and disable identity
+    auth. This prevents a forgotten environment variable from silently turning
+    tenant authorization off on an exposed deployment.
+    """
+    env = os.getenv("KALYX_ENV", "").strip().lower()
+    identity = os.getenv("KALYX_IDENTITY_AUTH", "").strip().lower()
+    return env == "demo" and identity in {"", "0", "false", "no", "off", "demo"}
+
+
 def identity_auth_required() -> bool:
-    if is_production():
-        return True
-    return os.getenv("KALYX_IDENTITY_AUTH", "false").strip().lower() in {"1", "true", "yes", "on", "production"}
+    return not _explicit_demo_mode()
 
 
 def create_identity_token(principal_id: str, secret: str, ttl_seconds: int = 3600) -> str:
@@ -76,10 +87,10 @@ def _resolve_principal_id(
             return verified
         raise HTTPException(status_code=401, detail="Invalid or expired Bearer token")
 
-    if is_production():
+    if not _explicit_demo_mode():
         raise HTTPException(
             status_code=401,
-            detail="Production authentication requires a valid Bearer token or API key; unverified headers are rejected.",
+            detail="Authentication requires a valid Bearer token or API key; unverified headers are rejected.",
         )
 
     if not x_principal_id:
