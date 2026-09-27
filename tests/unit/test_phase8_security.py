@@ -6,9 +6,55 @@ from src.domain.entities import ActionProposal, AgentRecord, Organisation
 from src.domain.enums import ActionType, AgentRole, AgentStatus
 from src.domain.exceptions import InsufficientCreditsError, UnauthorizedActionError
 from src.persistence.database import Database
+from src.persistence.repositories import SqliteLedger
 from src.security.atomic_ledger import AtomicSqliteLedger
 from src.security.capabilities import enforce_agent_capability
 from src.security.idempotency import IdempotencyConflict, IdempotencyInProgress, SQLiteIdempotencyJournal
+
+
+def test_base_sqlite_ledger_prevents_concurrent_overspend(tmp_path):
+    db_path = str(tmp_path / "base-money.db")
+    seed = Database(db_path)
+    SqliteLedger(seed, initial_treasury=100)
+    seed.close()
+
+    dbs = [Database(db_path) for _ in range(10)]
+    successes, failures, errors = [], [], []
+    lock = threading.Lock()
+
+    def spend(i):
+        db = dbs[i]
+        try:
+            ledger = SqliteLedger(db, initial_treasury=0)
+            try:
+                ledger.transfer("TREASURY", f"worker-{i}", 20, "base concurrency test", f"base-tx-{i}")
+                with lock:
+                    successes.append(i)
+            except InsufficientCreditsError:
+                with lock:
+                    failures.append(i)
+            except Exception as exc:
+                with lock:
+                    errors.append(exc)
+        except Exception as exc:
+            with lock:
+                errors.append(exc)
+
+    try:
+        threads = [threading.Thread(target=spend, args=(i,)) for i in range(10)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        assert not errors, errors
+        assert len(successes) == 5
+        assert len(failures) == 5
+        ledger = SqliteLedger(dbs[0], initial_treasury=0)
+        assert ledger.get_balance("TREASURY") == 0
+        assert ledger.verify_conservation()
+    finally:
+        for db in dbs:
+            db.close()
 
 
 def test_atomic_ledger_prevents_concurrent_overspend(tmp_path):
