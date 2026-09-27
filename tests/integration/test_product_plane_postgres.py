@@ -74,7 +74,8 @@ def test_product_plane_wallet_auth_and_onboarding_round_trip_postgres(monkeypatc
 
     me = client.get("/api/v1/product/me", headers=headers)
     assert me.status_code == 200, me.text
-    assert me.json()["wallet"]["address"].lower() == address.lower()
+    identity = next(item for item in me.json()["identities"] if item["kind"] == "wallet")
+    assert identity["subject"].lower() == address.lower()
 
     workspaces = client.get("/api/v1/product/workspaces", headers=headers)
     assert workspaces.status_code == 200, workspaces.text
