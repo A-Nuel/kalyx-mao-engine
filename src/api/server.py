@@ -69,15 +69,6 @@ ensure_started()
 
 logger = logging.getLogger("kalyx.api")
 
-# Make the unsafe state operationally visible. Demo mode is still supported for
-# local/judge use, but it must never be mistaken for tenant-isolated production.
-if not _identity_enabled():
-    logger.warning(
-        "KALYX SECURITY WARNING: identity authorization is DISABLED; "
-        "this instance must not receive untrusted traffic. "
-        "Set KALYX_ENV=production and KALYX_IDENTITY_AUTH=production before public use."
-    )
-
 app = FastAPI(title="Kalyx Command Centre API", version="1.0.0-phase22")
 app.include_router(product_plane_router)
 app.add_middleware(CORSMiddleware, allow_origins=cors_origins(), allow_credentials=False, allow_methods=["GET", "POST"], allow_headers=["*"])
@@ -477,6 +468,16 @@ def _identity_enabled() -> bool:
     if is_production() or os.getenv("KALYX_IDENTITY_AUTH", "").strip().lower() == "production":
         return True
     return os.getenv("KALYX_IDENTITY_AUTH", "false").strip().lower() in {"1", "true", "yes", "on", "production"}
+
+
+# Make the unsafe state operationally visible. Demo mode is still supported for
+# local/judge use, but it must never be mistaken for tenant-isolated production.
+if not _identity_enabled():
+    logger.warning(
+        "KALYX SECURITY WARNING: identity authorization is DISABLED; "
+        "this instance must not receive untrusted traffic. "
+        "Set KALYX_ENV=production and KALYX_IDENTITY_AUTH=production before public use."
+    )
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
