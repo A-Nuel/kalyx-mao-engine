@@ -510,7 +510,14 @@ def me(authorization: Optional[str] = Header(default=None, alias="Authorization"
             (user_id,),
         ).fetchall()
         orgs = db.conn.execute(
-            "SELECT id, mission, state, created_at FROM organisations WHERE tenant_id = ? ORDER BY created_at DESC",
+            """
+            SELECT o.id, o.mission, o.state, o.created_at,
+                   p.display_name, p.description
+            FROM organisations o
+            LEFT JOIN organisation_profiles p ON p.organisation_id = o.id
+            WHERE o.tenant_id = ?
+            ORDER BY o.created_at DESC
+            """,
             (tenant_id,),
         ).fetchall()
         return {
@@ -578,9 +585,18 @@ def create_organisation(
         if not context or not context.can_write():
             raise HTTPException(status_code=403, detail="Workspace write permission required")
         org_id = f"org_{uuid.uuid4().hex[:16]}"
+        created_at = _now()
         db.conn.execute(
             "INSERT INTO organisations (id,tenant_id,mission,treasury_balance,state,created_at) VALUES (?,?,?,?,?,?)",
-            (org_id, tenant_id, request.mission.strip(), 0, "INITIALIZING", _now()),
+            (org_id, tenant_id, request.mission.strip(), 0, "INITIALIZING", created_at),
+        )
+        db.conn.execute(
+            """
+            INSERT INTO organisation_profiles
+                (organisation_id, tenant_id, display_name, description, created_at, updated_at)
+            VALUES (?,?,?,?,?,?)
+            """,
+            (org_id, tenant_id, request.name.strip(), request.mission.strip(), created_at, created_at),
         )
         db.conn.commit()
         return {"organisation_id": org_id, "name": request.name.strip(), "tenant_id": tenant_id, "state": "INITIALIZING"}
@@ -883,8 +899,12 @@ def bootstrap_org(org_id: str, authorization: Optional[str] = Header(default=Non
         agents = db.conn.execute("SELECT id,role,model_name,authority_ceiling,status FROM agents WHERE org_id = ?", (org_id,)).fetchall()
         providers = db.conn.execute("SELECT id,provider,connection_type,status,metadata_json FROM provider_connections WHERE organisation_id = ?", (org_id,)).fetchall()
         policies = db.conn.execute("SELECT id,name,version,enabled,config_json FROM organisation_policies WHERE organisation_id = ? ORDER BY version DESC", (org_id,)).fetchall()
+        profile = db.conn.execute(
+            "SELECT display_name,description,created_at,updated_at FROM organisation_profiles WHERE organisation_id = ?",
+            (org_id,),
+        ).fetchone()
         return {
-            "organisation": org,
+            "organisation": {**org, "profile": dict(profile) if profile else None},
             "readiness": {
                 "identity": True,
                 "organisation": True,

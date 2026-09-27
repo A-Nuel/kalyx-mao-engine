@@ -93,6 +93,37 @@ def test_product_plane_wallet_auth_and_onboarding_round_trip_postgres(monkeypatc
     assert organisation.status_code == 200, organisation.text
     org_id = organisation.json()["organisation_id"]
 
+    # A newly-created organisation is structurally empty until onboarding or
+    # an explicit user action creates its workforce. The profile is tenant-bound.
+    bootstrap_empty = client.get(
+        f"/api/v1/product/organisations/{org_id}/bootstrap",
+        headers=headers,
+    )
+    assert bootstrap_empty.status_code == 200, bootstrap_empty.text
+    empty_payload = bootstrap_empty.json()
+    assert empty_payload["agents"] == []
+    assert empty_payload["organisation"]["profile"]["display_name"] == "Postgres Boolean Test Org"
+    assert empty_payload["organisation"]["profile"]["description"] == "Verify Product Plane PostgreSQL compatibility"
+
+    # A second organisation in the same workspace must not inherit the first
+    # organisation's agents.
+    second_org = client.post(
+        f"/api/v1/product/workspaces/{tenant_id}/organisations",
+        headers=headers,
+        json={
+            "name": "Second Empty Org",
+            "mission": "Remain empty until explicitly configured",
+        },
+    )
+    assert second_org.status_code == 200, second_org.text
+    second_org_id = second_org.json()["organisation_id"]
+    second_bootstrap = client.get(
+        f"/api/v1/product/organisations/{second_org_id}/bootstrap",
+        headers=headers,
+    )
+    assert second_bootstrap.status_code == 200, second_bootstrap.text
+    assert second_bootstrap.json()["agents"] == []
+
     ceo = client.post(
         f"/api/v1/product/organisations/{org_id}/agents",
         headers=headers,
@@ -105,6 +136,33 @@ def test_product_plane_wallet_auth_and_onboarding_round_trip_postgres(monkeypatc
         },
     )
     assert ceo.status_code == 200, ceo.text
+
+    specialist = client.post(
+        f"/api/v1/product/organisations/{org_id}/agents",
+        headers=headers,
+        json={
+            "name": "Robotics Researcher",
+            "role": "RESEARCHER",
+            "model_name": "openai/gpt-4o-mini",
+            "authority_ceiling": 20,
+            "allowed_action_types": ["INTERNAL_ANALYSIS", "DATA_FETCH"],
+        },
+    )
+    assert specialist.status_code == 200, specialist.text
+
+    first_org_agents = client.get(
+        f"/api/v1/product/organisations/{org_id}/bootstrap",
+        headers=headers,
+    )
+    assert first_org_agents.status_code == 200, first_org_agents.text
+    assert {agent["role"] for agent in first_org_agents.json()["agents"]} == {"CEO", "RESEARCHER"}
+
+    second_org_agents = client.get(
+        f"/api/v1/product/organisations/{second_org_id}/bootstrap",
+        headers=headers,
+    )
+    assert second_org_agents.status_code == 200, second_org_agents.text
+    assert second_org_agents.json()["agents"] == []
 
     policy = client.post(
         f"/api/v1/product/organisations/{org_id}/policies",
