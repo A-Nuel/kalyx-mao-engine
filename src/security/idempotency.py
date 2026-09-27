@@ -9,6 +9,10 @@ class IdempotencyConflict(RuntimeError):
     """Raised when an operation key is reused with different content."""
 
 
+class IdempotencyInProgress(RuntimeError):
+    """Raised when a concurrent caller races an unresolved operation."""
+
+
 class SQLiteIdempotencyJournal:
     """Crash-safe operation journal backed by the same SQLite database.
 
@@ -34,22 +38,36 @@ class SQLiteIdempotencyJournal:
         if not operation_key or not fingerprint:
             raise ValueError("operation_key and fingerprint are required")
         now = datetime.utcnow().isoformat()
-        with self.conn:
+
+        # The INSERT is the synchronization primitive. Do not perform a
+        # check-then-insert sequence: concurrent callers must contend on the
+        # PRIMARY KEY before either is allowed to proceed.
+        try:
+            with self.conn:
+                self.conn.execute(
+                    "INSERT INTO idempotency_operations(operation_key,fingerprint,state,created_at,updated_at) VALUES(?,?,?,?,?)",
+                    (operation_key, fingerprint, "started", now, now),
+                )
+            return None
+        except sqlite3.IntegrityError:
             row = self.conn.execute(
                 "SELECT fingerprint, state, receipt_id FROM idempotency_operations WHERE operation_key = ?",
                 (operation_key,),
             ).fetchone()
-            if row:
-                if row[0] != fingerprint:
-                    raise IdempotencyConflict(
-                        f"Operation key '{operation_key}' was already bound to different content"
-                    )
-                return row[2] if row[1] == "succeeded" else None
-            self.conn.execute(
-                "INSERT INTO idempotency_operations(operation_key,fingerprint,state,created_at,updated_at) VALUES(?,?,?,?,?)",
-                (operation_key, fingerprint, "started", now, now),
-            )
-        return None
+            if row is None:
+                raise
+            if row[0] != fingerprint:
+                raise IdempotencyConflict(
+                    f"Operation key '{operation_key}' was already bound to different content"
+                )
+            if row[1] == "succeeded":
+                return row[2]
+            if row[1] == "started":
+                raise IdempotencyInProgress(
+                    f"Operation key '{operation_key}' is already in progress"
+                )
+            # A failed operation may be retried under the existing contract.
+            return None
 
     def succeed(self, operation_key: str, fingerprint: str, receipt_id: str) -> None:
         if not receipt_id:
