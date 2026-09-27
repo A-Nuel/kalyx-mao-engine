@@ -86,10 +86,13 @@ def _resolve_principal_id(
             return verified
         raise HTTPException(status_code=401, detail="Invalid or expired Bearer token")
 
-    if not _explicit_demo_mode():
+    # The legacy principal header remains available only for an explicitly
+    # selected local/demo environment. Production and an unset environment
+    # require a verifiable bearer token or API key.
+    if os.getenv("KALYX_ENV", "").strip().lower() != "demo":
         raise HTTPException(
             status_code=401,
-            detail="Authentication requires a valid Bearer token or API key; unverified headers are rejected.",
+            detail="Production authentication requires a valid Bearer token or API key; unverified headers are rejected.",
         )
 
     if not x_principal_id:
