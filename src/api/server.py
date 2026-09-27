@@ -69,6 +69,15 @@ ensure_started()
 
 logger = logging.getLogger("kalyx.api")
 
+# Make the unsafe state operationally visible. Demo mode is still supported for
+# local/judge use, but it must never be mistaken for tenant-isolated production.
+if not _identity_enabled():
+    logger.warning(
+        "KALYX SECURITY WARNING: identity authorization is DISABLED; "
+        "this instance must not receive untrusted traffic. "
+        "Set KALYX_ENV=production and KALYX_IDENTITY_AUTH=production before public use."
+    )
+
 app = FastAPI(title="Kalyx Command Centre API", version="1.0.0-phase22")
 app.include_router(product_plane_router)
 app.add_middleware(CORSMiddleware, allow_origins=cors_origins(), allow_credentials=False, allow_methods=["GET", "POST"], allow_headers=["*"])
@@ -632,6 +641,8 @@ def health() -> Dict[str, Any]:
             "version": app.version,
             "database": "connected",
             "environment": "production" if is_production() else "demo",
+            "identity_auth_enabled": _identity_enabled(),
+            "public_demo_enabled": os.getenv("KALYX_PUBLIC_DEMO", "false").strip().lower() == "true",
         }
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Database unavailable: {type(exc).__name__}")
@@ -669,15 +680,33 @@ def create_and_run_mission(
 
 
 @app.get("/api/organisations")
-def organisations(x_tenant_id: str | None = Header(default=None, alias="X-Tenant-ID")) -> list[Dict[str, Any]]:
+def organisations(
+    x_tenant_id: str | None = Header(default=None, alias="X-Tenant-ID"),
+    x_principal_id: str | None = Header(default=None, alias="X-Principal-ID"),
+    authorization: str | None = Header(default=None, alias="Authorization"),
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+) -> list[Dict[str, Any]]:
+    """List organisations only inside the caller's authenticated tenant scope."""
     db = _db()
     try:
         if _identity_enabled():
             if not x_tenant_id:
                 raise HTTPException(status_code=400, detail="Tenant scope required")
+            require_identity_for_tenant(
+                db,
+                x_tenant_id,
+                x_principal_id,
+                x_tenant_id,
+                authorization=authorization,
+                x_api_key=x_api_key,
+            )
             return [dict(r) for r in db.conn.execute(
                 "SELECT * FROM organisations WHERE tenant_id = ? ORDER BY created_at DESC", (x_tenant_id,)
             ).fetchall()]
+
+        # Legacy/demo mode is intentionally retained for local development and
+        # the controlled judge environment. Production can never reach this
+        # branch because bootstrap rejects production without identity auth.
         return [dict(r) for r in db.conn.execute("SELECT * FROM organisations ORDER BY created_at DESC").fetchall()]
     finally:
         db.close()
@@ -1295,8 +1324,12 @@ def get_organisation_economy_events(
 
 
 @app.post("/api/experiments/run")
-def run_experiments_endpoint(num_rounds: int = Query(default=3, ge=1, le=10)) -> Dict[str, Any]:
-    """Run multi-scenario economic benchmark across STATIC, PERFORMANCE, and ADAPTIVE strategies."""
+def run_experiments_endpoint(
+    num_rounds: int = Query(default=3, ge=1, le=10),
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+) -> Dict[str, Any]:
+    """Run the economic benchmark; production requires the break-glass operator credential."""
+    _require_operator(x_api_key)
     global _latest_experiment_report
     report = EconomicExperiment.run(num_rounds=num_rounds, initial_treasury=100)
     data = report.model_dump(mode="json")
