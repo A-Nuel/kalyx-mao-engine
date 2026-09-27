@@ -9,17 +9,11 @@
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/landing.css">
 <script>
-async function enterKalyx(event){
+function enterKalyx(event){
   if(event) event.preventDefault();
-  const next='/command-centre';
-  const token=localStorage.getItem('kalyx_session');
-  if(!token){location.href='/auth?next='+encodeURIComponent(next);return;}
-  try{
-    const r=await fetch('/api/v1/product/me',{headers:{Authorization:'Bearer '+token}});
-    if(r.ok){location.href=next;return;}
-  }catch(_){}
-  localStorage.removeItem('kalyx_session');
-  location.href='/auth?next='+encodeURIComponent(next);
+  // TEMPORARY JUDGING MODE: let the public CTA open the command centre
+  // while wallet auth/onboarding are tested independently.
+  location.href='/command-centre';
 }
 </script>
 </head>
