@@ -15,7 +15,7 @@ import httpx
 from src.domain.entities import ActionProposal, ExecutionReceipt
 from src.persistence.database import parse_db_timestamp
 from src.execution.executor import ControlledExternalExecutor
-from src.security.idempotency import SQLiteIdempotencyJournal
+from src.security.idempotency import IdempotencyInProgress, SQLiteIdempotencyJournal
 from src.domain.events import canonical_json
 from src.domain.exceptions import ExternalExecutionError
 
@@ -52,7 +52,10 @@ class DurableControlledExternalExecutor(ControlledExternalExecutor):
             raise ExternalExecutionError(
                 "Operation is unresolved (STARTED); reconcile the external provider before retrying"
             )
-        prior_receipt_id = self.journal.begin(operation_key, fingerprint)
+        try:
+            prior_receipt_id = self.journal.begin(operation_key, fingerprint)
+        except IdempotencyInProgress as exc:
+            raise ExternalExecutionError(str(exc)) from exc
         if prior_receipt_id:
             row = self.ledger.db.conn.execute(
                 "SELECT * FROM execution_receipts WHERE id = ?", (prior_receipt_id,)
