@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from fastapi.exceptions import RequestValidationError
 from starlette.middleware.base import BaseHTTPMiddleware
-from src.api.bootstrap import ensure_started, is_production, policy_secret
+from src.api.bootstrap import ensure_started, policy_secret
 from src.api.config import cors_origins, operator_key, require_operator_auth
 from src.api.identity_auth import identity_auth_required, require_identity_for_org, require_identity_for_tenant, require_write_permission
 from src.api.product_plane import router as product_plane_router
