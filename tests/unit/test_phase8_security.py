@@ -8,7 +8,7 @@ from src.domain.exceptions import InsufficientCreditsError, UnauthorizedActionEr
 from src.persistence.database import Database
 from src.security.atomic_ledger import AtomicSqliteLedger
 from src.security.capabilities import enforce_agent_capability
-from src.security.idempotency import IdempotencyConflict, SQLiteIdempotencyJournal
+from src.security.idempotency import IdempotencyConflict, IdempotencyInProgress, SQLiteIdempotencyJournal
 
 
 def test_atomic_ledger_prevents_concurrent_overspend(tmp_path):
@@ -64,6 +64,17 @@ def test_idempotency_key_is_bound_to_content(tmp_path):
         assert journal.begin("op-1", "fingerprint-a") == "receipt-1"
         with pytest.raises(IdempotencyConflict):
             journal.begin("op-1", "fingerprint-b")
+    finally:
+        db.close()
+
+
+def test_idempotency_rejects_concurrent_claim_of_started_operation(tmp_path):
+    db = Database(str(tmp_path / "idempotency-started.db"))
+    try:
+        journal = SQLiteIdempotencyJournal(db.conn)
+        assert journal.begin("op-started", "fingerprint-a") is None
+        with pytest.raises(IdempotencyInProgress):
+            journal.begin("op-started", "fingerprint-a")
     finally:
         db.close()
 
