@@ -11,6 +11,10 @@ from src.persistence.database import Database
 def _seed_org(db_path):
     db = Database(str(db_path))
     db.conn.execute(
+        "INSERT OR IGNORE INTO tenants (id, name, status, created_at) VALUES (?, ?, ?, ?)",
+        ("tenant-auth-boundary", "Auth Boundary Tenant", "active", datetime.utcnow().isoformat()),
+    )
+    db.conn.execute(
         "INSERT INTO organisations (id, tenant_id, mission, treasury_balance, state, created_at) "
         "VALUES (?, ?, ?, ?, ?, ?)",
         (
