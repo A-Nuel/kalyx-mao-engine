@@ -89,7 +89,9 @@ def _resolve_principal_id(
     # The legacy principal header remains available only for an explicitly
     # selected local/demo environment. Production and an unset environment
     # require a verifiable bearer token or API key.
-    if os.getenv("KALYX_ENV", "").strip().lower() != "demo":
+    env = os.getenv("KALYX_ENV", "").strip().lower()
+    identity = os.getenv("KALYX_IDENTITY_AUTH", "").strip().lower()
+    if env != "demo" or identity == "production":
         raise HTTPException(
             status_code=401,
             detail="Production authentication requires a valid Bearer token or API key; unverified headers are rejected.",
