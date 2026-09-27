@@ -9,6 +9,10 @@ class IdempotencyConflict(RuntimeError):
     """Raised when an operation key is reused with different content."""
 
 
+class IdempotencyInProgress(RuntimeError):
+    """Raised when another worker currently owns the idempotency operation."""
+
+
 class SQLiteIdempotencyJournal:
     """Crash-safe operation journal backed by the same SQLite database.
 
@@ -33,23 +37,54 @@ class SQLiteIdempotencyJournal:
     def begin(self, operation_key: str, fingerprint: str) -> Optional[str]:
         if not operation_key or not fingerprint:
             raise ValueError("operation_key and fingerprint are required")
+
+        # The read and state transition must be one serialized write
+        # transaction. A deferred SELECT followed by INSERT is vulnerable to
+        # two workers both observing "missing" and then both executing the
+        # external operation. BEGIN IMMEDIATE acquires SQLite's writer lock
+        # before the ownership check.
         now = datetime.utcnow().isoformat()
-        with self.conn:
+        self.conn.execute("BEGIN IMMEDIATE")
+        try:
             row = self.conn.execute(
                 "SELECT fingerprint, state, receipt_id FROM idempotency_operations WHERE operation_key = ?",
                 (operation_key,),
             ).fetchone()
+
             if row:
                 if row[0] != fingerprint:
                     raise IdempotencyConflict(
                         f"Operation key '{operation_key}' was already bound to different content"
                     )
-                return row[2] if row[1] == "succeeded" else None
-            self.conn.execute(
-                "INSERT INTO idempotency_operations(operation_key,fingerprint,state,created_at,updated_at) VALUES(?,?,?,?,?)",
-                (operation_key, fingerprint, "started", now, now),
-            )
-        return None
+                if row[1] == "succeeded":
+                    self.conn.commit()
+                    return row[2]
+                if row[1] == "started":
+                    self.conn.rollback()
+                    raise IdempotencyInProgress(
+                        f"Operation key '{operation_key}' is already in progress"
+                    )
+
+                # A failed operation may be retried with the same key and
+                # fingerprint, but ownership must be reacquired atomically.
+                self.conn.execute(
+                    "UPDATE idempotency_operations SET state='started', receipt_id=NULL, updated_at=? "
+                    "WHERE operation_key=?",
+                    (now, operation_key),
+                )
+            else:
+                self.conn.execute(
+                    "INSERT INTO idempotency_operations(operation_key,fingerprint,state,created_at,updated_at) "
+                    "VALUES(?,?,?,?,?)",
+                    (operation_key, fingerprint, "started", now, now),
+                )
+
+            self.conn.commit()
+            return None
+        except Exception:
+            if self.conn.in_transaction:
+                self.conn.rollback()
+            raise
 
     def succeed(self, operation_key: str, fingerprint: str, receipt_id: str) -> None:
         if not receipt_id:
