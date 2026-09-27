@@ -441,8 +441,9 @@ class Database:
     def __init__(self, db_path: str = ":memory:"):
         self.db_path = db_path
         if db_path != ":memory:": os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
-        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        self.conn = sqlite3.connect(self.db_path, check_same_thread=False, timeout=10.0)
         self.conn.row_factory = sqlite3.Row
+        self.conn.execute("PRAGMA busy_timeout = 10000")
         self._init_schema()
 
     def _init_schema(self) -> None:

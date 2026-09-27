@@ -92,29 +92,59 @@ class SqliteLedger:
         tx_id = transaction_id or str(uuid.uuid4())
         entry_id = str(uuid.uuid4())
         now_iso = datetime.utcnow().isoformat()
-        with self.db.conn:
-            cur = self.db.conn.cursor()
-            cur.execute("SELECT id FROM ledger_entries WHERE transaction_id = ?", (tx_id,))
-            if cur.fetchone():
-                raise ValueError(f"Duplicate transaction ID '{tx_id}' detected. Transfer aborted to prevent double-spending.")
+
+        # Serialize the balance check and ledger append. The scoped production
+        # path already uses AtomicSqliteLedger/Postgres locks; keeping the base
+        # SQLite implementation safe prevents latent double-spend races when
+        # it is used directly by scripts, recovery tooling, or tests.
+        conn = self.db.conn
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            if conn.execute(
+                "SELECT id FROM ledger_entries WHERE transaction_id = ?", (tx_id,)
+            ).fetchone():
+                conn.rollback()
+                raise ValueError(
+                    f"Duplicate transaction ID '{tx_id}' detected. Transfer aborted to prevent double-spending."
+                )
+
             current_balance = self.get_balance(from_account)
             if current_balance < amount:
+                conn.rollback()
                 raise InsufficientCreditsError(
                     f"Account '{from_account}' has {current_balance} credits, cannot transfer {amount}"
                 )
+
             try:
-                self.db.conn.execute(
+                conn.execute(
                     """
                     INSERT INTO ledger_entries (id, timestamp, transaction_id, from_account, to_account, amount, memo)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """, (entry_id, now_iso, tx_id, from_account, to_account, amount, memo)
+                    """,
+                    (entry_id, now_iso, tx_id, from_account, to_account, amount, memo),
                 )
             except sqlite3.IntegrityError as e:
+                conn.rollback()
                 if "transaction_id" in str(e):
-                    raise ValueError(f"Duplicate transaction ID '{tx_id}' detected. Transfer aborted to prevent double-spending.") from e
+                    raise ValueError(
+                        f"Duplicate transaction ID '{tx_id}' detected. Transfer aborted to prevent double-spending."
+                    ) from e
                 raise
-        return LedgerEntry(id=entry_id, timestamp=datetime.fromisoformat(now_iso), transaction_id=tx_id,
-                           from_account=from_account, to_account=to_account, amount=amount, memo=memo)
+            conn.commit()
+        except Exception:
+            if conn.in_transaction:
+                conn.rollback()
+            raise
+
+        return LedgerEntry(
+            id=entry_id,
+            timestamp=datetime.fromisoformat(now_iso),
+            transaction_id=tx_id,
+            from_account=from_account,
+            to_account=to_account,
+            amount=amount,
+            memo=memo,
+        )
 
     def get_entries(self, account: Optional[str] = None) -> List[LedgerEntry]:
         cursor = self.db.conn.cursor()
