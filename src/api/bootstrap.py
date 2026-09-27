@@ -6,8 +6,11 @@ missing or known-insecure configuration.
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import List
+
+logger = logging.getLogger("kalyx.bootstrap")
 
 DEMO_POLICY_SECRETS = {
     "phase7-demo-policy-secret",
@@ -77,3 +80,12 @@ def ensure_started() -> None:
     validate_production_config()
     from src.api.config import validate_blockchain_config
     validate_blockchain_config()
+
+    env = environment()
+    identity = os.getenv("KALYX_IDENTITY_AUTH", "").strip().lower()
+    if env == "demo" and identity in {"", "0", "false", "no", "off", "demo"}:
+        logger.warning(
+            "KALYX identity authorization is disabled in demo mode. "
+            "Use KALYX_ENV=production and KALYX_IDENTITY_AUTH=production "
+            "before exposing this instance to untrusted traffic."
+        )
