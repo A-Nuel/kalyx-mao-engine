@@ -144,7 +144,10 @@ class TestPhase13ApiEndpoints:
         assert init_resp.status_code == 200
 
         # 2. Trigger run: POST /api/experiments/run
-        run_resp = tc.post("/api/experiments/run?num_rounds=2")
+        run_resp = tc.post(
+            "/api/experiments/run?num_rounds=2",
+            headers={"X-API-Key": "test-operator-secret"},
+        )
         assert run_resp.status_code == 200
         report = run_resp.json()
         assert report["num_rounds"] == 2
