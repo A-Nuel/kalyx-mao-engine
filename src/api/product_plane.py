@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import os
 import secrets
 import time
@@ -30,6 +31,7 @@ from src.identity.repository import IdentityRepository
 from src.identity.social import configured_social_providers
 
 router = APIRouter(prefix="/api/v1/product", tags=["product-plane"])
+logger = logging.getLogger("kalyx.product_plane")
 
 
 PRODUCT_SCHEMA = """
@@ -366,80 +368,131 @@ def wallet_challenge(request: WalletChallengeRequest) -> dict[str, Any]:
 
 @router.post("/auth/wallet/verify")
 def wallet_verify(request: WalletVerifyRequest) -> dict[str, Any]:
+    """Verify a wallet challenge and atomically establish the product identity/session.
+
+    Production Postgres uses pooled connections. Any exception after the first
+    write must explicitly rollback before the connection is returned to the
+    pool; otherwise a failed transaction can poison the next request.
+    """
     db = create_database()
     try:
         ensure_product_schema(db)
-        row = db.conn.execute(
-            "SELECT * FROM wallet_challenges WHERE id = ? AND consumed = 0",
-            (request.challenge_id,),
-        ).fetchone()
-        if not row or time.time() > float(row["expires_at"]):
-            raise HTTPException(status_code=400, detail="Challenge is invalid or expired")
+        with db.conn:
+            row = db.conn.execute(
+                "SELECT * FROM wallet_challenges WHERE id = ? AND consumed = 0",
+                (request.challenge_id,),
+            ).fetchone()
+            if not row or time.time() > float(row["expires_at"]):
+                raise HTTPException(status_code=400, detail="Challenge is invalid or expired")
 
-        try:
-            recovered = Account.recover_message(
-                encode_defunct(text=row["message"]),
-                signature=request.signature,
-            )
-            recovered = to_checksum_address(recovered)
-        except Exception as exc:
-            raise HTTPException(status_code=401, detail="Wallet signature verification failed") from exc
+            try:
+                recovered = Account.recover_message(
+                    encode_defunct(text=row["message"]),
+                    signature=request.signature,
+                )
+                recovered = to_checksum_address(recovered)
+            except Exception as exc:
+                raise HTTPException(status_code=401, detail="Wallet signature verification failed") from exc
 
-        if recovered.lower() != row["address"].lower():
-            raise HTTPException(status_code=401, detail="Signature does not match challenged wallet")
+            if recovered.lower() != row["address"].lower():
+                raise HTTPException(status_code=401, detail="Signature does not match challenged wallet")
 
-        db.conn.execute("UPDATE wallet_challenges SET consumed = 1 WHERE id = ?", (request.challenge_id,))
-
-        identity = db.conn.execute(
-            "SELECT i.user_id FROM product_identities i WHERE i.kind = 'wallet' AND lower(i.subject) = lower(?)",
-            (recovered,),
-        ).fetchone()
-
-        if identity:
-            user_id = identity["user_id"]
-            user = db.conn.execute("SELECT * FROM product_users WHERE id = ?", (user_id,)).fetchone()
-            principal_id = user["principal_id"]
-            tenant_id = _tenant_for_user(db, principal_id)
-        else:
-            user_id = f"usr_{uuid.uuid4().hex}"
-            principal_id = f"prn_{uuid.uuid4().hex}"
-            tenant_id = f"ws_{uuid.uuid4().hex}"
-            display_name = f"{recovered[:6]}…{recovered[-4:]}"
             db.conn.execute(
-                "INSERT INTO product_users (id,principal_id,display_name,created_at) VALUES (?,?,?,?)",
-                (user_id, principal_id, display_name, _now()),
-            )
-            db.conn.execute(
-                "INSERT INTO product_identities (id,user_id,kind,subject,metadata_json,created_at) VALUES (?,?,?,?,?,?)",
-                (f"ident_{uuid.uuid4().hex}", user_id, "wallet", recovered, json.dumps({"chain_id": _challenge_chain_id(row["message"])}), _now()),
-            )
-            db.conn.execute(
-                "INSERT INTO tenants (id,name,status,created_at) VALUES (?,?,?,?)",
-                (tenant_id, f"{display_name}'s Workspace", "active", _now()),
-            )
-            IdentityRepository(db).save_principal(
-                Principal(id=principal_id, name=display_name, active=True)
-            )
-            IdentityRepository(db).save_membership(
-                Membership(principal_id=principal_id, tenant_id=tenant_id, role=MembershipRole.OWNER, active=True)
+                "UPDATE wallet_challenges SET consumed = 1 WHERE id = ?",
+                (request.challenge_id,),
             )
 
-        token = create_identity_token(principal_id, os.getenv("KALYX_POLICY_SECRET", "phase7-demo-policy-secret"), ttl_seconds=86400)
-        db.conn.execute(
-            "INSERT INTO product_sessions (id,user_id,principal_id,token_hash,expires_at,created_at) VALUES (?,?,?,?,?,?)",
-            (
-                f"sess_{uuid.uuid4().hex}", user_id, principal_id,
-                hashlib.sha256(token.encode()).hexdigest(), time.time() + 86400, _now(),
-            ),
+            identity = db.conn.execute(
+                "SELECT i.user_id FROM product_identities i WHERE i.kind = 'wallet' AND lower(i.subject) = lower(?)",
+                (recovered,),
+            ).fetchone()
+
+            if identity:
+                user_id = identity["user_id"]
+                user = db.conn.execute(
+                    "SELECT * FROM product_users WHERE id = ?",
+                    (user_id,),
+                ).fetchone()
+                if not user:
+                    raise HTTPException(status_code=500, detail="Wallet identity is missing its product account")
+                principal_id = user["principal_id"]
+                tenant_id = _tenant_for_user(db, principal_id)
+            else:
+                user_id = f"usr_{uuid.uuid4().hex}"
+                principal_id = f"prn_{uuid.uuid4().hex}"
+                tenant_id = f"ws_{uuid.uuid4().hex}"
+                display_name = f"{recovered[:6]}…{recovered[-4:]}"
+
+                db.conn.execute(
+                    "INSERT INTO product_users (id,principal_id,display_name,created_at) VALUES (?,?,?,?)",
+                    (user_id, principal_id, display_name, _now()),
+                )
+                db.conn.execute(
+                    "INSERT INTO product_identities (id,user_id,kind,subject,metadata_json,created_at) VALUES (?,?,?,?,?,?)",
+                    (
+                        f"ident_{uuid.uuid4().hex}",
+                        user_id,
+                        "wallet",
+                        recovered,
+                        json.dumps({"chain_id": _challenge_chain_id(row["message"])}),
+                        _now(),
+                    ),
+                )
+                db.conn.execute(
+                    "INSERT INTO tenants (id,name,status,created_at) VALUES (?,?,?,?)",
+                    (tenant_id, f"{display_name}'s Workspace", "active", _now()),
+                )
+                IdentityRepository(db).save_principal(
+                    Principal(id=principal_id, name=display_name, active=True)
+                )
+                IdentityRepository(db).save_membership(
+                    Membership(
+                        principal_id=principal_id,
+                        tenant_id=tenant_id,
+                        role=MembershipRole.OWNER,
+                        active=True,
+                    )
+                )
+
+            token = create_identity_token(
+                principal_id,
+                os.getenv("KALYX_POLICY_SECRET", "phase7-demo-policy-secret"),
+                ttl_seconds=86400,
+            )
+            db.conn.execute(
+                "INSERT INTO product_sessions (id,user_id,principal_id,token_hash,expires_at,created_at) VALUES (?,?,?,?,?,?)",
+                (
+                    f"sess_{uuid.uuid4().hex}",
+                    user_id,
+                    principal_id,
+                    hashlib.sha256(token.encode()).hexdigest(),
+                    time.time() + 86400,
+                    _now(),
+                ),
+            )
+
+            return {
+                "token": token,
+                "user": {"id": user_id, "principal_id": principal_id},
+                "workspace": {"tenant_id": tenant_id},
+                "wallet": recovered,
+                "chain_id": _challenge_chain_id(row["message"]),
+            }
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception(
+            "Wallet authentication transaction failed",
+            extra={"challenge_id": request.challenge_id},
         )
-        db.conn.commit()
-        return {
-            "token": token,
-            "user": {"id": user_id, "principal_id": principal_id},
-            "workspace": {"tenant_id": tenant_id},
-            "wallet": recovered,
-            "chain_id": _challenge_chain_id(row["message"]),
-        }
+        try:
+            db.conn.rollback()
+        except Exception:
+            logger.exception("Failed to rollback wallet authentication transaction")
+        raise HTTPException(
+            status_code=500,
+            detail="Wallet authentication could not be completed",
+        )
     finally:
         db.close()
 
