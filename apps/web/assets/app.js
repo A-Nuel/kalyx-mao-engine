@@ -442,7 +442,7 @@ const App = (() => {
     const agentContainer = $('activeAgentsContainer');
     if (agentContainer) {
       if (!agents || agents.length === 0) {
-        agentContainer.innerHTML = '<div class="kalyx-empty-state">No agents configured yet. Open Organisation → Workforce to create your first specialist agent.</div>';
+        agentContainer.innerHTML = '<div class="p-6 text-center text-slate-500 font-mono text-xs border border-dashed border-white/10 rounded-xl">No agents configured yet. Open Organisation → Workforce to create your first specialist agent.</div>';
       } else {
         const compactAgentId = (id) => {
         const value = String(id || '—');
