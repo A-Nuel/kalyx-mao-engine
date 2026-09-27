@@ -36,11 +36,11 @@ CREATE TABLE IF NOT EXISTS tenants (
     id TEXT PRIMARY KEY, name TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active', created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS principals (
-    id TEXT PRIMARY KEY, name TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, active BOOLEAN NOT NULL DEFAULT TRUE, created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS tenant_memberships (
     principal_id TEXT NOT NULL, tenant_id TEXT NOT NULL, role TEXT NOT NULL,
-    active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL,
+    active BOOLEAN NOT NULL DEFAULT TRUE, created_at TEXT NOT NULL,
     PRIMARY KEY (principal_id, tenant_id),
     FOREIGN KEY (principal_id) REFERENCES principals(id), FOREIGN KEY (tenant_id) REFERENCES tenants(id)
 );

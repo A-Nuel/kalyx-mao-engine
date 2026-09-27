@@ -27,26 +27,32 @@ def identity_auth_required() -> bool:
 
 
 def create_identity_token(principal_id: str, secret: str, ttl_seconds: int = 3600) -> str:
-    """Generate a tamper-evident bearer token bound to a principal."""
+    """Generate a unique, tamper-evident bearer token bound to a principal."""
     expiry = int(time.time()) + ttl_seconds
-    msg = f"{principal_id}:{expiry}".encode("utf-8")
+    token_id = secrets.token_urlsafe(16)
+    msg = f"{principal_id}:{expiry}:{token_id}".encode("utf-8")
     sig = hmac.new(secret.encode("utf-8"), msg, hashlib.sha256).hexdigest()
-    return f"{principal_id}:{expiry}:{sig}"
+    return f"{principal_id}:{expiry}:{token_id}:{sig}"
 
 
 def verify_identity_token(token: str, secret: str) -> Optional[str]:
-    """Verify bearer token signature and expiry, returning principal_id or None."""
+    """Verify bearer token signature and expiry, accepting legacy tokens until expiry."""
     parts = token.split(":")
-    if len(parts) != 3:
+    if len(parts) == 4:
+        principal_id, expiry_str, token_id, sig = parts
+        msg = f"{principal_id}:{expiry_str}:{token_id}".encode("utf-8")
+    elif len(parts) == 3:
+        # Backward compatibility for tokens issued before the token-id hardening.
+        principal_id, expiry_str, sig = parts
+        msg = f"{principal_id}:{expiry_str}".encode("utf-8")
+    else:
         return None
-    principal_id, expiry_str, sig = parts
     try:
         expiry = int(expiry_str)
     except ValueError:
         return None
     if time.time() > expiry:
         return None
-    msg = f"{principal_id}:{expiry}".encode("utf-8")
     expected_sig = hmac.new(secret.encode("utf-8"), msg, hashlib.sha256).hexdigest()
     if not secrets.compare_digest(sig, expected_sig):
         return None

@@ -81,6 +81,11 @@ class _PgCursorProxy:
             self._cur.execute(converted, params)
         return self
 
+    @property
+    def rowcount(self) -> int:
+        """Expose psycopg rowcount through the SQLite-compatible cursor proxy."""
+        return self._cur.rowcount
+
     def fetchone(self):
         row = self._cur.fetchone()
         if row is None:

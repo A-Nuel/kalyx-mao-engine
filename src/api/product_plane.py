@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS wallet_challenges (
     message TEXT NOT NULL,
     nonce TEXT NOT NULL UNIQUE,
     expires_at REAL NOT NULL,
-    consumed INTEGER NOT NULL DEFAULT 0,
+    consumed BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS product_sessions (
@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS product_sessions (
     principal_id TEXT NOT NULL,
     token_hash TEXT NOT NULL UNIQUE,
     expires_at REAL NOT NULL,
-    revoked INTEGER NOT NULL DEFAULT 0,
+    revoked BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TEXT NOT NULL,
     FOREIGN KEY(user_id) REFERENCES product_users(id)
 );
@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS agent_credentials (
     key_hash TEXT NOT NULL UNIQUE,
     scopes_json TEXT NOT NULL,
     expires_at REAL,
-    revoked INTEGER NOT NULL DEFAULT 0,
+    revoked BOOLEAN NOT NULL DEFAULT FALSE,
     last_used_at TEXT,
     created_at TEXT NOT NULL
 );
@@ -117,7 +117,7 @@ CREATE TABLE IF NOT EXISTS organisation_policies (
     organisation_id TEXT NOT NULL,
     name TEXT NOT NULL,
     version INTEGER NOT NULL DEFAULT 1,
-    enabled INTEGER NOT NULL DEFAULT 1,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
     config_json TEXT NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -533,7 +533,7 @@ def list_workspaces(authorization: Optional[str] = Header(default=None, alias="A
         ensure_product_schema(db)
         _, principal_id, _ = _authenticate(db, authorization)
         rows = db.conn.execute(
-            "SELECT t.id, t.name, t.status, m.role FROM tenants t JOIN tenant_memberships m ON m.tenant_id=t.id WHERE m.principal_id=? AND m.active=1 ORDER BY t.created_at",
+            "SELECT t.id, t.name, t.status, m.role FROM tenants t JOIN tenant_memberships m ON m.tenant_id=t.id WHERE m.principal_id=? AND m.active = TRUE ORDER BY t.created_at",
             (principal_id,),
         ).fetchall()
         return [dict(r) for r in rows]
@@ -808,7 +808,7 @@ def create_policy(
         config = request.model_dump()
         db.conn.execute(
             "INSERT INTO organisation_policies (id,tenant_id,organisation_id,name,version,enabled,config_json,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
-            (policy_id, tenant_id, org_id, request.name, version, 1, json.dumps(config, sort_keys=True), _now(), _now()),
+            (policy_id, tenant_id, org_id, request.name, version, True, json.dumps(config, sort_keys=True), _now(), _now()),
         )
         db.conn.execute(
             "UPDATE organisations SET state = CASE WHEN state = 'INITIALIZING' THEN 'PLANNING' ELSE state END WHERE id = ?",

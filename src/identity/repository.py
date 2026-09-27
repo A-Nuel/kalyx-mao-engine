@@ -15,7 +15,7 @@ class IdentityRepository:
             self.db.conn.execute(
                 "INSERT INTO principals (id, name, active, created_at) VALUES (?, ?, ?, ?) "
                 "ON CONFLICT(id) DO UPDATE SET name=excluded.name, active=excluded.active",
-                (principal.id, principal.name, int(principal.active), principal.created_at.isoformat()),
+                (principal.id, principal.name, principal.active, principal.created_at.isoformat()),
             )
 
     def save_membership(self, membership: Membership) -> None:
@@ -23,7 +23,7 @@ class IdentityRepository:
             self.db.conn.execute(
                 "INSERT INTO tenant_memberships (principal_id, tenant_id, role, active, created_at) VALUES (?, ?, ?, ?, ?) "
                 "ON CONFLICT(principal_id, tenant_id) DO UPDATE SET role=excluded.role, active=excluded.active",
-                (membership.principal_id, membership.tenant_id, membership.role.value, int(membership.active), membership.created_at.isoformat()),
+                (membership.principal_id, membership.tenant_id, membership.role.value, membership.active, membership.created_at.isoformat()),
             )
 
     def get_context(self, principal_id: str, tenant_id: str) -> Optional[IdentityContext]:

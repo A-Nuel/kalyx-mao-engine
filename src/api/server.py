@@ -486,6 +486,14 @@ class IdentityAuthorizationMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         path = request.url.path
+
+        # Product Plane owns its own wallet/session authentication and tenant
+        # resolution. Do not route its organisation-shaped URLs through the
+        # legacy generic organisation middleware, which expects X-Tenant-ID
+        # before the Product Plane handler can resolve the workspace itself.
+        if path.startswith("/api/v1/product/"):
+            return await call_next(request)
+
         parts = [p for p in path.split("/") if p]
         org_segment = "organisations" if "organisations" in parts else ("organization" if "organization" in parts else None)
         if org_segment is None:
