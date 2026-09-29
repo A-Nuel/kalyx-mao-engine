@@ -64,8 +64,9 @@ class PostgresLedger:
         row = self.db.conn.execute(
             """SELECT COALESCE(SUM(CASE WHEN to_account = %s THEN amount ELSE 0 END), 0)
                       - COALESCE(SUM(CASE WHEN from_account = %s THEN amount ELSE 0 END), 0) AS balance
-               FROM ledger_entries""",
-            (account, account),
+               FROM ledger_entries
+               WHERE tenant_id = %s""",
+            (account, account, self.tenant_id),
         ).fetchone()
         if row is None:
             return 0
@@ -93,7 +94,7 @@ class PostgresLedger:
             # Serialize spends on the same from_account within this transaction.
             conn.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", (from_account,))
             dup = conn.execute(
-                "SELECT 1 FROM ledger_entries WHERE transaction_id = %s", (tx_id,)
+                "SELECT 1 FROM ledger_entries WHERE transaction_id = %s AND tenant_id = %s", (tx_id, tid)
             ).fetchone()
             if dup:
                 conn.rollback()
@@ -103,8 +104,9 @@ class PostgresLedger:
             bal_row = conn.execute(
                 """SELECT COALESCE(SUM(CASE WHEN to_account = %s THEN amount ELSE 0 END), 0)
                           - COALESCE(SUM(CASE WHEN from_account = %s THEN amount ELSE 0 END), 0) AS balance
-                   FROM ledger_entries""",
-                (from_account, from_account),
+                   FROM ledger_entries
+                   WHERE tenant_id = %s""",
+                (from_account, from_account, tid),
             ).fetchone()
             balance = int(
                 bal_row["balance"] if hasattr(bal_row, "keys") and "balance" in bal_row.keys() else (bal_row[0] if bal_row else 0) or 0
@@ -136,13 +138,14 @@ class PostgresLedger:
         if account:
             rows = self.db.conn.execute(
                 """SELECT * FROM ledger_entries
-                   WHERE from_account = %s OR to_account = %s
+                   WHERE tenant_id = %s AND (from_account = %s OR to_account = %s)
                    ORDER BY sequence_num ASC""",
-                (account, account),
+                (self.tenant_id, account, account),
             ).fetchall()
         else:
             rows = self.db.conn.execute(
-                "SELECT * FROM ledger_entries ORDER BY sequence_num ASC"
+                "SELECT * FROM ledger_entries WHERE tenant_id = %s ORDER BY sequence_num ASC",
+                (self.tenant_id,),
             ).fetchall()
         out: List[LedgerEntry] = []
         for r in rows:
