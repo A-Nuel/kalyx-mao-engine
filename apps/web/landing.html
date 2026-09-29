@@ -11,9 +11,7 @@
 <script>
 function enterKalyx(event){
   if(event) event.preventDefault();
-  // TEMPORARY JUDGING MODE: let the public CTA open the command centre
-  // while wallet auth/onboarding are tested independently.
-  location.href='/command-centre';
+  location.href='/auth?next='+encodeURIComponent('/command-centre');
 }
 </script>
 </head>
@@ -22,7 +20,7 @@ function enterKalyx(event){
 <header class="site-header">
 <a class="brand" href="/"><span class="mark"><i></i><i></i></span>KALYX</a>
 <nav><a href="#protocol">Protocol</a><a href="#economy">Economy</a><a href="#marketplace">Marketplace</a><a href="#trust">Trust</a></nav>
-<a class="header-cta" href="/command-centre" onclick="enterKalyx(event)">Enter Kalyx ↗</a>
+<a class="header-cta" href="/auth?next=%2Fcommand-centre" onclick="enterKalyx(event)">Enter Kalyx ↗</a>
 </header>
 <main>
 <section class="hero section" data-section="hero">
@@ -30,7 +28,7 @@ function enterKalyx(event){
 <p class="eyebrow">AUTONOMOUS ORGANIZATIONS <span>01</span></p>
 <h1>Work doesn't<br><em>have to wait.</em></h1>
 <p class="lede">Kalyx gives autonomous systems a way to turn intent into governed work, verified outcomes, and the resources to keep going.</p>
-<div class="actions"><a class="button primary" href="/command-centre">Enter Kalyx <b>→</b></a><a class="button" href="#protocol">Explore the system <b>↓</b></a></div>
+<div class="actions"><a class="button primary" href="/auth?next=%2Fcommand-centre">Enter Kalyx <b>→</b></a><a class="button" href="#protocol">Explore the system <b>↓</b></a></div>
 </div>
 <div class="hero-system" aria-label="Kalyx work cycle">
 <div class="orbit a"></div><div class="orbit b"></div><div class="orbit c"></div>
@@ -90,8 +88,8 @@ function enterKalyx(event){
 <aside><span>ORGANIZATIONS</span><b>17</b><span>ACTIVE WORK</span><b>06</b><span>RESOURCES</span><b>42.8 CR</b><span>VERIFIED VALUE</span><b>$812.40</b><div class="chart"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></aside></div></div>
 </section>
 
-<section class="section closing"><p class="eyebrow">KALYX <span>09</span></p><h2>Give software<br><em>somewhere to go.</em></h2><p>Infrastructure for autonomous organizations.</p><a class="button primary" href="/command-centre" onclick="enterKalyx(event)">Enter the Command Centre <b>→</b></a></section>
+<section class="section closing"><p class="eyebrow">KALYX <span>09</span></p><h2>Give software<br><em>somewhere to go.</em></h2><p>Infrastructure for autonomous organizations.</p><a class="button primary" href="/auth?next=%2Fcommand-centre" onclick="enterKalyx(event)">Enter the Command Centre <b>→</b></a></section>
 </main>
-<footer><a class="brand" href="/"><span class="mark"><i></i><i></i></span>KALYX</a><span>Autonomous organizations · Economic systems · Real work</span><div><a href="#protocol">Protocol</a><a href="#marketplace">Marketplace</a><a href="/command-centre">Command Centre</a></div></footer>
+<footer><a class="brand" href="/"><span class="mark"><i></i><i></i></span>KALYX</a><span>Autonomous organizations · Economic systems · Real work</span><div><a href="#protocol">Protocol</a><a href="#marketplace">Marketplace</a><a href="/auth?next=%2Fcommand-centre">Command Centre</a></div></footer>
 <script src="/assets/landing.js" defer></script>
 </body></html>

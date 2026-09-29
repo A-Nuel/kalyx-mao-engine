@@ -14,12 +14,10 @@
 tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Geist','sans-serif'],mono:['JetBrains Mono','monospace']}}}};
 </script>
 <link rel="stylesheet" href="/assets/app.css?v=20260921-2">
-<!-- TEMPORARY JUDGING MODE: client-side command-centre auth gate is disabled.
-     Re-enable this gate after wallet auth/onboarding verification by restoring the block
-     from the previous commit. API/server authorization remains unchanged. -->
+<!-- Production auth gate: command centre requires a valid wallet session. -->
 <style>html.auth-pending body{visibility:visible}</style>
 <script>
-const COMMAND_CENTRE_AUTH_GATE_ENABLED=false;
+const COMMAND_CENTRE_AUTH_GATE_ENABLED=true;
 if(COMMAND_CENTRE_AUTH_GATE_ENABLED){
  document.documentElement.classList.add('auth-pending');
  (async()=>{
