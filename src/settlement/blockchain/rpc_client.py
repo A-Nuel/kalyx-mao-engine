@@ -35,22 +35,77 @@ class IEvmRpcClient(Protocol):
         ...
 
 
+_DOH_INSTALLED = False
+_DOH_CACHE: dict[str, str] = {}
+
+
+def _ensure_doh_resolver() -> None:
+    global _DOH_INSTALLED
+    if _DOH_INSTALLED:
+        return
+    import socket
+    import urllib.request
+    import json
+    import ssl
+
+    _orig_getaddrinfo = socket.getaddrinfo
+
+    def _doh_getaddrinfo(host, port, *args, **kwargs):
+        if not host:
+            return _orig_getaddrinfo(host, port, *args, **kwargs)
+        if host in _DOH_CACHE:
+            return _orig_getaddrinfo(_DOH_CACHE[host], port, *args, **kwargs)
+        # Check if already IP address or localhost
+        if host in ("localhost", "127.0.0.1", "::1") or host.replace(".", "").isdigit():
+            return _orig_getaddrinfo(host, port, *args, **kwargs)
+
+        # Fast-path DoH to avoid Windows 15s DNS timeout on blocked UDP 53
+        try:
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            url = f"https://1.1.1.1/dns-query?name={host}&type=A"
+            req = urllib.request.Request(
+                url,
+                headers={"Accept": "application/dns-json", "Host": "cloudflare-dns.com"},
+            )
+            with urllib.request.urlopen(req, timeout=3, context=ctx) as resp:
+                data = json.loads(resp.read().decode())
+                answers = [
+                    a["data"] for a in data.get("Answer", []) if not a["data"].endswith(".")
+                ]
+                if answers:
+                    _DOH_CACHE[host] = answers[0]
+                    return _orig_getaddrinfo(answers[0], port, *args, **kwargs)
+        except Exception:
+            pass
+
+        return _orig_getaddrinfo(host, port, *args, **kwargs)
+
+    socket.getaddrinfo = _doh_getaddrinfo
+    _DOH_INSTALLED = True
+
+
 class HttpEvmRpcClient:
     """Standard HTTP JSON-RPC client for live EVM networks (e.g. Sepolia)."""
 
-    def __init__(self, rpc_url: str, timeout: float = 15.0):
+    def __init__(self, rpc_url: str, timeout: float = 20.0):
+        _ensure_doh_resolver()
         self.rpc_url = rpc_url.strip()
         self.timeout = timeout
+        self._client = httpx.Client(timeout=self.timeout)
 
     def _call(self, method: str, params: list[Any]) -> Any:
         payload = {"jsonrpc": "2.0", "method": method, "params": params, "id": 1}
-        with httpx.Client(timeout=self.timeout) as client:
-            resp = client.post(self.rpc_url, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
-            if "error" in data:
-                raise RuntimeError(f"RPC error: {data['error']}")
-            return data.get("result")
+        resp = self._client.post(self.rpc_url, json=payload)
+        resp.raise_for_status()
+        data = resp.json()
+        if "error" in data:
+            raise RuntimeError(f"RPC error: {data['error']}")
+        return data.get("result")
+
+    def close(self) -> None:
+        self._client.close()
 
     def get_chain_id(self) -> int:
         res = self._call("eth_chainId", [])

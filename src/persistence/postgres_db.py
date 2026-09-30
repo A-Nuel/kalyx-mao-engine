@@ -108,6 +108,25 @@ class _PgCursorProxy:
         return iter(self.fetchall())
 
 
+import threading
+
+_SHARED_POOLS: dict[str, Any] = {}
+_SHARED_POOLS_LOCK = threading.Lock()
+_MIGRATED_DSNS: set[str] = set()
+
+
+def close_all_pools() -> None:
+    """Close all shared connection pools (for server shutdown / test teardown)."""
+    with _SHARED_POOLS_LOCK:
+        for pool in _SHARED_POOLS.values():
+            try:
+                pool.close()
+            except Exception:
+                pass
+        _SHARED_POOLS.clear()
+        _MIGRATED_DSNS.clear()
+
+
 class PostgresDatabase:
     """Pooled PostgreSQL backend.
 
@@ -116,7 +135,14 @@ class PostgresDatabase:
               this Database instance — suitable for request-scoped usage).
     """
 
-    def __init__(self, dsn: str, pool_min: int = 1, pool_max: int = 10, run_migrate: bool = True):
+    def __init__(
+        self,
+        dsn: str,
+        pool_min: int = 1,
+        pool_max: int = 10,
+        run_migrate: bool = True,
+        shared_pool: bool = True,
+    ):
         try:
             from psycopg_pool import ConnectionPool
             from psycopg.rows import dict_row
@@ -127,21 +153,52 @@ class PostgresDatabase:
             ) from exc
 
         self.dsn = dsn
-        self._pool = ConnectionPool(
-            conninfo=dsn,
-            min_size=pool_min,
-            max_size=pool_max,
-            kwargs={"row_factory": dict_row, "autocommit": False},
-            open=True,
-        )
+        self.shared_pool = shared_pool
+
+        if shared_pool:
+            with _SHARED_POOLS_LOCK:
+                if dsn not in _SHARED_POOLS or _SHARED_POOLS[dsn].closed:
+                    _SHARED_POOLS[dsn] = ConnectionPool(
+                        conninfo=dsn,
+                        min_size=pool_min,
+                        max_size=pool_max,
+                        kwargs={"row_factory": dict_row, "autocommit": False},
+                        open=True,
+                    )
+                self._pool = _SHARED_POOLS[dsn]
+        else:
+            self._pool = ConnectionPool(
+                conninfo=dsn,
+                min_size=pool_min,
+                max_size=pool_max,
+                kwargs={"row_factory": dict_row, "autocommit": False},
+                open=True,
+            )
+
         # Borrow one connection for this Database instance (transitional API).
         self._raw = self._pool.getconn()
         self.conn = _PgConnectionProxy(self._raw)
+
         if run_migrate:
-            run_migrations(self.conn)
+            with _SHARED_POOLS_LOCK:
+                needs_migrate = dsn not in _MIGRATED_DSNS
+            if needs_migrate:
+                run_migrations(self.conn)
+                with _SHARED_POOLS_LOCK:
+                    _MIGRATED_DSNS.add(dsn)
 
     def close(self) -> None:
         if self._raw is not None:
+            # Cleanly roll back any open/uncommitted transaction (e.g. from read-only SELECTs)
+            # to prevent the psycopg_pool warning: "rolling back returned connection ... INTRANS"
+            try:
+                if hasattr(self._raw, "info") and getattr(self._raw.info, "transaction_status", None) is not None:
+                    status = self._raw.info.transaction_status
+                    if status == 2 or getattr(status, "name", "") == "INTRANS":
+                        self._raw.rollback()
+            except Exception:
+                pass
+
             try:
                 self._pool.putconn(self._raw)
             except Exception:
@@ -150,7 +207,8 @@ class PostgresDatabase:
                 except Exception:
                     pass
             self._raw = None
-        if self._pool is not None:
+
+        if not self.shared_pool and self._pool is not None:
             try:
                 self._pool.close()
             except Exception:

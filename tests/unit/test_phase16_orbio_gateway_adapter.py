@@ -33,7 +33,9 @@ def sample_work_order():
     )
 
 
-def test_orbio_gateway_successful_execution(sample_work_order):
+def test_orbio_gateway_successful_execution(sample_work_order, monkeypatch):
+    monkeypatch.delenv("ORBIO_GATEWAY_BASE", raising=False)
+    monkeypatch.delenv("ORBIO_API_BASE_URL", raising=False)
     mock_response_data = {
         "id": "chatcmpl-test-123",
         "object": "chat.completion",

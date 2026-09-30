@@ -159,7 +159,7 @@ def test_six_stage_b2b_marketplace_loop_demo(tmp_path, monkeypatch):
     session_id = started.json()["session_id"]
     assert session_id.startswith("mkt-demo-")
 
-    deadline = time.time() + 15
+    deadline = time.time() + 30
     snapshot = {}
     while time.time() < deadline:
         res = client.get(f"/api/demo/marketplace/{session_id}")

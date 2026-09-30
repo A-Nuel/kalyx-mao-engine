@@ -6,62 +6,190 @@
 main{width:min(520px,90vw)}.mark{font:700 12px ui-monospace,monospace;letter-spacing:.2em;color:#9bb8ff}
 h1{font-size:clamp(36px,9vw,58px);line-height:.98;letter-spacing:-.05em;margin:22px 0 12px}.lede{color:#8792a5;line-height:1.65}
 .card{margin-top:30px;border:1px solid #202633;background:#0b0e14;border-radius:18px;padding:22px}
-button{width:100%;padding:14px 16px;border-radius:10px;border:1px solid #31405a;background:#dce7ff;color:#07090d;font-weight:700;cursor:pointer;margin-top:10px}
-button.secondary{background:#121720;color:#dbe5f5}.status{margin-top:16px;color:#8fa4c5;font:12px/1.6 ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
+.wallet-list{display:grid;gap:10px;margin-top:10px}
+button{width:100%;padding:14px 16px;border-radius:10px;border:1px solid #31405a;background:#121720;color:#dbe5f5;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:.15s}
+button:hover{border-color:#5c7cb5;background:#18212e}
+button.primary{background:#dce7ff;color:#07090d;border-color:#dce7ff}
+button.primary:hover{background:#c8d9ff}
+button img{width:20px;height:20px;border-radius:4px;object-fit:contain}
+.status{margin-top:16px;color:#8fa4c5;font:12px/1.6 ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
 small{display:block;color:#69758a;line-height:1.6;margin-top:16px}
 a{color:#9bb8ff;text-decoration:none}
+.divider{margin:16px 0 8px;font:11px ui-monospace,monospace;color:#526075;text-align:center;letter-spacing:.1em}
 </style></head><body><main>
 <div class="mark">KALYX / IDENTITY</div>
 <h1>Enter the control plane.</h1>
 <p class="lede">Connect your wallet and sign a short authentication message. Signing in does not move funds or authorize a blockchain transaction.</p>
 <section class="card">
-<button id="walletConnect">Connect a wallet</button>
-<button id="browser" class="secondary">Use browser wallet</button>
-<div id="status" class="status">Checking wallet connector…</div>
+<div id="walletList" class="wallet-list">
+  <button id="btnMetaMask" style="display:none"><img src="https://raw.githubusercontent.com/MetaMask/brand-resources/master/SVG/metamask-fox.svg" alt="">Sign in with MetaMask</button>
+  <button id="btnPhantom" style="display:none"><img src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png" alt="">Sign in with Phantom</button>
+  <div id="discoveredWallets" class="wallet-list"></div>
+  <button id="browser" class="secondary">Use browser wallet</button>
+</div>
+<div class="divider">OR</div>
+<button id="walletConnect" class="secondary">WalletConnect / Mobile QR</button>
+<div id="status" class="status">Detecting available wallets…</div>
 <small>New here? After authentication, Kalyx will take you through workspace, organisation, agent, policy and provider setup.</small>
 </section>
 <p><a href="/">← Back to Kalyx</a></p>
 </main>
 <script>
 const $=id=>document.getElementById(id);let appKit=null,adapter=null,core=null;
+const discoveredProviders=new Map();
+
 async function api(path,opts={}){const r=await fetch(path,{...opts,headers:{'Content-Type':'application/json',...(opts.headers||{})}});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Request failed');return d}
 function status(x){$('status').textContent=x}
 function go(v){localStorage.setItem('kalyx_session',v.token);const next=new URLSearchParams(location.search).get('next');location.href=next||'/onboarding'}
-async function init(){
- const cfg=await api('/api/v1/product/auth/wallet/config');
- if(!cfg.walletconnect.configured){$('walletConnect').disabled=true;status('WalletConnect is not configured on this deployment yet.\nUse Browser Wallet or configure KALYX_REOWN_PROJECT_ID.');return}
+
+async function authenticateWithProvider(provider, walletName='Wallet'){
  try{
-  const sdk=await import('https://cdn.jsdelivr.net/npm/@reown/appkit-cdn@1.8.24/dist/appkit.min.js');
-  const {createAppKit,WagmiAdapter}=sdk;
-  core=await import('https://cdn.jsdelivr.net/npm/@wagmi/core@2.18.1/+esm');
-  const network={id:cfg.chain.id,name:cfg.chain.name,nativeCurrency:{name:'Ether',symbol:'ETH',decimals:18},rpcUrls:{default:{http:[cfg.chain.rpc_url]}},blockExplorers:{default:{name:'Robinhood Chain Explorer',url:cfg.chain.explorer}},testnet:false};
-  adapter=new WagmiAdapter({projectId:cfg.walletconnect.project_id,networks:[network]});
-  appKit=createAppKit({adapters:[adapter],networks:[network],projectId:cfg.walletconnect.project_id,defaultNetwork:network,themeMode:'dark',metadata:{name:'Kalyx',description:'Governed autonomous organisations',url:location.origin,icons:[]},features:{analytics:false,email:false,socials:false}});
-  status('WalletConnect ready.');
- }catch(e){$('walletConnect').disabled=true;status('WalletConnect failed to initialize: '+e.message)}
-}
-async function browser(){
- try{
-  if(!window.ethereum)throw new Error('No browser wallet detected. Use Connect a wallet instead.');
-  const [address]=await window.ethereum.request({method:'eth_requestAccounts'});
-  const chainId=parseInt(await window.ethereum.request({method:'eth_chainId'}),16);
+  if(!provider)throw new Error(`No provider found for ${walletName}.`);
+  status(`Connecting to ${walletName}…`);
+  const accounts=await provider.request({method:'eth_requestAccounts'});
+  const address=accounts[0];
+  if(!address)throw new Error('No account selected.');
+  const chainIdHex=await provider.request({method:'eth_chainId'});
+  const chainId=parseInt(chainIdHex,16);
   const ch=await api('/api/v1/product/auth/wallet/challenge',{method:'POST',body:JSON.stringify({address,chain_id:chainId})});
-  status('Approve the Kalyx sign-in message in your wallet…');
-  const sig=await window.ethereum.request({method:'personal_sign',params:[ch.message,address]});
+  status(`Approve the Kalyx sign-in message in ${walletName}…`);
+  const sig=await provider.request({method:'personal_sign',params:[ch.message,address]});
+  status('Verifying signature…');
   go(await api('/api/v1/product/auth/wallet/verify',{method:'POST',body:JSON.stringify({challenge_id:ch.challenge_id,signature:sig})}));
  }catch(e){status(e.message)}
 }
-$('browser').onclick=browser;
-$('walletConnect').onclick=async()=>{try{
- if(!appKit){await init();if(!appKit)throw new Error('WalletConnect is unavailable.')}
- await appKit.open();status('Waiting for wallet approval…');
- let account=null;for(let i=0;i<60;i++){account=core.getAccount(adapter.wagmiConfig);if(account?.isConnected&&account.address)break;await new Promise(r=>setTimeout(r,300))}
- if(!account?.address)throw new Error('Wallet connection was not completed.');
- const chainId=core.getChainId(adapter.wagmiConfig);
- const ch=await api('/api/v1/product/auth/wallet/challenge',{method:'POST',body:JSON.stringify({address:account.address,chain_id:chainId})});
- status('Approve the Kalyx sign-in message in your wallet…');
- const sig=await core.signMessage(adapter.wagmiConfig,{message:ch.message});
- go(await api('/api/v1/product/auth/wallet/verify',{method:'POST',body:JSON.stringify({challenge_id:ch.challenge_id,signature:sig})}));
- }catch(e){status(e.message)}};
-init().catch(e=>status('Wallet setup unavailable: '+e.message));
+
+// EIP-6963 Multi-Injected Provider Discovery
+function setupEIP6963(){
+ window.addEventListener('eip6963:announceProvider',(event)=>{
+  const {info,provider}=event.detail;
+  if(!info||!provider||discoveredProviders.has(info.rdns))return;
+  discoveredProviders.set(info.rdns,{info,provider});
+
+  const isMM=info.rdns==='io.metamask'||info.name.toLowerCase().includes('metamask');
+  const isPhantom=info.rdns==='app.phantom'||info.name.toLowerCase().includes('phantom');
+
+  if(isMM){
+   $('btnMetaMask').style.display='flex';
+   $('btnMetaMask').onclick=()=>authenticateWithProvider(provider,'MetaMask');
+   $('browser').style.display='none';
+   status('Select your wallet above.');
+   return;
+  }
+  if(isPhantom){
+   $('btnPhantom').style.display='flex';
+   $('btnPhantom').onclick=()=>authenticateWithProvider(provider,'Phantom');
+   $('browser').style.display='none';
+   status('Select your wallet above.');
+   return;
+  }
+
+  const container=$('discoveredWallets');
+  const btn=document.createElement('button');
+  btn.className='secondary';
+  if(info.icon){
+   const img=document.createElement('img');
+   img.src=info.icon;
+   btn.appendChild(img);
+  }
+  const txt=document.createTextNode(`Sign in with ${info.name}`);
+  btn.appendChild(txt);
+  btn.onclick=()=>authenticateWithProvider(provider,info.name);
+  container.appendChild(btn);
+  $('browser').style.display='none';
+  status('Select your wallet above.');
+ });
+
+ window.dispatchEvent(new Event('eip6963:requestProvider'));
+}
+
+// Fallback legacy inspection of window.ethereum
+function setupLegacyProviders(){
+ const eth=window.ethereum;
+ let mmFound=false,phantomFound=false;
+
+ if(eth?.providers?.length){
+  for(const p of eth.providers){
+   if(p.isMetaMask&&!p.isPhantom&&!mmFound){
+    mmFound=true;
+    $('btnMetaMask').style.display='flex';
+    $('btnMetaMask').onclick=()=>authenticateWithProvider(p,'MetaMask');
+   }
+   if(p.isPhantom&&!phantomFound){
+    phantomFound=true;
+    $('btnPhantom').style.display='flex';
+    $('btnPhantom').onclick=()=>authenticateWithProvider(p,'Phantom');
+   }
+  }
+ }
+
+ if(window.phantom?.ethereum&&!phantomFound){
+  phantomFound=true;
+  $('btnPhantom').style.display='flex';
+  $('btnPhantom').onclick=()=>authenticateWithProvider(window.phantom.ethereum,'Phantom');
+ }
+
+ if(eth&&!mmFound&&!phantomFound){
+  if(eth.isMetaMask&&!eth.isPhantom){
+   $('btnMetaMask').style.display='flex';
+   $('btnMetaMask').onclick=()=>authenticateWithProvider(eth,'MetaMask');
+   mmFound=true;
+  }else if(eth.isPhantom){
+   $('btnPhantom').style.display='flex';
+   $('btnPhantom').onclick=()=>authenticateWithProvider(eth,'Phantom');
+   phantomFound=true;
+  }
+ }
+
+ $('browser').onclick=()=>{
+  if(!window.ethereum)return status('No browser wallet detected.');
+  authenticateWithProvider(window.ethereum,'Browser Wallet');
+ };
+
+ if(mmFound||phantomFound||discoveredProviders.size>0){
+  $('browser').style.display='none';
+  status('Select your wallet above.');
+ }else{
+  $('browser').style.display='flex';
+  status('Click "Use browser wallet" or "WalletConnect" below.');
+ }
+}
+
+// Lazy WalletConnect / AppKit initialization on demand
+async function openWalletConnect(){
+ try{
+  status('Loading WalletConnect…');
+  const cfg=await api('/api/v1/product/auth/wallet/config');
+  if(!cfg.walletconnect?.configured){
+   throw new Error('WalletConnect is not configured on this server (set KALYX_REOWN_PROJECT_ID).');
+  }
+  if(!appKit){
+   const sdk=await import('https://cdn.jsdelivr.net/npm/@reown/appkit-cdn@1.8.24/dist/appkit.min.js');
+   const {createAppKit,WagmiAdapter}=sdk;
+   core=await import('https://cdn.jsdelivr.net/npm/@wagmi/core@2.18.1/+esm');
+   const network={id:cfg.chain.id,name:cfg.chain.name,nativeCurrency:{name:'Ether',symbol:'ETH',decimals:18},rpcUrls:{default:{http:[cfg.chain.rpc_url]}},blockExplorers:{default:{name:'Robinhood Chain Explorer',url:cfg.chain.explorer}},testnet:false};
+   adapter=new WagmiAdapter({projectId:cfg.walletconnect.project_id,networks:[network]});
+   appKit=createAppKit({adapters:[adapter],networks:[network],projectId:cfg.walletconnect.project_id,defaultNetwork:network,themeMode:'dark',metadata:{name:'Kalyx',description:'Governed autonomous organisations',url:location.origin,icons:[]},features:{analytics:false,email:false,socials:false}});
+  }
+  await appKit.open();
+  status('Waiting for wallet approval…');
+  let account=null;
+  for(let i=0;i<60;i++){
+   account=core.getAccount(adapter.wagmiConfig);
+   if(account?.isConnected&&account.address)break;
+   await new Promise(r=>setTimeout(r,300));
+  }
+  if(!account?.address)throw new Error('Wallet connection was not completed.');
+  const chainId=core.getChainId(adapter.wagmiConfig);
+  const ch=await api('/api/v1/product/auth/wallet/challenge',{method:'POST',body:JSON.stringify({address:account.address,chain_id:chainId})});
+  status('Approve the Kalyx sign-in message in your wallet…');
+  const sig=await core.signMessage(adapter.wagmiConfig,{message:ch.message});
+  go(await api('/api/v1/product/auth/wallet/verify',{method:'POST',body:JSON.stringify({challenge_id:ch.challenge_id,signature:sig})}));
+ }catch(e){status(e.message)}
+}
+
+$('walletConnect').onclick=openWalletConnect;
+
+setupEIP6963();
+setTimeout(setupLegacyProviders,150);
 </script></body></html>

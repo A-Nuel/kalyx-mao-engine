@@ -46,12 +46,19 @@ class OrbioGatewayAdapter(BaseWorkExecutor):
         self.base_url = (os.getenv("ORBIO_GATEWAY_BASE") or os.getenv("ORBIO_API_BASE_URL") or base_url).rstrip("/")
         self.api_key = api_key or os.getenv("ORBIO_API_KEY")
         self.model = os.getenv("ORBIO_MODEL") or model
+        is_prod = os.getenv("KALYX_ENV", "demo").strip().lower() in {"production", "prod"}
         if allow_simulated_fallback is None:
-            configured = os.getenv("KALYX_ORBIO_ALLOW_SIMULATED_FALLBACK")
-            if configured is not None:
-                allow_simulated_fallback = configured.strip().lower() in {"1", "true", "yes", "on"}
+            if is_prod:
+                allow_simulated_fallback = False
             else:
-                allow_simulated_fallback = os.getenv("KALYX_ENV", "demo").strip().lower() not in {"production", "prod"}
+                configured = os.getenv("KALYX_ORBIO_ALLOW_SIMULATED_FALLBACK")
+                if configured is not None:
+                    allow_simulated_fallback = configured.strip().lower() in {"1", "true", "yes", "on"}
+                else:
+                    allow_simulated_fallback = True
+        elif is_prod and allow_simulated_fallback:
+            logger.warning("Simulated fallback cannot be enabled in production; forcing False")
+            allow_simulated_fallback = False
         self.allow_simulated_fallback = bool(allow_simulated_fallback)
         self._credit_store = credit_store if credit_store is not None else {}
         self.fallback_executor = fallback_executor or SimulatedWorkExecutor(credit_store=self._credit_store)
