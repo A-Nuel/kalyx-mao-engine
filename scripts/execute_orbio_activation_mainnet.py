@@ -25,6 +25,12 @@ from typing import Any, Dict, Optional, Tuple
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from src.domain.entities import Organisation
 from src.domain.enums import OrgState
 from src.domain.orbio_activation import (
@@ -50,6 +56,7 @@ from src.settlement.orbio_activation_verifier import (
     ActivationVerificationResult,
     OrbioCreditActivationVerifier,
 )
+from src.settlement.orbio_api_verifier import OrbioApiBalanceVerifier
 
 EXPECTED_OPERATOR = "0x4675b9d0323479b1af399c87331d1d2436e6be99"
 EXPECTED_CALLDATA = encode_activate_calldata(MAX_ACTIVATION_AMOUNT)
@@ -71,6 +78,8 @@ class DriverConfig:
     signed_raw_tx_hex: Optional[str] = None
     export_unsigned: bool = False
     reconcile_tx_hash: Optional[str] = None
+    max_fee_per_gas: int = 500_000_000
+    max_priority_fee_per_gas: int = 50_000_000
 
 
 def _redact_key(_key: str) -> str:
@@ -114,6 +123,18 @@ def load_config(args: argparse.Namespace) -> DriverConfig:
             f"{EXPECTED_OPERATOR}"
         )
 
+    max_fee = getattr(args, "max_fee_per_gas", None)
+    if max_fee is None and os.getenv("KALYX_MAX_FEE_PER_GAS"):
+        max_fee = int(os.environ["KALYX_MAX_FEE_PER_GAS"])
+    if max_fee is None:
+        max_fee = 500_000_000
+
+    max_prio = getattr(args, "max_priority_fee_per_gas", None)
+    if max_prio is None and os.getenv("KALYX_MAX_PRIORITY_FEE_PER_GAS"):
+        max_prio = int(os.environ["KALYX_MAX_PRIORITY_FEE_PER_GAS"])
+    if max_prio is None:
+        max_prio = 50_000_000
+
     return DriverConfig(
         signer_mode=signer_mode,
         rpc_url=rpc,
@@ -124,6 +145,8 @@ def load_config(args: argparse.Namespace) -> DriverConfig:
         signed_raw_tx_hex=getattr(args, "signed_tx_hex", None),
         export_unsigned=bool(getattr(args, "export_unsigned_tx", False)),
         reconcile_tx_hash=getattr(args, "reconcile_tx", None),
+        max_fee_per_gas=max_fee,
+        max_priority_fee_per_gas=max_prio,
     )
 
 
@@ -163,6 +186,8 @@ def build_intent(
     tenant_id: str = "tenant-orbio",
     organisation_id: str = "org-orbio-activation",
     operation_id: Optional[str] = None,
+    max_fee_per_gas: int = 500_000_000,
+    max_priority_fee_per_gas: int = 50_000_000,
 ) -> OrbioCreditActivationIntent:
     op_id = operation_id or f"act-{uuid.uuid4().hex[:12]}"
     return OrbioCreditActivationIntent(
@@ -174,6 +199,8 @@ def build_intent(
         credit_contract=ORBIO_CREDIT_ACTIVATION_CONTRACT,
         amount=MAX_ACTIVATION_AMOUNT,
         gas_limit=DEFAULT_GAS_LIMIT,
+        max_fee_per_gas=max_fee_per_gas,
+        max_priority_fee_per_gas=max_priority_fee_per_gas,
         amount_credits=0,
         idempotency_key=f"orbio-activate-1credit-{op_id}",
         policy_decision_id="pending",
@@ -313,8 +340,41 @@ def execute_via_provider(
         "api_balance_confirmed": False,
     }
 
-    # UNKNOWN / TIMEOUT: do not retry
+    # UNKNOWN / TIMEOUT: do not retry resending
     if result.outcome in ("TIMEOUT", "UNKNOWN"):
+        # If the transaction was submitted to mempool, poll for confirmation
+        if result.error_message and "pending on-chain confirmation" in result.error_message:
+            tx_hash = result.provider_reference
+            if tx_hash:
+                print(f"Transaction submitted ({tx_hash}); waiting for on-chain confirmation...")
+                for attempt in range(15):
+                    time.sleep(2.0)
+                    receipt = rpc.get_transaction_receipt(tx_hash)
+                    if receipt:
+                        status_val = receipt.get("status")
+                        if status_val not in (1, "0x1", "1"):
+                            out["outcome"] = "FAILURE"
+                            out["state"] = "FAILED"
+                            out["error_message"] = "Transaction reverted on-chain"
+                            return out
+                        report = OrbioCreditActivationVerifier().verify(
+                            intent,
+                            chain_id=ORBIO_ACTIVATION_CHAIN_ID,
+                            receipt=receipt,
+                            expected_sender=signer.address,
+                        )
+                        out["outcome"] = "SUCCESS"
+                        out["raw_response"] = receipt
+                        out["verification"] = report.to_audit_dict()
+                        out["state"] = (
+                            "VERIFIED_ON_CHAIN"
+                            if report.result == ActivationVerificationResult.VERIFIED
+                            else "NOT_VERIFIED"
+                        )
+                        out["api_balance_confirmed"] = False
+                        out["api_balance_note"] = "API BALANCE NOT YET CONFIRMED — ON-CHAIN ACTIVATION ONLY; Phase 21"
+                        return out
+
         out["state"] = "UNKNOWN_PENDING"
         out["note"] = "Ambiguous broadcast; do not resend. Reconcile by tx hash / nonce."
         return out
@@ -354,8 +414,21 @@ def execute_via_provider(
         if report.result == ActivationVerificationResult.VERIFIED
         else "NOT_VERIFIED"
     )
-    out["api_balance_confirmed"] = False
-    out["api_balance_note"] = "API BALANCE NOT YET CONFIRMED — ON-CHAIN ACTIVATION ONLY; Phase 21"
+    api_report = OrbioApiBalanceVerifier().verify(
+        expected_min_credits=0.95,
+        expected_account_id=signer.address,
+    )
+    if api_report.is_confirmed:
+        out["api_balance_confirmed"] = True
+        out["api_balance_note"] = (
+            f"ORBIO API CONFIRMED: available={api_report.available_balance:.4f} USD (account: {api_report.account_id})"
+        )
+    else:
+        out["api_balance_confirmed"] = False
+        out["api_balance_note"] = (
+            f"API BALANCE NOT YET CONFIRMED — ON-CHAIN ACTIVATION ONLY; Phase 21 ({api_report.status.value}: {api_report.error_message or 'Configure ORBIO_API_KEY'})"
+        )
+    out["api_verification"] = api_report.to_audit_dict()
     return out
 
 
@@ -418,6 +491,17 @@ def reconcile_via_tx_hash(
         receipt=receipt,
         expected_sender=operator_address,
     )
+    api_report = OrbioApiBalanceVerifier().verify(
+        expected_min_credits=0.95,
+        expected_account_id=operator_address,
+    )
+    if api_report.is_confirmed:
+        api_confirmed = True
+        api_note = f"ORBIO API CONFIRMED: available={api_report.available_balance:.4f} USD (account: {api_report.account_id})"
+    else:
+        api_confirmed = False
+        api_note = f"API BALANCE NOT YET CONFIRMED — ON-CHAIN ACTIVATION ONLY; Phase 21 ({api_report.status.value}: {api_report.error_message or 'Configure ORBIO_API_KEY'})"
+
     return {
         "outcome": "SUCCESS",
         "provider_reference": clean_tx_hash,
@@ -427,8 +511,9 @@ def reconcile_via_tx_hash(
             else "NOT_VERIFIED"
         ),
         "verification": report.to_audit_dict(),
-        "api_balance_confirmed": False,
-        "api_balance_note": "API BALANCE NOT YET CONFIRMED — ON-CHAIN ACTIVATION ONLY; Phase 21",
+        "api_balance_confirmed": api_confirmed,
+        "api_balance_note": api_note,
+        "api_verification": api_report.to_audit_dict(),
     }
 
 
@@ -475,6 +560,18 @@ def main(argv: Optional[list] = None) -> int:
         default=None,
         help="Transaction hash to verify and reconcile if already broadcast by wallet",
     )
+    parser.add_argument(
+        "--max-fee-per-gas",
+        type=int,
+        default=None,
+        help="Max fee per gas in wei (default: 500000000 = 0.5 Gwei)",
+    )
+    parser.add_argument(
+        "--max-priority-fee-per-gas",
+        type=int,
+        default=None,
+        help="Max priority fee per gas in wei (default: 50000000 = 0.05 Gwei)",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -487,9 +584,14 @@ def main(argv: Optional[list] = None) -> int:
         print(f"CREDIT: {ORBIO_CREDIT_ACTIVATION_CONTRACT}")
         print(f"Amount: {MAX_ACTIVATION_AMOUNT} atoms (1.000000 CREDIT)")
         print(f"Calldata: {EXPECTED_CALLDATA}")
+        print(f"Max Fee Per Gas: {cfg.max_fee_per_gas} wei ({cfg.max_fee_per_gas / 1e9:.2f} Gwei)")
+        print(f"Max Priority Fee Per Gas: {cfg.max_priority_fee_per_gas} wei ({cfg.max_priority_fee_per_gas / 1e9:.2f} Gwei)")
         print(f"Dry-run: {cfg.dry_run}")
 
-        intent = build_intent()
+        intent = build_intent(
+            max_fee_per_gas=cfg.max_fee_per_gas,
+            max_priority_fee_per_gas=cfg.max_priority_fee_per_gas,
+        )
         validate_intent_hard_bounds(intent)
 
         intent, approval, bundle = authorize(intent)
@@ -547,8 +649,8 @@ def main(argv: Optional[list] = None) -> int:
                     "type": 2,
                     "chainId": intent.chain_id,
                     "nonce": live_nonce,
-                    "maxFeePerGas": 25_000_000_000,
-                    "maxPriorityFeePerGas": 1_500_000_000,
+                    "maxFeePerGas": intent.max_fee_per_gas,
+                    "maxPriorityFeePerGas": intent.max_priority_fee_per_gas,
                     "gas": intent.gas_limit,
                     "to": intent.credit_contract,
                     "value": 0,
@@ -592,6 +694,10 @@ def main(argv: Optional[list] = None) -> int:
         print(f"Outcome: {out.get('outcome')}")
         print(f"State: {out.get('state')}")
         print(f"Tx: {out.get('provider_reference')}")
+        if out.get("error_message"):
+            print(f"Error: {out.get('error_message')}")
+        if out.get("raw_response"):
+            print(f"Raw Response: {out.get('raw_response')}")
         print(f"Verification: {out.get('verification')}")
         print(out.get("api_balance_note", "API balance not confirmed"))
         if out.get("state") == "UNKNOWN_PENDING":

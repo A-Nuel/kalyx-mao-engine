@@ -62,7 +62,8 @@ class OrchestrationEngine:
             for a in self.org.agents.values(): self.repository.save_agent(a, self.org.id)
 
     def start_mission(self) -> None:
-        StateMachine.transition_org(self.org, OrgState.PLANNING)
+        if self.org.state != OrgState.PLANNING:
+            StateMachine.transition_org(self.org, OrgState.PLANNING)
         self.event_store.append_event(actor_id="ORCHESTRATOR", event_type="MISSION_STARTED", entity_id=self.org.id,
                                       payload={"mission": self.org.mission, "treasury_balance": self.org.treasury_balance})
         self._emit_stage("MISSION_STARTED", organisation_id=self.org.id, mission=self.org.mission, treasury_balance=self.org.treasury_balance)

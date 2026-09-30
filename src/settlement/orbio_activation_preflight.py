@@ -201,6 +201,12 @@ class OrbioActivationPreflight:
                 errors.append("get_balance returned None")
             elif eth_bal == 0:
                 errors.append("operator ETH balance is zero; cannot pay gas")
+            elif eth_bal < (intent.gas_limit * intent.max_fee_per_gas):
+                errors.append(
+                    f"insufficient ETH for max gas reserve: balance={eth_bal}, "
+                    f"required={intent.gas_limit * intent.max_fee_per_gas} "
+                    f"({intent.gas_limit} * {intent.max_fee_per_gas})"
+                )
         except Exception as exc:
             errors.append(f"get_balance failed: {exc}")
 

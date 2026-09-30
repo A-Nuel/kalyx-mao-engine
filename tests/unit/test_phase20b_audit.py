@@ -271,7 +271,8 @@ def test_audit_08_reconcile_tx_rejects_arbitrary_or_tampered_transactions():
 # ===========================================================================
 # 9. No API balance is marked as confirmed merely from blockchain receipt
 # ===========================================================================
-def test_audit_09_api_balance_never_confirmed_from_blockchain_receipt():
+def test_audit_09_api_balance_never_confirmed_from_blockchain_receipt(monkeypatch):
+    monkeypatch.delenv("ORBIO_API_KEY", raising=False)
     intent = driver.build_intent()
 
     class ValidOnChainRpc:
