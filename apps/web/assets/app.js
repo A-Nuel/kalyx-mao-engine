@@ -6,8 +6,34 @@ const App = (() => {
   let cachedLedgerData = null;
   let cachedAgents = [];
   let auditEventsById = {};
-
+  let liveDemoSessionId = null;
+  let liveDemoPollTimer = null;
+  let liveDemoCountdownTimer = null;
+  let liveDemoMode = 'guided';
   let navigationCollapsed = true;
+  const LIVE_DEMO_STAGES = [
+    ['INITIALIZE', 'Initialize', 'Mission accepted by the control plane'],
+    ['PLAN', 'Plan', 'Agents decompose the objective'],
+    ['PROPOSE', 'Propose', 'An agent submits a consequential proposal'],
+    ['AUTHORIZE', 'Authorize', 'Policy decides whether authority is valid'],
+    ['EXECUTE', 'Execute', 'Controlled executor performs the action'],
+    ['VERIFY', 'Verify', 'Independent auditor checks evidence'],
+    ['SETTLE', 'Settle', 'Ledger reflects the resulting economic state'],
+    ['AUDIT', 'Audit', 'The completed chronology remains inspectable'],
+  ];
+
+  const MARKETPLACE_DEMO_STAGES = [
+    ['ORDER_PROPOSED', 'Order & Escrow Lock', 'Client locks 300 USDG in escrow for market capability'],
+    ['CAPABILITY_EXPANSION', 'Capability Evolution', 'Provider worker evaluated (94.5 > 80) & granted capability'],
+    ['ORBIO_EXECUTION', 'Orbio Work Execution', 'Productive computation via Orbio Gateway (1,000 credits)'],
+    ['INDEPENDENT_AUDIT', 'Independent Audit', 'Cryptographic HMAC verification & deliverable audit'],
+    ['ESCROW_SETTLEMENT', 'Settlement & Surplus Split', 'Escrow released with 80/20 mission surplus allocation'],
+    ['MISSION_CHAINING', 'Mission Chaining', 'Mission 2 funded strictly from verified surplus (<= 240 USDG)'],
+  ];
+
+  let marketplaceDemoSessionId = null;
+  let marketplaceDemoPollTimer = null;
+  let marketplaceCountdownTimer = null;
 
   // Agent inspector is always populated from the authoritative API. No fictional fallback registry.
   const AGENT_REGISTRY = Object.freeze({});
@@ -758,7 +784,7 @@ const App = (() => {
     if (operations.length === 0) {
       container.innerHTML = `
         <div class="col-span-full text-center py-space-xl text-on-surface-variant font-body-sm text-body-sm">
-          No consequential operations yet — run the governed mission to generate one.
+          No consequential operations yet — run the demo to generate one.
         </div>`;
       return;
     }
@@ -872,7 +898,7 @@ const App = (() => {
         </tr>
       `).join('');
     } else if (tbody) {
-      tbody.innerHTML = '<tr><td colspan="5" class="kc-empty">No audit events yet — run the governed mission to generate one.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" class="kc-empty">No audit events yet — run the demo to generate one.</td></tr>';
     }
   }
 
