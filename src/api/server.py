@@ -15,7 +15,14 @@ from pydantic import BaseModel, Field
 from fastapi.exceptions import RequestValidationError
 from starlette.middleware.base import BaseHTTPMiddleware
 from src.api.bootstrap import ensure_started, is_production, policy_secret
-from src.api.config import cors_origins, operator_key, require_operator_auth
+from src.api.config import (
+    cors_origins,
+    operator_key,
+    require_operator_auth,
+    blockchain_enabled,
+    blockchain_network_name,
+    blockchain_chain_id,
+)
 from src.api.identity_auth import identity_auth_required, require_identity_for_org, require_identity_for_tenant, require_write_permission
 from src.api.product_plane import router as product_plane_router
 from src.identity.execution_context import ExecutionContext, current_execution_context, reset_current_execution_context, set_current_execution_context
