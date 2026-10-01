@@ -70,7 +70,7 @@ const App = (() => {
 
   // Navigation & Routing
   function setRoute(route) {
-    const validRoutes = ['overview', 'demo', 'missions', 'organisation', 'treasury', 'policies', 'operations', 'marketplace', 'collateral', 'audit', 'experiments', 'settings'];
+    const validRoutes = ['overview', 'missions', 'organisation', 'treasury', 'policies', 'operations', 'marketplace', 'collateral', 'audit', 'experiments', 'settings'];
     const target = validRoutes.includes(route) ? route : 'overview';
     currentRoute = target;
 
@@ -119,7 +119,7 @@ const App = (() => {
   function applyNavigationState() {
     const isMobile = window.matchMedia('(max-width: 760px)').matches;
     const navLabels = {
-      overview: 'Overview', demo: 'Live Demo', missions: 'Missions', organisation: 'Organisation',
+      overview: 'Overview', missions: 'Missions', organisation: 'Organisation',
       treasury: 'Treasury', policies: 'Policies', operations: 'Operations', marketplace: 'Marketplace',
       collateral: 'CREDIT Collateral', audit: 'Audit', experiments: 'Experiments', settings: 'Settings',
     };
@@ -306,7 +306,7 @@ const App = (() => {
 
   // Refresh current view based on activeRoute
   async function refreshCurrentView() {
-    if (!activeOrgId && currentRoute !== 'experiments' && currentRoute !== 'settings' && currentRoute !== 'demo') {
+    if (!activeOrgId && currentRoute !== 'experiments' && currentRoute !== 'settings' && currentRoute !== 'overview') {
       return;
     }
 
@@ -331,8 +331,6 @@ const App = (() => {
       switch (currentRoute) {
         case 'overview':
           await refreshOverview();
-          break;
-        case 'demo':
           break;
         case 'missions':
           await refreshMissions();
@@ -513,7 +511,7 @@ const App = (() => {
       const badge = $('workOrderCountBadge');
       if (badge) badge.textContent = `${wos.length} Order${wos.length !== 1 ? 's' : ''}`;
       if (wos.length === 0) {
-        woTbody.innerHTML = '<tr><td colspan="5" class="py-6 px-4 text-center text-slate-500 italic">No work orders yet &mdash; run a demo to generate one</td></tr>';
+        woTbody.innerHTML = '<tr><td colspan="5" class="py-6 px-4 text-center text-slate-500 italic">No work orders yet &mdash; execute a governed mission to generate one</td></tr>';
       } else {
         woTbody.innerHTML = wos.map(item => {
           const wo = item.work_order;
@@ -1034,7 +1032,7 @@ const App = (() => {
     {title:'The control loop', body:'Agents PROPOSE. Policies AUTHORIZE. Executors EXECUTE. Auditors VERIFY. This separation is the core safety boundary of Kalyx.', target:'#view-overview .kalyx-loop-panel', route:'overview', button:'Next'},
     {title:'Capital becomes productive work', body:'Kalyx tracks CAPITAL → WORK → REVENUE → SURPLUS. Verified surplus can fund a subsequent governed mission.', target:'#view-treasury .kc-money-flow', route:'treasury', button:'Next'},
     {title:'Evidence makes outcomes authoritative', body:'An agent saying “done” is not enough. Kalyx requires verifiable execution evidence before an economic result becomes authoritative.', target:'#view-audit .kc-audit-layout', route:'audit', button:'Next'},
-    {title:'You now know the machine', body:'Use Follow the loop to walk through the judge path: proposal → policy → resource acquisition → productive work → independent verification → revenue → surplus → next mission.', target:null, route:'overview', button:'Finish'}
+    {title:'You now know the machine', body:'Use Follow the loop to walk through the governance path: proposal → policy → resource acquisition → productive work → independent verification → revenue → surplus → next mission.', target:null, route:'overview', button:'Finish'}
   ];
   let tourIndex=0;
   const TOUR_DESKTOP_BREAKPOINT=768;
@@ -1697,7 +1695,7 @@ const App = (() => {
       const started = await API.startJudgeDemo();
       liveDemoSessionId = started.session_id;
       liveDemoMode = 'judge';
-      setTxt('liveDemoCompletionNote', 'Judge Mode pauses the real engine at each persisted boundary. Proposal review auto-advances after 15 seconds.');
+      setTxt('liveDemoCompletionNote', 'Step-by-step trace pauses the real engine at each persisted boundary. Proposal review auto-advances after 15 seconds.');
       await pollLiveDemo();
     } catch (err) {
       renderLiveDemoSnapshot({ status: 'failed', current_stage: 'ERROR', history: [], error: err.message });
@@ -1773,6 +1771,22 @@ const App = (() => {
       const health = await API.getHealth();
       setTxt('engineStatusText', 'OPERATIONAL');
       setTxt('overviewEnvironment', String(health.environment || 'unknown').toUpperCase());
+      const networkName = health.blockchain?.network || 'UNKNOWN';
+      const chainId = health.blockchain?.chain_id ?? '—';
+      setTxt('kalyxNetworkLabel', 'PRODUCTION / ' + String(networkName).toUpperCase() + ' (Chain ' + chainId + ')');
+      setTxt('systemOrbioState', health.orbio?.active ? 'LIVE' : 'INACTIVE');
+      if (window.ethereum && chainId !== '—') {
+        try {
+          const walletChain = parseInt(await window.ethereum.request({method:'eth_chainId'}), 16);
+          const configuredChain = Number(chainId);
+          const banner = document.getElementById('networkMismatchBanner');
+          if (banner) {
+            const mismatch = Number.isFinite(walletChain) && walletChain !== configuredChain;
+            banner.classList.toggle('hidden', !mismatch);
+            if (mismatch) banner.textContent = '⚠ NETWORK MISMATCH — Wallet is on Chain ' + walletChain + ' (Kalyx execution uses Chain ' + configuredChain + ', ' + networkName + '). Switch your wallet network before signing transactions.';
+          }
+        } catch {}
+      }
     } catch (err) {
       console.warn('Health check failed:', err);
       setTxt('engineStatusText', 'DEGRADED');
