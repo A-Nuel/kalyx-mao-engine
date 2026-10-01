@@ -469,8 +469,8 @@ def _identity_enabled() -> bool:
     return identity_auth_required()
 
 
-# Make the unsafe state operationally visible. Demo mode is still supported for
-# local/judge use, but it must never be mistaken for tenant-isolated production.
+# Keep unsafe development configuration operationally visible; production
+# remains fail-closed behind the canonical identity authorization gate.
 if not _identity_enabled():
     logger.warning(
         "KALYX SECURITY WARNING: identity authorization is DISABLED; "
@@ -640,9 +640,14 @@ def health() -> Dict[str, Any]:
             "service": "kalyx-command-centre",
             "version": app.version,
             "database": "connected",
-            "environment": "production" if is_production() else "demo",
+            "environment": "production" if is_production() else "development",
             "identity_auth_enabled": _identity_enabled(),
             "public_demo_enabled": os.getenv("KALYX_PUBLIC_DEMO", "false").strip().lower() == "true",
+            "blockchain": {
+                "enabled": blockchain_enabled(),
+                "network": blockchain_network_name(),
+                "chain_id": blockchain_chain_id(),
+            },
         }
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Database unavailable: {type(exc).__name__}")
