@@ -1,4 +1,5 @@
 import os
+import urllib.parse
 
 import pytest
 from fastapi.testclient import TestClient
@@ -204,3 +205,146 @@ def test_multiple_workspaces_are_not_implicitly_collapsed(client):
         json={"name": "Second Org", "mission": "Workspace isolation"},
     )
     assert org.status_code == 200
+
+
+def _wallet_session(client):
+    account = Account.create()
+    challenge = client.post(
+        "/api/v1/product/auth/wallet/challenge",
+        json={"address": account.address, "chain_id": 4663},
+    ).json()
+    signed = Account.sign_message(encode_defunct(text=challenge["message"]), account.key)
+    token = client.post(
+        "/api/v1/product/auth/wallet/verify",
+        json={"challenge_id": challenge["challenge_id"], "signature": signed.signature.hex()},
+    ).json()["token"]
+    return token
+
+
+def test_orbio_oauth_pkce_callback_stores_encrypted_connection(client, monkeypatch):
+    monkeypatch.setenv("ORBIO_CLIENT_ID", "orbio-client-test")
+    monkeypatch.setenv("ORBIO_CLIENT_SECRET", "orbio-secret-test")
+    monkeypatch.setenv("KALYX_PUBLIC_BASE_URL", "https://kalyx.example")
+    token = _wallet_session(client)
+    headers = {"Authorization": f"Bearer {token}"}
+    tenant = client.get("/api/v1/product/me", headers=headers).json()["workspace"]["tenant_id"]
+    org = client.post(
+        f"/api/v1/product/workspaces/{tenant}/organisations",
+        headers=headers,
+        json={"name": "Orbio Org", "mission": "Use delegated compute"},
+    ).json()["organisation_id"]
+
+    start = client.get(
+        f"/api/v1/product/organisations/{org}/providers/orbio/authorize",
+        headers=headers,
+    )
+    assert start.status_code == 200
+    auth_url = start.json()["authorization_url"]
+    parsed = urllib.parse.urlparse(auth_url)
+    params = urllib.parse.parse_qs(parsed.query)
+    assert parsed.scheme == "https"
+    assert parsed.netloc == "www.orbio.so"
+    assert params["client_id"] == ["orbio-client-test"]
+    assert params["redirect_uri"] == ["https://kalyx.example/api/v1/product/auth/orbio/callback"]
+    assert params["code_challenge_method"] == ["S256"]
+    assert params["code_challenge"]
+    assert params["state"]
+
+    class FakeResponse:
+        def __init__(self, status_code, payload):
+            self.status_code = status_code
+            self._payload = payload
+
+        def json(self):
+            return self._payload
+
+    def fake_post(url, **kwargs):
+        assert url == "https://www.orbio.so/api/oauth/token"
+        assert kwargs["auth"] == ("orbio-client-test", "orbio-secret-test")
+        assert kwargs["data"]["grant_type"] == "authorization_code"
+        assert kwargs["data"]["redirect_uri"] == "https://kalyx.example/api/v1/product/auth/orbio/callback"
+        assert kwargs["data"]["code_verifier"]
+        return FakeResponse(200, {
+            "access_token": "orbio_at_test",
+            "refresh_token": "orbio_rt_test",
+            "token_type": "Bearer",
+            "expires_in": 3600,
+            "scope": "openid profile email wallet balance inference tools",
+        })
+
+    def fake_get(url, **kwargs):
+        assert url == "https://www.orbio.so/api/oauth/userinfo"
+        assert kwargs["headers"]["Authorization"] == "Bearer orbio_at_test"
+        return FakeResponse(200, {
+            "sub": "orbio-user-1",
+            "email": "user@example.com",
+            "email_verified": True,
+            "wallet_address": "0x123",
+            "chain_id": 4663,
+            "iss": "https://www.orbio.so",
+        })
+
+    monkeypatch.setattr("src.api.product_plane.httpx.post", fake_post)
+    monkeypatch.setattr("src.api.product_plane.httpx.get", fake_get)
+
+    callback = client.get(
+        "/api/v1/product/auth/orbio/callback",
+        params={"code": "auth-code", "state": params["state"][0], "iss": "https://www.orbio.so"},
+        follow_redirects=False,
+    )
+    assert callback.status_code == 303
+    assert callback.headers["location"] == f"/onboarding?orbio=connected&org={org}"
+
+    providers = client.get(
+        f"/api/v1/product/organisations/{org}/providers",
+        headers=headers,
+    ).json()
+    assert len(providers) == 1
+    assert providers[0]["provider"] == "orbio"
+    assert providers[0]["connection_type"] == "oauth2"
+    assert providers[0]["metadata"]["subject"] == "orbio-user-1"
+
+    from src.persistence.factory import create_database
+    db = create_database()
+    try:
+        row = db.conn.execute(
+            "SELECT secret_ciphertext FROM provider_connections WHERE organisation_id = ? AND provider = 'orbio'",
+            (org,),
+        ).fetchone()
+        assert row
+        assert "orbio_at_test" not in row["secret_ciphertext"]
+        assert "orbio_rt_test" not in row["secret_ciphertext"]
+    finally:
+        db.close()
+
+    replay = client.get(
+        "/api/v1/product/auth/orbio/callback",
+        params={"code": "auth-code", "state": params["state"][0], "iss": "https://www.orbio.so"},
+        follow_redirects=False,
+    )
+    assert replay.status_code == 400
+
+
+def test_orbio_oauth_rejects_unexpected_issuer(client, monkeypatch):
+    monkeypatch.setenv("ORBIO_CLIENT_ID", "orbio-client-test")
+    monkeypatch.setenv("ORBIO_CLIENT_SECRET", "orbio-secret-test")
+    monkeypatch.setenv("KALYX_PUBLIC_BASE_URL", "https://kalyx.example")
+    token = _wallet_session(client)
+    headers = {"Authorization": f"Bearer {token}"}
+    tenant = client.get("/api/v1/product/me", headers=headers).json()["workspace"]["tenant_id"]
+    org = client.post(
+        f"/api/v1/product/workspaces/{tenant}/organisations",
+        headers=headers,
+        json={"name": "Issuer Org", "mission": "Reject issuer spoofing"},
+    ).json()["organisation_id"]
+    start = client.get(
+        f"/api/v1/product/organisations/{org}/providers/orbio/authorize",
+        headers=headers,
+    )
+    state = urllib.parse.parse_qs(urllib.parse.urlparse(start.json()["authorization_url"]).query)["state"][0]
+    result = client.get(
+        "/api/v1/product/auth/orbio/callback",
+        params={"code": "auth-code", "state": state, "iss": "https://evil.example"},
+        follow_redirects=False,
+    )
+    assert result.status_code == 400
