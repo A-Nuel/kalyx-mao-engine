@@ -351,7 +351,7 @@ def _orbio_client_credentials() -> tuple[str, str]:
 
 
 def _orbio_redirect_uri() -> str:
-    return _orbio_public_base_url() + "/auth/orbio/callback"
+    return _orbio_public_base_url() + "/api/v1/product/auth/orbio/callback"
 
 
 def _pkce_verifier() -> str:
