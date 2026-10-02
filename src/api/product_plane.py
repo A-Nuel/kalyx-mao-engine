@@ -6,6 +6,7 @@ provider credentials separate from execution authority.
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import json
@@ -13,6 +14,7 @@ import logging
 import os
 import secrets
 import time
+import urllib.parse
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -21,7 +23,9 @@ from cryptography.fernet import Fernet, InvalidToken
 from eth_account import Account
 from eth_account.messages import encode_defunct
 from eth_utils import to_checksum_address
+import httpx
 from fastapi import APIRouter, Header, HTTPException
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
 from src.api.identity_auth import create_identity_token, verify_identity_token
@@ -71,6 +75,20 @@ CREATE TABLE IF NOT EXISTS product_sessions (
     created_at TEXT NOT NULL,
     FOREIGN KEY(user_id) REFERENCES product_users(id)
 );
+CREATE TABLE IF NOT EXISTS orbio_oauth_states (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    tenant_id TEXT NOT NULL,
+    organisation_id TEXT NOT NULL,
+    state_hash TEXT NOT NULL UNIQUE,
+    code_verifier_ciphertext TEXT NOT NULL,
+    redirect_uri TEXT NOT NULL,
+    expires_at REAL NOT NULL,
+    consumed BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_orbio_oauth_states_expiry
+    ON orbio_oauth_states(expires_at, consumed);
 CREATE TABLE IF NOT EXISTS agent_credentials (
     id TEXT PRIMARY KEY,
     tenant_id TEXT NOT NULL,
@@ -306,6 +324,383 @@ class ProviderConnectionRequest(BaseModel):
     connection_type: str = Field(default="api_key", max_length=40)
     api_key: Optional[str] = Field(default=None, max_length=4096)
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class OrbioOAuthRefreshResponse(BaseModel):
+    organisation_id: str
+    provider: str
+    status: str
+
+
+def _orbio_public_base_url() -> str:
+    base = os.getenv("KALYX_PUBLIC_BASE_URL", "").strip().rstrip("/")
+    if not base:
+        raise HTTPException(status_code=503, detail="KALYX_PUBLIC_BASE_URL is not configured")
+    parsed = urllib.parse.urlparse(base)
+    if parsed.scheme != "https" or not parsed.netloc:
+        raise HTTPException(status_code=500, detail="KALYX_PUBLIC_BASE_URL must be an HTTPS URL")
+    return base
+
+
+def _orbio_client_credentials() -> tuple[str, str]:
+    client_id = os.getenv("ORBIO_CLIENT_ID", "").strip()
+    client_secret = os.getenv("ORBIO_CLIENT_SECRET", "").strip()
+    if not client_id or not client_secret:
+        raise HTTPException(status_code=503, detail="Orbio OAuth is not configured")
+    return client_id, client_secret
+
+
+def _orbio_redirect_uri() -> str:
+    return _orbio_public_base_url() + "/auth/orbio/callback"
+
+
+def _pkce_verifier() -> str:
+    return secrets.token_urlsafe(64)
+
+
+def _pkce_challenge(verifier: str) -> str:
+    digest = hashlib.sha256(verifier.encode("ascii")).digest()
+    return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+
+
+def _hash_oauth_state(state: str) -> str:
+    return hashlib.sha256(state.encode("utf-8")).hexdigest()
+
+
+def _encrypt_secret(value: str) -> str:
+    return _credential_fernet().encrypt(value.encode("utf-8")).decode("ascii")
+
+
+def _decrypt_secret(value: str) -> str:
+    try:
+        return _credential_fernet().decrypt(value.encode("ascii")).decode("utf-8")
+    except (InvalidToken, ValueError) as exc:
+        raise HTTPException(status_code=500, detail="Stored Orbio credential could not be decrypted") from exc
+
+
+def _orbio_token_exchange(
+    *,
+    code: str,
+    redirect_uri: str,
+    code_verifier: str,
+) -> dict[str, Any]:
+    client_id, client_secret = _orbio_client_credentials()
+    try:
+        response = httpx.post(
+            "https://www.orbio.so/api/oauth/token",
+            auth=(client_id, client_secret),
+            data={
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": redirect_uri,
+                "code_verifier": code_verifier,
+            },
+            timeout=15.0,
+            follow_redirects=False,
+        )
+    except httpx.HTTPError as exc:
+        logger.exception("Orbio OAuth token exchange failed")
+        raise HTTPException(status_code=502, detail="Could not reach Orbio token endpoint") from exc
+    if response.status_code != 200:
+        try:
+            detail = response.json().get("error") or response.json().get("error_description")
+        except ValueError:
+            detail = None
+        raise HTTPException(status_code=502, detail=f"Orbio token exchange failed{': ' + detail if detail else ''}")
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail="Orbio returned invalid token response") from exc
+    if not payload.get("access_token") or not payload.get("refresh_token"):
+        raise HTTPException(status_code=502, detail="Orbio token response is missing required tokens")
+    return payload
+
+
+def _orbio_userinfo(access_token: str) -> dict[str, Any]:
+    try:
+        response = httpx.get(
+            "https://www.orbio.so/api/oauth/userinfo",
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=15.0,
+        )
+    except httpx.HTTPError as exc:
+        logger.exception("Orbio OAuth userinfo request failed")
+        raise HTTPException(status_code=502, detail="Could not reach Orbio userinfo endpoint") from exc
+    if response.status_code != 200:
+        raise HTTPException(status_code=502, detail="Orbio userinfo request failed")
+    try:
+        return response.json()
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail="Orbio returned invalid userinfo") from exc
+
+
+def _store_orbio_connection(
+    db: Any,
+    *,
+    user_id: str,
+    tenant_id: str,
+    organisation_id: str,
+    token_payload: dict[str, Any],
+    userinfo: dict[str, Any],
+) -> str:
+    now = _now()
+    access_token = str(token_payload["access_token"])
+    refresh_token = str(token_payload["refresh_token"])
+    expires_at = time.time() + int(token_payload.get("expires_in", 3600))
+    metadata = {
+        "issuer": "https://www.orbio.so",
+        "subject": userinfo.get("sub"),
+        "email": userinfo.get("email"),
+        "email_verified": userinfo.get("email_verified"),
+        "wallet_address": userinfo.get("wallet_address"),
+        "chain_id": userinfo.get("chain_id"),
+        "scope": token_payload.get("scope", ""),
+        "token_type": token_payload.get("token_type", "Bearer"),
+        "expires_at": expires_at,
+        "user_id": user_id,
+    }
+    existing = db.conn.execute(
+        "SELECT id FROM provider_connections WHERE organisation_id = ? AND provider = 'orbio' AND status = 'ACTIVE' ORDER BY created_at DESC LIMIT 1",
+        (organisation_id,),
+    ).fetchone()
+    connection_id = existing["id"] if existing else f"prov_{uuid.uuid4().hex}"
+    if existing:
+        db.conn.execute(
+            "UPDATE provider_connections SET connection_type = ?, secret_ciphertext = ?, metadata_json = ?, status = 'ACTIVE', updated_at = ? WHERE id = ?",
+            (
+                "oauth2",
+                json.dumps({"access_token": _encrypt_secret(access_token), "refresh_token": _encrypt_secret(refresh_token)}, sort_keys=True),
+                json.dumps(metadata, sort_keys=True),
+                now,
+                connection_id,
+            ),
+        )
+    else:
+        secret = {
+            "access_token": _encrypt_secret(access_token),
+            "refresh_token": _encrypt_secret(refresh_token),
+        }
+        db.conn.execute(
+            "INSERT INTO provider_connections (id,tenant_id,organisation_id,provider,connection_type,secret_ciphertext,metadata_json,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (
+                connection_id,
+                tenant_id,
+                organisation_id,
+                "orbio",
+                "oauth2",
+                json.dumps(secret, sort_keys=True),
+                json.dumps(metadata, sort_keys=True),
+                "ACTIVE",
+                now,
+                now,
+            ),
+        )
+    return connection_id
+
+
+@router.get("/organisations/{org_id}/providers/orbio/authorize")
+def authorize_orbio(
+    org_id: str,
+    authorization: Optional[str] = Header(default=None, alias="Authorization"),
+) -> dict[str, Any]:
+    db = create_database()
+    try:
+        ensure_product_schema(db)
+        user_id, principal_id, _ = _authenticate(db, authorization)
+        tenant_id, _ = _require_org(db, principal_id, org_id)
+        client_id, _ = _orbio_client_credentials()
+        redirect_uri = _orbio_redirect_uri()
+        state = secrets.token_urlsafe(48)
+        verifier = _pkce_verifier()
+        db.conn.execute(
+            "INSERT INTO orbio_oauth_states (id,user_id,tenant_id,organisation_id,state_hash,code_verifier_ciphertext,redirect_uri,expires_at,created_at) VALUES (?,?,?,?,?,?,?,?,?)",
+            (
+                f"oas_{uuid.uuid4().hex}",
+                user_id,
+                tenant_id,
+                org_id,
+                _hash_oauth_state(state),
+                _encrypt_secret(verifier),
+                redirect_uri,
+                time.time() + 300,
+                _now(),
+            ),
+        )
+        db.conn.commit()
+        params = {
+            "response_type": "code",
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "scope": "openid profile email wallet balance inference tools",
+            "state": state,
+            "code_challenge": _pkce_challenge(verifier),
+            "code_challenge_method": "S256",
+        }
+        return {
+            "authorization_url": "https://www.orbio.so/oauth/authorize?" + urllib.parse.urlencode(params),
+            "redirect_uri": redirect_uri,
+            "expires_in": 300,
+        }
+    finally:
+        db.close()
+
+
+@router.get("/auth/orbio/callback")
+def orbio_callback(
+    code: Optional[str] = None,
+    state: Optional[str] = None,
+    iss: Optional[str] = None,
+    error: Optional[str] = None,
+) -> RedirectResponse:
+    if error:
+        raise HTTPException(status_code=400, detail=f"Orbio authorization failed: {error}")
+    if not code or not state:
+        raise HTTPException(status_code=400, detail="Orbio callback requires code and state")
+    if iss and iss.rstrip("/") != "https://www.orbio.so":
+        raise HTTPException(status_code=400, detail="Unexpected OAuth issuer")
+    db = create_database()
+    try:
+        ensure_product_schema(db)
+        row = db.conn.execute(
+            "SELECT * FROM orbio_oauth_states WHERE state_hash = ? AND consumed = FALSE",
+            (_hash_oauth_state(state),),
+        ).fetchone()
+        if not row or time.time() > float(row["expires_at"]):
+            raise HTTPException(status_code=400, detail="OAuth state is invalid or expired")
+        verifier = _decrypt_secret(row["code_verifier_ciphertext"])
+        token_payload = _orbio_token_exchange(
+            code=code,
+            redirect_uri=row["redirect_uri"],
+            code_verifier=verifier,
+        )
+        userinfo = _orbio_userinfo(token_payload["access_token"])
+        if userinfo.get("iss") and str(userinfo["iss"]).rstrip("/") != "https://www.orbio.so":
+            raise HTTPException(status_code=502, detail="Orbio userinfo issuer mismatch")
+        connection_id = _store_orbio_connection(
+            db,
+            user_id=row["user_id"],
+            tenant_id=row["tenant_id"],
+            organisation_id=row["organisation_id"],
+            token_payload=token_payload,
+            userinfo=userinfo,
+        )
+        db.conn.execute("UPDATE orbio_oauth_states SET consumed = TRUE WHERE id = ?", (row["id"],))
+        db.conn.commit()
+        return RedirectResponse(
+            url=f"/onboarding?orbio=connected&org={urllib.parse.quote(row['organisation_id'])}",
+            status_code=303,
+        )
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Orbio OAuth callback failed")
+        try:
+            db.conn.rollback()
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail="Orbio connection could not be completed")
+    finally:
+        db.close()
+
+
+@router.post("/organisations/{org_id}/providers/orbio/refresh")
+def refresh_orbio(
+    org_id: str,
+    authorization: Optional[str] = Header(default=None, alias="Authorization"),
+) -> dict[str, Any]:
+    db = create_database()
+    try:
+        ensure_product_schema(db)
+        _, principal_id, _ = _authenticate(db, authorization)
+        tenant_id, _ = _require_org(db, principal_id, org_id)
+        row = db.conn.execute(
+            "SELECT * FROM provider_connections WHERE organisation_id = ? AND provider = 'orbio' AND status = 'ACTIVE' ORDER BY updated_at DESC LIMIT 1",
+            (org_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Orbio is not connected")
+        secret = json.loads(row["secret_ciphertext"] or "{}")
+        refresh_token = _decrypt_secret(secret["refresh_token"])
+        client_id, client_secret = _orbio_client_credentials()
+        try:
+            response = httpx.post(
+                "https://www.orbio.so/api/oauth/token",
+                auth=(client_id, client_secret),
+                data={"grant_type": "refresh_token", "refresh_token": refresh_token},
+                timeout=15.0,
+                follow_redirects=False,
+            )
+        except httpx.HTTPError as exc:
+            raise HTTPException(status_code=502, detail="Could not reach Orbio token endpoint") from exc
+        if response.status_code != 200:
+            raise HTTPException(status_code=502, detail="Orbio refresh failed")
+        payload = response.json()
+        if not payload.get("access_token") or not payload.get("refresh_token"):
+            raise HTTPException(status_code=502, detail="Orbio refresh response is missing required tokens")
+        metadata = json.loads(row["metadata_json"] or "{}")
+        metadata.update({
+            "scope": payload.get("scope", metadata.get("scope", "")),
+            "token_type": payload.get("token_type", "Bearer"),
+            "expires_at": time.time() + int(payload.get("expires_in", 3600)),
+        })
+        db.conn.execute(
+            "UPDATE provider_connections SET secret_ciphertext = ?, metadata_json = ?, status = 'ACTIVE', updated_at = ? WHERE id = ? AND tenant_id = ?",
+            (
+                json.dumps({
+                    "access_token": _encrypt_secret(payload["access_token"]),
+                    "refresh_token": _encrypt_secret(payload["refresh_token"]),
+                }, sort_keys=True),
+                json.dumps(metadata, sort_keys=True),
+                _now(),
+                row["id"],
+                tenant_id,
+            ),
+        )
+        db.conn.commit()
+        return {"organisation_id": org_id, "provider": "orbio", "status": "ACTIVE"}
+    finally:
+        db.close()
+
+
+@router.delete("/organisations/{org_id}/providers/orbio")
+def disconnect_orbio(
+    org_id: str,
+    authorization: Optional[str] = Header(default=None, alias="Authorization"),
+) -> dict[str, Any]:
+    db = create_database()
+    try:
+        ensure_product_schema(db)
+        _, principal_id, _ = _authenticate(db, authorization)
+        tenant_id, _ = _require_org(db, principal_id, org_id)
+        row = db.conn.execute(
+            "SELECT * FROM provider_connections WHERE organisation_id = ? AND provider = 'orbio' AND status = 'ACTIVE' ORDER BY updated_at DESC LIMIT 1",
+            (org_id,),
+        ).fetchone()
+        if not row:
+            return {"organisation_id": org_id, "provider": "orbio", "status": "DISCONNECTED"}
+        secret = json.loads(row["secret_ciphertext"] or "{}")
+        refresh_token = _decrypt_secret(secret["refresh_token"])
+        client_id, client_secret = _orbio_client_credentials()
+        try:
+            response = httpx.post(
+                "https://www.orbio.so/api/oauth/revoke",
+                auth=(client_id, client_secret),
+                data={"refresh_token": refresh_token},
+                timeout=15.0,
+                follow_redirects=False,
+            )
+        except httpx.HTTPError as exc:
+            raise HTTPException(status_code=502, detail="Could not reach Orbio revoke endpoint") from exc
+        if response.status_code not in {200, 204}:
+            raise HTTPException(status_code=502, detail="Orbio disconnect failed")
+        db.conn.execute(
+            "UPDATE provider_connections SET status = 'REVOKED', updated_at = ? WHERE id = ? AND tenant_id = ?",
+            (_now(), row["id"], tenant_id),
+        )
+        db.conn.commit()
+        return {"organisation_id": org_id, "provider": "orbio", "status": "DISCONNECTED"}
+    finally:
+        db.close()
 
 
 @router.get("/auth/social/providers")
