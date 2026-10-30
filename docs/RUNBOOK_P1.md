@@ -1,4 +1,4 @@
-﻿# Kalyx Autonomous DAO — Phase 17 P1 Production Runbook
+# Kalyx Autonomous DAO — Production Runbook
 
 ## 1. System Topography & Core Invariant
 
@@ -30,7 +30,7 @@ uvicorn src.api.server:app --host 0.0.0.0 --port 8000
 # Start API server with persistent volume kalyx-data
 docker compose up -d kalyx-api
 
-# Execute Phase 17 autonomous economic loop demo
+# Execute autonomous economic loop run
 docker compose run --rm kalyx-demo
 
 # Run full regression test suite inside container
@@ -41,7 +41,7 @@ docker compose run --rm kalyx-test
 
 ## 3. Configuration & Provenance
 
-| Parameter | Recommended Demo | Production Requirement |
+| Parameter | Development / Local | Production Requirement |
 |---|---|---|
 | `KALYX_ENV` | `demo` | `production` (strict fail-closed checks) |
 | `KALYX_DB` | `/app/data/kalyx.db` | PostgreSQL via `KALYX_DATABASE_URL` |

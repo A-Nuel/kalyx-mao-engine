@@ -1,4 +1,4 @@
-# Phase 18 — CREDIT CollateralVault
+# CREDIT CollateralVault
 
 ## What this contract adds
 
