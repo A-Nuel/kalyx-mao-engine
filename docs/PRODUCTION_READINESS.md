@@ -1,15 +1,15 @@
 # Kalyx Production Readiness Pass
 
 **Review date:** 2026-09-26  
-**Scope:** standalone deployment readiness after Phase 21D–21H
+**Scope:** standalone deployment readiness and verification gates
 
-This document separates **deployable software infrastructure** from **live consequential economic execution**. A green CI run is required before merging the Phase 21D–21H branch.
+This document separates **deployable software infrastructure** from **live consequential economic execution**.
 
 ## Gate status
 
 | Gate | Status | Notes |
 |---|---|---|
-| Automated CI | GREEN | Phase 21D–21H PR #38 completed the Python 3.11/3.12 matrix, SQLite suite, PostgreSQL integration suite, production container build, dependency checks, JavaScript syntax check, and Python compilation. |
+| Automated CI | GREEN | Automated CI verifies the Python 3.11/3.12 matrix, SQLite suite, PostgreSQL integration suite, production container build, dependency checks, JavaScript syntax check, and Python compilation. |
 | Python 3.11 / 3.12 | REQUIRED | Matrix is enforced by GitHub Actions. |
 | Production container build | REQUIRED | CI builds the production image on Python 3.12. |
 | PostgreSQL integration | REQUIRED | Production persistence path must pass its integration suite. |
@@ -17,7 +17,7 @@ This document separates **deployable software infrastructure** from **live conse
 | Health endpoint | IMPLEMENTED | `/api/health` is available and used by the container healthcheck. |
 | Rate/body limits | IMPLEMENTED | Security middleware enforces configured request limits. |
 | CORS | CONFIGURED | Production should set explicit browser origins; do not use wildcard CORS. |
-| Tenant/organisation isolation | IMPLEMENTED + TESTED | Phase 21B/21C and Phase 21D–21H tests bind execution context and approvals to scope. |
+| Tenant/organisation isolation | IMPLEMENTED + TESTED | Integration tests bind execution context and approvals to scope. |
 | Execution authority | IMPLEMENTED | `ExecutionAuthority` is organisation-bound and delegates cryptographic signing to the existing signer boundary. |
 | Wallet identity boundary | IMPLEMENTED | Public metadata only; no seed phrase/private key field. |
 | Durable execution approval | IMPLEMENTED | HMAC-bound, expiring, durable, and atomically single-use. |
@@ -28,11 +28,9 @@ This document separates **deployable software infrastructure** from **live conse
 | Disaster recovery | DOCUMENTED | PostgreSQL backup/recovery procedures exist; deployment operator must configure actual backups. |
 | Observability | IMPLEMENTED | Structured logging and correlation/operational controls exist; production operator must connect logs/alerts to an actual service. |
 
-## Required Render configuration
+## Required production configuration
 
-Phase 21D–21H introduces **no new mandatory environment variable**.
-
-A production Render deployment should provide the existing production configuration, including:
+A production deployment should provide the necessary configuration, including:
 
 - `KALYX_ENV=production`
 - `KALYX_DATABASE_URL=<PostgreSQL URL>`
@@ -47,7 +45,7 @@ Only enable provider-specific credentials when that provider is intentionally be
 
 ### Wallet security
 
-Do **not** place a Robinhood Wallet seed phrase or private key in Render merely to support Phase 21D–21H. The current external signer boundary exists specifically so wallet custody can remain outside the Kalyx application process.
+Do **not** place a wallet seed phrase or private key in application environment variables or storage. The external signer boundary exists specifically so wallet custody remains outside the Kalyx application process.
 
 ## Live execution boundary
 
@@ -65,7 +63,7 @@ Therefore the correct release description is:
 
 ## Merge gate
 
-The Phase 21D–21H merge gate is satisfied: the **final branch head** has a green CI run covering:
+All production PRs and releases require a green CI run covering:
 
 - Python 3.11
 - Python 3.12
